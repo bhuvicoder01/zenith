@@ -40,6 +40,7 @@ export default function Home() {
           <div className="hidden md:flex items-center gap-8 text-[11px] font-black uppercase tracking-[0.2em] text-muted-foreground">
             <a href="#features" className="hover:text-foreground transition-colors">Agents</a>
             <Link href="/public/jobs" className="hover:text-foreground transition-colors">Explore Jobs</Link>
+            <Link href="/public/profiles" className="hover:text-foreground transition-colors">Explore Profiles</Link>
           </div>
           <div className="flex items-center gap-4">
              {isAuthenticated ? (

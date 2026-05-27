@@ -354,6 +354,7 @@ export default function SettingsPage() {
                  {[
                    { id: 'hideProfile', label: 'Ghost Protocol', sub: 'Hide your profile from recruiter search engines.', icon: Shield },
                    { id: 'anonymizeData', label: 'Anonymize Intel', sub: 'Strip PII from data sent to AI matching agents.', icon: UserCircle },
+                   { id: 'showEmail', label: 'Expose Email ID', sub: 'Show your email address on your public profile page.', icon: Mail },
                  ].map((item) => (
                     <div key={item.id} className="flex items-center justify-between">
                        <div className="flex items-center gap-4">

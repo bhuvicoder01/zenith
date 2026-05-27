@@ -61,6 +61,7 @@ public class UserProfile {
         private boolean jobMatchAlerts = true;
         private boolean hideProfile = false;
         private boolean anonymizeData = false;
+        private boolean showEmail = true;
     }
 
     @Data

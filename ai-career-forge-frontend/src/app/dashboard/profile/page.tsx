@@ -54,6 +54,7 @@ interface UserProfile {
     jobMatchAlerts: boolean;
     hideProfile: boolean;
     anonymizeData: boolean;
+    showEmail?: boolean;
   };
 }
 

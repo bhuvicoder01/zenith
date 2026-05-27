@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { 
   User, Briefcase, FileText, CheckCircle, LogOut, Menu, X,
-  LayoutDashboard, ClipboardList, BrainCircuit, Loader2, Sun, Moon, TrendingUp, Settings 
+  LayoutDashboard, ClipboardList, BrainCircuit, Loader2, Sun, Moon, TrendingUp, Settings,
+  Users, Bell
 } from "lucide-react";
 import { useRouter, usePathname } from "next/navigation";
 import Image from "next/image";
@@ -12,6 +13,7 @@ import useAuthStore from "@/store/useAuthStore";
 import AuthGuard from "@/components/AuthGuard";
 
 import useSyncStore from "@/store/useSyncStore";
+import { useNotificationStore } from "@/store/useNotificationStore";
 import { useEffect, useState } from "react";
 import { useTheme } from "next-themes";
 import api from "@/lib/api";
@@ -29,6 +31,17 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   // Global SSE connection for sync status
   const { syncStatus, connect, disconnect } = useSyncStore();
   const isSyncing = syncStatus.status === 'SYNCING' || syncStatus.status === 'MATCHING';
+
+  // Global WebSocket connection for notifications
+  const { 
+    connect: connectNotifications, 
+    disconnect: disconnectNotifications,
+    loadSavedNotifications,
+    notifications 
+  } = useNotificationStore();
+
+  const unreadCount = notifications.filter(n => !n.read).length;
+  const [pendingCount, setPendingCount] = useState(0);
 
   const { theme, setTheme, resolvedTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
@@ -79,6 +92,27 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     return () => disconnect();
   }, [connect, disconnect]);
 
+  // Connect WebSocket notifications once at layout level
+  useEffect(() => {
+    loadSavedNotifications();
+    connectNotifications((url: string) => router.push(url));
+    return () => disconnectNotifications();
+  }, [connectNotifications, disconnectNotifications, loadSavedNotifications, router]);
+
+  // Fetch pending connection count on mount and when connection notifications change
+  useEffect(() => {
+    const fetchPendingConnectionsCount = async () => {
+      try {
+        const res = await api.get("/connections/pending");
+        setPendingCount(res.data.length);
+      } catch (err) {
+        console.error("Failed to fetch pending connections:", err);
+      }
+    };
+
+    fetchPendingConnectionsCount();
+  }, [notifications]);
+
   // Close sidebar when clicking a link (on mobile)
   useEffect(() => {
     setIsSidebarOpen(false);
@@ -86,6 +120,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   const navLinks = [
     { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+    { href: "/dashboard/notifications", label: "Notifications", icon: Bell },
+    { href: "/dashboard/connections", label: "Connections", icon: Users },
     { href: "/dashboard/jobs", label: "Job Matches", icon: Briefcase },
     { href: "/dashboard/applications", label: "Tracker", icon: CheckCircle },
     // { href: "/dashboard/profile", label: "Profile", icon: User },
@@ -135,7 +171,18 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                       : "hover:bg-secondary/80 text-muted-foreground hover:text-foreground border-transparent"
                   }`}
                 >
-                  <link.icon className="w-5 h-5" /> {link.label}
+                  <link.icon className="w-5 h-5" /> 
+                  <span>{link.label}</span>
+                  {link.href === "/dashboard/notifications" && unreadCount > 0 && (
+                    <span className="ml-auto px-2 py-0.5 bg-primary text-background rounded-full text-[10px] font-black animate-pulse">
+                      {unreadCount}
+                    </span>
+                  )}
+                  {link.href === "/dashboard/connections" && pendingCount > 0 && (
+                    <span className="ml-auto px-2 py-0.5 bg-primary text-background rounded-full text-[10px] font-black">
+                      {pendingCount}
+                    </span>
+                  )}
                 </Link>
               ))}
               
@@ -221,7 +268,18 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                         : "hover:bg-white/5 text-secondary-foreground/70 border-transparent"
                     }`}
                   >
-                    <link.icon className="w-6 h-6" /> {link.label}
+                    <link.icon className="w-6 h-6" /> 
+                    <span>{link.label}</span>
+                    {link.href === "/dashboard/notifications" && unreadCount > 0 && (
+                      <span className="ml-auto px-2 py-0.5 bg-white text-black dark:bg-black dark:text-white rounded-full text-[9px] font-black">
+                        {unreadCount}
+                      </span>
+                    )}
+                    {link.href === "/dashboard/connections" && pendingCount > 0 && (
+                      <span className="ml-auto px-2 py-0.5 bg-white text-black dark:bg-black dark:text-white rounded-full text-[9px] font-black">
+                        {pendingCount}
+                      </span>
+                    )}
                   </Link>
                 ))}
               </div>

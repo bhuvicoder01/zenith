@@ -6,6 +6,7 @@ import Link from "next/link";
 import { Briefcase, MapPin, DollarSign, ExternalLink, Star } from "lucide-react";
 import { useTheme } from "next-themes";
 import { BACKEND_URL } from "@/lib/api";
+import useAuthStore from "@/store/useAuthStore";
 
 interface Job {
   id: string;
@@ -28,6 +29,7 @@ export default function PublicJobsPage() {
   const [query, setQuery] = useState("");
   const { resolvedTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
+  const { isAuthenticated } = useAuthStore();
 
   useEffect(() => {
     setMounted(true);
@@ -76,13 +78,25 @@ export default function PublicJobsPage() {
             </div>
             <span className="text-xl font-black tracking-tighter uppercase">ZENITH</span>
           </Link>
+          <div className="hidden md:flex items-center gap-8 text-[11px] font-black uppercase tracking-[0.2em] text-muted-foreground">
+            <Link href="/public/jobs" className="text-foreground transition-colors">Explore Jobs</Link>
+            <Link href="/public/profiles" className="hover:text-foreground transition-colors">Explore Profiles</Link>
+          </div>
           <div className="flex items-center gap-4">
-            <Link href="/auth/login" className="text-xs font-black uppercase tracking-widest hover:text-primary transition-colors">
-              Login
-            </Link>
-            <Link href="/auth/register" className="px-5 py-2.5 bg-foreground text-background rounded-full text-xs font-black uppercase tracking-widest hover:opacity-90 transition-all">
-              Sign Up
-            </Link>
+            {isAuthenticated ? (
+              <Link href="/dashboard" className="px-5 py-2.5 bg-foreground text-background rounded-full text-xs font-black uppercase tracking-widest hover:opacity-90 transition-all">
+                Dashboard
+              </Link>
+            ) : (
+              <>
+                <Link href="/auth/login" className="text-xs font-black uppercase tracking-widest hover:text-primary transition-colors">
+                  Login
+                </Link>
+                <Link href="/auth/register" className="px-5 py-2.5 bg-foreground text-background rounded-full text-xs font-black uppercase tracking-widest hover:opacity-90 transition-all">
+                  Sign Up
+                </Link>
+              </>
+            )}
           </div>
         </div>
       </nav>

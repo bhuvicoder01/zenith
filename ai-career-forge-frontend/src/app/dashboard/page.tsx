@@ -3,12 +3,14 @@
 import { 
   BrainCircuit, UploadCloud, Loader2, CheckCircle2, 
   ArrowRight, Search, User, Sparkles, FileText, 
-  BarChart3, Target, Briefcase, Zap, X, Save
+  BarChart3, Target, Briefcase, Zap, X, Save, Bell
 } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import api from "@/lib/api";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { useNotificationStore } from "@/store/useNotificationStore";
 
 interface Experience {
   title: string;
@@ -39,6 +41,8 @@ interface UserProfile {
 }
 
 export default function DashboardProfile() {
+  const router = useRouter();
+  const { notifications, markAsRead } = useNotificationStore();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isUploading, setIsUploading] = useState(false);
@@ -49,6 +53,17 @@ export default function DashboardProfile() {
   const [saving, setSaving] = useState(false);
   const [showAllSkills, setShowAllSkills] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleNotificationClick = (item: any) => {
+    markAsRead(item.id);
+    if (item.type === "CONNECTION_REQUEST" && item.data?.requester?.userId) {
+      router.push(`/public/profiles/${item.data.requester.userId}`);
+    } else if (item.type === "CONNECTION_ACCEPTED" && item.data?.user?.userId) {
+      router.push(`/public/profiles/${item.data.user.userId}`);
+    } else {
+      router.push("/dashboard/notifications");
+    }
+  };
 
   useEffect(() => {
     fetchProfile();
@@ -261,6 +276,66 @@ export default function DashboardProfile() {
                 </div>
                 <span className="text-xs font-black uppercase tracking-widest">AI Cover</span>
              </Link>
+          </section>
+
+          {/* Live Stream Notifications Feed */}
+          <section className="bg-card border border-border rounded-[2rem] p-8 space-y-6 shadow-xl relative overflow-hidden group">
+             <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                   <div className="p-2 bg-primary/10 rounded-xl">
+                      <Bell className="w-5 h-5 text-primary" />
+                   </div>
+                   <h3 className="text-lg font-black uppercase tracking-tight">Live Stream</h3>
+                </div>
+                {notifications.filter(n => !n.read).length > 0 && (
+                   <span className="px-2 py-0.5 bg-primary text-background rounded-full text-[9px] font-black animate-pulse">
+                      {notifications.filter(n => !n.read).length} NEW
+                   </span>
+                )}
+             </div>
+
+             <div className="space-y-4">
+                {notifications.length > 0 ? (
+                   notifications.slice(0, 3).map((n) => (
+                      <div 
+                         key={n.id}
+                         onClick={() => handleNotificationClick(n)}
+                         className={`block p-4 border rounded-2xl hover:bg-secondary/40 transition-all cursor-pointer ${
+                            n.read ? 'border-border/60 opacity-80' : 'border-primary/20 bg-primary/5'
+                         }`}
+                      >
+                         <div className="flex items-center justify-between gap-2">
+                            <span className={`text-[9px] font-black uppercase tracking-wide truncate ${
+                               n.type === 'CONNECTION_REQUEST' ? 'text-blue-500' :
+                               n.type === 'CONNECTION_ACCEPTED' ? 'text-emerald-500' :
+                               n.type === 'NEWS' ? 'text-violet-500' : 'text-primary'
+                            }`}>
+                               {n.type.replace('_', ' ')}
+                            </span>
+                            <span className="text-[9px] text-muted-foreground font-semibold">
+                               {new Date(n.timestamp).toLocaleDateString()}
+                            </span>
+                         </div>
+                         <h5 className="font-bold text-xs truncate mt-1">{n.title}</h5>
+                         <p className="text-[10px] text-muted-foreground line-clamp-1 mt-0.5">{n.message}</p>
+                      </div>
+                   ))
+                ) : (
+                   <div className="py-8 text-center border-2 border-dashed border-border rounded-2xl flex flex-col items-center gap-3">
+                      <Bell className="w-8 h-8 text-muted-foreground opacity-20" />
+                      <p className="text-[10px] font-black uppercase text-muted-foreground">Systems Nominal</p>
+                   </div>
+                )}
+
+                {notifications.length > 0 && (
+                   <Link 
+                      href="/dashboard/notifications" 
+                      className="w-full py-3 bg-secondary hover:bg-secondary/80 border border-border text-foreground text-center rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-1.5"
+                   >
+                      View All Transmission <ArrowRight className="w-3.5 h-3.5" />
+                   </Link>
+                )}
+             </div>
           </section>
         </div>
 

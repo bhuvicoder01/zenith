@@ -7,6 +7,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
+import com.aicareerforge.dto.PublicProfileDTO;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.Map;
@@ -21,6 +23,20 @@ public class UserProfileController {
     @GetMapping
     public ResponseEntity<UserProfile> getProfile(@AuthenticationPrincipal User user) {
         return ResponseEntity.ok(userProfileService.getProfile(user.getId()));
+    }
+
+    @GetMapping("/public/{userId}")
+    public ResponseEntity<PublicProfileDTO> getPublicProfile(@PathVariable String userId) {
+        try {
+            return ResponseEntity.ok(userProfileService.getPublicProfile(userId));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
+        }
+    }
+
+    @GetMapping("/public/search")
+    public ResponseEntity<java.util.List<PublicProfileDTO>> searchPublicProfiles(@RequestParam(value = "query", required = false) String query) {
+        return ResponseEntity.ok(userProfileService.searchPublicProfiles(query));
     }
 
     @PutMapping

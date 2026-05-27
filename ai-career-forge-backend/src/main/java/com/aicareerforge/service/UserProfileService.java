@@ -8,6 +8,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.text.PDFTextStripper;
+import com.aicareerforge.dto.PublicProfileDTO;
 import java.io.IOException;
 
 @Slf4j
@@ -39,6 +40,39 @@ public class UserProfileService {
 
         hydrateUrls(profile);
         return profile;
+    }
+
+    public PublicProfileDTO getPublicProfile(String userId) {
+        UserProfile profile = userProfileRepository.findByUserId(userId)
+                .orElseThrow(() -> new IllegalArgumentException("Profile not found for user: " + userId));
+
+        if (profile.getSettings() != null && profile.getSettings().isHideProfile()) {
+            throw new IllegalArgumentException("Profile is private.");
+        }
+
+        userRepository.findById(userId).ifPresent(user -> {
+            profile.setEmail(user.getEmail());
+            profile.setPasswordGenerated(user.isPasswordGenerated());
+        });
+
+        hydrateUrls(profile);
+        return PublicProfileDTO.fromEntity(profile);
+    }
+
+    public java.util.List<PublicProfileDTO> searchPublicProfiles(String query) {
+        java.util.List<UserProfile> profiles;
+        if (query == null || query.isBlank()) {
+            profiles = userProfileRepository.findAllPublic();
+        } else {
+            profiles = userProfileRepository.searchPublic(query.trim());
+        }
+
+        return profiles.stream()
+                .map(profile -> {
+                    hydrateUrls(profile);
+                    return PublicProfileDTO.fromEntity(profile);
+                })
+                .collect(java.util.stream.Collectors.toList());
     }
 
     private void hydrateUrls(UserProfile profile) {
