@@ -169,15 +169,16 @@ export const useWebSocketStore = create<WebSocketStore>((set, get) => ({
 
               // Check if user is currently on the messages page
               const isChatPage = typeof window !== 'undefined' && window.location.pathname.startsWith('/dashboard/messages');
-              
-              // Only notify if they aren't on the chat page OR if the tab is blurred OR if the message is from a different chat
               const isCurrentChat = isChatPage && get().activeChatUserId === data.data.senderId;
-              const shouldNotify = !isCurrentChat || !document.hasFocus();
               
-              if (shouldNotify) {
-                // Increment reactive unread message count
+              // Increment reactive unread message count if not actively viewing the current chat
+              if (!isCurrentChat) {
                 set(state => ({ unreadMessageCount: state.unreadMessageCount + 1 }));
+              }
 
+              // Only show toast and add to notifications feed if user is not active/online (tab is blurred/out of focus)
+              const isUserOffline = typeof document !== 'undefined' && !document.hasFocus();
+              if (isUserOffline) {
                 // Show a reply toast alert
                 toast.info(`New message from ${data.title || 'Connection'}`, {
                   description: data.message,
@@ -287,6 +288,10 @@ export const useWebSocketStore = create<WebSocketStore>((set, get) => ({
   disconnect: () => {
     const { socket } = get();
     if (socket) {
+      socket.onopen = null;
+      socket.onmessage = null;
+      socket.onclose = null;
+      socket.onerror = null;
       socket.close();
     }
     if (reconnectTimeout) {
