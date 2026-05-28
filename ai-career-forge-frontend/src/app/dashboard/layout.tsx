@@ -119,6 +119,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     setIsSidebarOpen(false);
   }, [pathname]);
 
+  // Listen for custom toggle-sidebar events
+  useEffect(() => {
+    const handleToggle = () => {
+      setIsSidebarOpen(prev => !prev);
+    };
+    window.addEventListener("toggle-sidebar", handleToggle);
+    return () => window.removeEventListener("toggle-sidebar", handleToggle);
+  }, []);
+
   const navLinks = [
     { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
     { href: "/dashboard/notifications", label: "Notifications", icon: Bell },
@@ -130,36 +139,75 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     { href: "/dashboard/settings", label: "Settings", icon: Settings },
   ];
 
+  const [hasActiveChat, setHasActiveChat] = useState(false);
+
+  useEffect(() => {
+    const checkChat = () => {
+      if (typeof window !== "undefined") {
+        const query = new URLSearchParams(window.location.search);
+        setHasActiveChat(pathname === "/dashboard/messages" && !!query.get("userId"));
+      }
+    };
+    checkChat();
+    const interval = setInterval(checkChat, 100);
+    return () => clearInterval(interval);
+  }, [pathname]);
+
+  const getPageTitle = () => {
+    if (pathname === "/dashboard/messages") return "Conversations";
+    if (pathname === "/dashboard/profile") return "Profile";
+    const currentLink = navLinks.find(link => link.href === pathname);
+    return currentLink ? currentLink.label : "Dashboard";
+  };
+
   return (
     <>
       <div className={`flexbox ${isMobile ? 'flex-col' : ''}`}>
         {/* Desktop Sidebar / Mobile Top Bar */}
-        <nav className={`flex navbar ${isMobile ? 'flex-row items-center px-4 py-2 w-full border-b' : 'flex-col border-r'} justify-between bg-card border-border`}>
+        {!(isMobile && pathname === "/dashboard/messages" && hasActiveChat) && (
+          <nav className={`flex navbar ${isMobile ? 'flex-row items-center px-4 py-3 w-full border-b' : 'flex-col border-r'} justify-between bg-card border-border`}>
           
-          <div className={`flex items-center justify-center w-full md:w-auto ${!isMobile ? 'pt-10 px-8 pb-4' : ''}`}>
-            <Link href="/" className="flex nav-logo items-center gap-3 hover:opacity-80 transition-opacity group">
-              <div className="w-full max-w-[120px] group-hover:scale-105 transition-transform duration-500">
+          {isMobile ? (
+            <div className="flex items-center justify-between w-full">
+              <div className="flex items-center gap-2">
+                <button 
+                  onClick={() => setIsSidebarOpen(true)}
+                  className="p-2 rounded-xl hover:bg-secondary text-foreground transition-colors flex items-center justify-center"
+                  aria-label="Toggle Menu"
+                >
+                  <Menu className="w-5 h-5" />
+                </button>
+                <h1 className="text-xl font-black italic tracking-tight uppercase leading-none">
+                  {getPageTitle()}
+                </h1>
+              </div>
+              <Link href="/" className="max-w-[80px] hover:opacity-80 transition-opacity flex items-center justify-center shrink-0">
                 <Image 
                   src={mounted && resolvedTheme === 'dark' ? "/zenith-dark.png" : "/zenith-light.png"} 
                   alt="Zenith" 
-                  width={100} 
-                  height={38} 
-                  className="w-auto h-auto" 
+                  width={70} 
+                  height={26} 
+                  className="w-auto h-auto opacity-70" 
                   priority
                 />
-              </div>
-            </Link>
-
-            {isMobile && (
-              <button 
-                onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-                className="p-2 rounded-md hover:bg-secondary text-secondary-foreground transition-colors"
-                aria-label="Toggle Menu"
-              >
-                {isSidebarOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
-              </button>
-            )}
-          </div>
+              </Link>
+            </div>
+          ) : (
+            <div className="pt-10 px-8 pb-4">
+              <Link href="/" className="flex nav-logo items-center gap-3 hover:opacity-80 transition-opacity group">
+                <div className="w-full max-w-[120px] group-hover:scale-105 transition-transform duration-500">
+                  <Image 
+                    src={mounted && resolvedTheme === 'dark' ? "/zenith-dark.png" : "/zenith-light.png"} 
+                    alt="Zenith" 
+                    width={100} 
+                    height={38} 
+                    className="w-auto h-auto" 
+                    priority
+                  />
+                </div>
+              </Link>
+            </div>
+          )}
 
           {!isMobile && (
             <div className="flex flex-col flex-1 mt-10 space-y-3 nav-links px-2">
@@ -241,6 +289,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           )}
 
         </nav>
+        )}
 
         {/* Mobile Sidebar Overlay */}
         {isMobile && (
@@ -251,18 +300,20 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             onClick={() => setIsSidebarOpen(false)}
           >
             <div 
-              className={`fixed left-0 top-0 bottom-0 w-[280px] glass p-6 flex flex-col transition-transform duration-300 ease-in-out ${
+              className={`fixed left-0 top-0 bottom-0 w-[280px] bg-white dark:bg-[#0a0a0a] border-r border-border p-6 flex flex-col transition-transform duration-300 ease-in-out ${
                 isSidebarOpen ? 'translate-x-0' : '-translate-x-full'
               }`}
               onClick={(e) => e.stopPropagation()}
             >
-                  <Image 
-                    src={mounted && resolvedTheme === 'dark' ? "/zenith-dark.png" : "/zenith-light.png"} 
-                    alt="Zenith" 
-                    width={100} 
-                    height={38} 
-                    className="w-auto h-auto" 
-                  />
+                  <Link href="/" className="hover:opacity-80 transition-opacity block mb-6 shrink-0 w-fit">
+                    <Image 
+                      src={mounted && resolvedTheme === 'dark' ? "/zenith-dark.png" : "/zenith-light.png"} 
+                      alt="Zenith" 
+                      width={100} 
+                      height={38} 
+                      className="w-auto h-auto" 
+                    />
+                  </Link>
 
               <div className="flex flex-col space-y-4">
                 {navLinks.map((link) => (

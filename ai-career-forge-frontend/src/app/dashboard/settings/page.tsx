@@ -126,7 +126,7 @@ export default function SettingsPage() {
 
   return (
     <div className="max-w-4xl mx-auto space-y-10 pb-20">
-      <div className="flex flex-col gap-2">
+      <div className="flex flex-col gap-2 hidden md:flex">
         <h1 className="text-3xl md:text-5xl font-black tracking-tight text-foreground">Settings</h1>
         <p className="text-muted-foreground font-medium">Manage your ZENITH experience and account security.</p>
       </div>

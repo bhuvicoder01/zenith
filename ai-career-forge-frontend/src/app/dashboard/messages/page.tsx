@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, useEffect, useRef, Suspense } from "react";
+import { useState, useEffect, useRef, Suspense, useLayoutEffect, Fragment } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { 
   Search, Send, MessageSquare, ArrowLeft, User, Loader2, 
-  ExternalLink, Mail, Circle, PhoneCall, Plus, X, CheckCheck, Trash2
+  ExternalLink, Mail, Circle, PhoneCall, Plus, X, CheckCheck, Trash2, Menu
 } from "lucide-react";
 import api, { BACKEND_URL } from "@/lib/api";
 import { useWebSocketStore } from "@/store/useWebSocketStore";
@@ -58,6 +58,13 @@ function ChatContainer() {
   const [showNewChatModal, setShowNewChatModal] = useState(false);
   const [newChatSearch, setNewChatSearch] = useState("");
 
+  const [page, setPage] = useState(0);
+  const [hasMore, setHasMore] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const isInitialLoadRef = useRef(true);
+  const intersectingMessageIdsRef = useRef<Set<string>>(new Set());
+  const [visibleTimeMessageId, setVisibleTimeMessageId] = useState<string | null>(null);
+
   const { socket, isConnected, fetchUnreadMessageCount, onlineUserIds, setActiveChatUserId } = useWebSocketStore();
   const { user } = useAuthStore();
   const currentUserId = user?.id;
@@ -93,20 +100,13 @@ function ChatContainer() {
             return [...prev, msg];
           });
           
-          // Mark as read only if sender is activeUser and window/tab is focused
           if (msg.senderId === activeUser.userId) {
-            if (document.hasFocus()) {
-              api.post(`/messages/read/${activeUser.userId}`)
-                .then(() => fetchUnreadMessageCount())
-                .catch(err => console.error("Failed to mark read:", err));
-            } else {
-              // Increment local unreadCount so the user sees a badge in the sidebar list
-              setConversations(prev => 
-                prev.map(c => 
-                  c.otherUser.userId === activeUser.userId ? { ...c, unreadCount: c.unreadCount + 1 } : c
-                )
-              );
-            }
+            // Increment local unreadCount; the IntersectionObserver will mark it read if visible
+            setConversations(prev => 
+              prev.map(c => 
+                c.otherUser.userId === activeUser.userId ? { ...c, unreadCount: c.unreadCount + 1 } : c
+              )
+            );
           }
         } else {
           // If it's not the active conversation, just refresh the list to update snippets/unread count
@@ -127,11 +127,46 @@ function ChatContainer() {
     return () => window.removeEventListener("zenith-app-message", handleIncomingMessage);
   }, [activeUser, currentUserId]);
 
-  // Handle marking messages as read when tab/window gains focus or user clicks inside
+  const markMessagesAsRead = async (messageIds: string[]) => {
+    if (!activeUser || messageIds.length === 0) return;
+    try {
+      await api.post("/messages/read-multiple", { messageIds });
+      
+      // Update local messages state
+      setMessages(prev => 
+        prev.map(m => messageIds.includes(m.id) ? { ...m, read: true } : m)
+      );
+      
+      // Update local unreadCount for the active conversation
+      setConversations(prev => 
+        prev.map(c => 
+          c.otherUser.userId === activeUser.userId 
+            ? { ...c, unreadCount: Math.max(0, c.unreadCount - messageIds.length) } 
+            : c
+        )
+      );
+
+      // Refresh global unread badge
+      fetchUnreadMessageCount();
+      
+      // Clean up the marked IDs from the intersecting set
+      messageIds.forEach(id => intersectingMessageIdsRef.current.delete(id));
+    } catch (err) {
+      console.error("Failed to mark messages as read:", err);
+    }
+  };
+
+  // Reset intersecting messages set on active conversation transition
+  useEffect(() => {
+    intersectingMessageIdsRef.current.clear();
+    setVisibleTimeMessageId(null);
+  }, [activeUser]);
+
+  // Handle marking visible messages as read when tab/window gains focus or user clicks inside
   useEffect(() => {
     const handleFocus = () => {
-      if (activeUser && document.hasFocus()) {
-        markActiveChatAsRead(activeUser.userId);
+      if (activeUser && document.hasFocus() && intersectingMessageIdsRef.current.size > 0) {
+        markMessagesAsRead(Array.from(intersectingMessageIdsRef.current));
       }
     };
 
@@ -143,6 +178,43 @@ function ChatContainer() {
       window.removeEventListener("click", handleFocus);
     };
   }, [activeUser]);
+
+  // Intersection Observer for viewport-based read receipts
+  useEffect(() => {
+    if (!activeUser || messages.length === 0 || !chatContainerRef.current) return;
+
+    const container = chatContainerRef.current;
+    
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        const msgId = entry.target.getAttribute("data-message-id");
+        if (!msgId) return;
+
+        if (entry.isIntersecting) {
+          intersectingMessageIdsRef.current.add(msgId);
+        } else {
+          intersectingMessageIdsRef.current.delete(msgId);
+        }
+      });
+
+      // If document is focused, mark visible messages as read
+      if (document.hasFocus() && intersectingMessageIdsRef.current.size > 0) {
+        markMessagesAsRead(Array.from(intersectingMessageIdsRef.current));
+      }
+    }, {
+      root: container,
+      rootMargin: "0px 0px -70px 0px", // Obscured by the message typing footer (~70px height)
+      threshold: 0.1 // Intersects if at least 10% visible above typing section
+    });
+
+    // Observe all unread messages sent by the other user
+    const unreadElements = container.querySelectorAll('[data-unread="true"]');
+    unreadElements.forEach(el => observer.observe(el));
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [activeUser, messages]);
 
   // Synchronize activeChatUserId with useWebSocketStore
   useEffect(() => {
@@ -157,12 +229,77 @@ function ChatContainer() {
   }, [activeUser, setActiveChatUserId]);
 
   // Scroll to bottom when messages load/change
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
+  useLayoutEffect(() => {
+    if (loadingMessages) return;
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (isInitialLoadRef.current) {
+      scrollToBottom(false);
+      isInitialLoadRef.current = false;
+    } else {
+      if (page === 0) {
+        scrollToBottom(true);
+      } else if (chatContainerRef.current) {
+        const target = chatContainerRef.current;
+        const isNearBottom = target.scrollHeight - target.scrollTop - target.clientHeight < 200;
+        if (isNearBottom) {
+          scrollToBottom(true);
+        }
+      }
+    }
+  }, [messages, loadingMessages]);
+
+  const scrollToBottom = (smooth = false) => {
+    if (chatContainerRef.current) {
+      const target = chatContainerRef.current;
+      if (smooth) {
+        target.scrollTo({ top: target.scrollHeight, behavior: "smooth" });
+      } else {
+        target.scrollTop = target.scrollHeight;
+        requestAnimationFrame(() => {
+          if (chatContainerRef.current) {
+            chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+          }
+        });
+        setTimeout(() => {
+          if (chatContainerRef.current) {
+            chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+          }
+        }, 50);
+      }
+    }
+  };
+
+  const handleScroll = async (e: React.UIEvent<HTMLDivElement>) => {
+    const target = e.currentTarget;
+    if (target.scrollTop === 0 && hasMore && !loadingMore && !loadingMessages && activeUser) {
+      setLoadingMore(true);
+      const prevScrollHeight = target.scrollHeight;
+      const nextPage = page + 1;
+      try {
+        const res = await api.get(`/messages/history/${activeUser.userId}?page=${nextPage}&size=30`);
+        const olderMessages = res.data;
+        if (olderMessages.length > 0) {
+          setMessages(prev => {
+            const newMsgs = olderMessages.filter((m: DirectMessage) => !prev.some(p => p.id === m.id));
+            return [...newMsgs, ...prev];
+          });
+          setPage(nextPage);
+        }
+        if (olderMessages.length < 30) {
+          setHasMore(false);
+        }
+        setTimeout(() => {
+          if (chatContainerRef.current) {
+            const newScrollHeight = chatContainerRef.current.scrollHeight;
+            chatContainerRef.current.scrollTop = newScrollHeight - prevScrollHeight;
+          }
+        }, 50);
+      } catch (err) {
+        console.error("Failed to load older messages:", err);
+      } finally {
+        setLoadingMore(false);
+      }
+    }
   };
 
   const fetchConversations = async () => {
@@ -225,26 +362,18 @@ function ChatContainer() {
   const selectConversation = async (otherUser: PublicProfile) => {
     setActiveUser(otherUser);
     setLoadingMessages(true);
+    setPage(0);
+    setHasMore(true);
+    isInitialLoadRef.current = true;
     
-    // Clear clean search parameters once selected
-    if (targetUserId) {
-      router.replace("/dashboard/messages", { scroll: false });
-    }
+    // Persist active chat user in query param for persistence on refresh
+    router.replace(`/dashboard/messages?userId=${otherUser.userId}`, { scroll: false });
 
     try {
-      const res = await api.get(`/messages/history/${otherUser.userId}`);
+      const res = await api.get(`/messages/history/${otherUser.userId}?page=0&size=30`);
       setMessages(res.data);
-      
-      // Mark read only if window/tab is focused
-      if (document.hasFocus()) {
-        await markActiveChatAsRead(otherUser.userId);
-      } else {
-        // Update local list counts reactively to 0 for display
-        setConversations(prev => 
-          prev.map(c => 
-            c.otherUser.userId === otherUser.userId ? { ...c, unreadCount: 0 } : c
-          )
-        );
+      if (res.data.length < 30) {
+        setHasMore(false);
       }
     } catch (err) {
       console.error("Failed to load chat history:", err);
@@ -268,6 +397,7 @@ function ChatContainer() {
       toast.success("Conversation cleared");
       setActiveUser(null);
       setMessages([]);
+      router.replace("/dashboard/messages", { scroll: false });
       fetchConversations();
     } catch (err) {
       console.error("Failed to clear conversation:", err);
@@ -358,6 +488,30 @@ function ChatContainer() {
     }
   };
 
+  const getDividerDateLabel = (isoString: string) => {
+    try {
+      const date = new Date(isoString);
+      const today = new Date();
+      const yesterday = new Date();
+      yesterday.setDate(today.getDate() - 1);
+      
+      if (date.toDateString() === today.toDateString()) {
+        return "Today";
+      } else if (date.toDateString() === yesterday.toDateString()) {
+        return "Yesterday";
+      } else {
+        return date.toLocaleDateString(undefined, {
+          weekday: "long",
+          year: "numeric",
+          month: "long",
+          day: "numeric"
+        });
+      }
+    } catch (e) {
+      return "";
+    }
+  };
+
   // Filter contacts/active threads
   const filteredConversations = conversations.filter(c => {
     const name = c.otherUser.fullName?.toLowerCase() || "";
@@ -386,7 +540,8 @@ function ChatContainer() {
         <div className="p-5 border-b border-border/60 space-y-4">
           <div className="flex items-center justify-between">
             <h1 className="text-2xl font-black italic tracking-tight flex items-center gap-2">
-              Conversations <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
+              Conversations 
+              {/* <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" /> */}
             </h1>
             <button
               onClick={() => setShowNewChatModal(true)}
@@ -519,7 +674,10 @@ function ChatContainer() {
               <div className="flex items-center gap-3.5 min-w-0">
                 {/* Back button for mobile */}
                 <button
-                  onClick={() => setActiveUser(null)}
+                  onClick={() => {
+                    setActiveUser(null);
+                    router.replace("/dashboard/messages", { scroll: false });
+                  }}
                   className="p-2 hover:bg-secondary rounded-xl text-muted-foreground hover:text-foreground md:hidden transition-colors"
                 >
                   <ArrowLeft className="w-5 h-5" />
@@ -545,7 +703,7 @@ function ChatContainer() {
                     {activeUser.fullName}
                     {onlineUserIds.includes(activeUser.userId) ? (
                       <span className="flex items-center gap-1 text-[9px] text-emerald-500 font-extrabold uppercase bg-emerald-500/10 px-2 py-0.5 rounded-full select-none">
-                        <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-ping shrink-0" />
+                        {/* <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-ping shrink-0" /> */}
                         Online
                       </span>
                     ) : (
@@ -584,6 +742,7 @@ function ChatContainer() {
             {/* Chat feed body */}
             <div 
               ref={chatContainerRef}
+              onScroll={handleScroll}
               className="flex-1 overflow-y-auto p-5 space-y-4 bg-secondary/5 border-b border-border/30 relative"
             >
               {loadingMessages ? (
@@ -593,37 +752,62 @@ function ChatContainer() {
                 </div>
               ) : messages.length > 0 ? (
                 <div className="space-y-4">
+                  {loadingMore && (
+                    <div className="flex justify-center py-2 shrink-0">
+                      <Loader2 className="w-5 h-5 animate-spin text-primary animate-pulse" />
+                    </div>
+                  )}
                   {messages.map((msg, index) => {
                     const isSelf = msg.senderId === currentUserId;
+                    const dateLabel = getDividerDateLabel(msg.timestamp);
+                    const prevMsg = index > 0 ? messages[index - 1] : null;
+                    const prevDateLabel = prevMsg ? getDividerDateLabel(prevMsg.timestamp) : null;
+                    const showDivider = dateLabel && dateLabel !== prevDateLabel;
+
                     return (
-                      <div 
-                        key={msg.id} 
-                        className={`flex flex-col max-w-[75%] sm:max-w-[65%] w-fit group relative ${
-                          isSelf ? "ml-auto items-end" : "mr-auto items-start"
-                        }`}
-                      >
-                        <div className={`p-3.5 rounded-2xl text-sm leading-relaxed relative w-fit ${
-                          isSelf 
-                            ? "bg-foreground text-background rounded-tr-none shadow-md" 
-                            : "bg-card border border-border rounded-tl-none text-foreground shadow-sm"
-                        }`}>
-                          <p className="whitespace-pre-wrap">{msg.content}</p>
+                      <Fragment key={msg.id}>
+                        {showDivider && (
+                          <div className="flex items-center justify-center my-6 w-full select-none">
+                            <div className="h-[1px] bg-border/60 flex-1" />
+                            <span className="mx-4 text-[10px] font-black uppercase tracking-widest text-muted-foreground bg-secondary/30 px-3 py-1.5 rounded-full border border-border/40 shadow-sm">
+                              {dateLabel}
+                            </span>
+                            <div className="h-[1px] bg-border/60 flex-1" />
+                          </div>
+                        )}
+                        <div 
+                          data-message-id={msg.id}
+                          data-unread={!msg.read && !isSelf}
+                          onClick={() => setVisibleTimeMessageId(prev => prev === msg.id ? null : msg.id)}
+                          className={`flex flex-col max-w-[75%] sm:max-w-[65%] w-fit group relative cursor-pointer select-none ${
+                            isSelf ? "ml-auto items-end" : "mr-auto items-start"
+                          }`}
+                        >
+                          <div className={`p-3.5 rounded-2xl text-sm leading-relaxed relative w-fit ${
+                            isSelf 
+                              ? "bg-foreground text-background rounded-tr-none shadow-md" 
+                              : "bg-card border border-border rounded-tl-none text-foreground shadow-sm"
+                          }`}>
+                            <p className="whitespace-pre-wrap select-text">{msg.content}</p>
+                          </div>
+                          
+                          {/* Detailed time and checkmarks */}
+                          <div className="flex items-center gap-1.5 mt-1 px-1">
+                            {visibleTimeMessageId === msg.id && (
+                              <span className="text-[9px] text-muted-foreground/60 font-semibold animate-in fade-in slide-in-from-top-1 duration-200">
+                                {formatDetailedTime(msg.timestamp)}
+                              </span>
+                            )}
+                            {isSelf && (
+                              msg.read ? (
+                                <span title="Seen"><CheckCheck className="w-3.5 h-3.5 text-blue-500" /></span>
+                              ) : (
+                                <span title="Delivered"><CheckCheck className="w-3.5 h-3.5 text-muted-foreground/40" /></span>
+                              )
+                            )}
+                          </div>
                         </div>
-                        
-                        {/* Hover-reveal detailed time and checkmarks */}
-                        <div className="flex items-center gap-1.5 mt-1 px-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-                          <span className="text-[9px] text-muted-foreground/60 font-semibold">
-                            {formatDetailedTime(msg.timestamp)}
-                          </span>
-                          {isSelf && (
-                            msg.read ? (
-                              <span title="Seen"><CheckCheck className="w-3.5 h-3.5 text-blue-500" /></span>
-                            ) : (
-                              <span title="Delivered"><CheckCheck className="w-3.5 h-3.5 text-muted-foreground/40" /></span>
-                            )
-                          )}
-                        </div>
-                      </div>
+                      </Fragment>
                     );
                   })}
                   <div ref={messagesEndRef} />

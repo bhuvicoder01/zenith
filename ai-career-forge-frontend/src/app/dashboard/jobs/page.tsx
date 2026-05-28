@@ -229,7 +229,7 @@ export default function JobsPage() {
       {/* Header & Controls */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 bg-card p-8 rounded-[2rem] border border-border shadow-sm">
         <div className="space-y-4">
-          <div className="space-y-1">
+          <div className="space-y-1 hidden md:block">
             <h1 className="text-4xl md:text-6xl font-black tracking-tighter text-foreground">Job Discovery</h1>
             <p className="text-muted-foreground font-medium max-w-lg">
               {activeTab === "dashboard" ? "Personalized collections based on your profile and behavior." : "Semantic matches and global verified career opportunities."}

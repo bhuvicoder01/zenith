@@ -10,7 +10,7 @@ import java.util.List;
 public interface DirectMessageRepository extends MongoRepository<DirectMessage, String> {
 
     @Query("{$or: [{senderId: ?0, receiverId: ?1, deletedBySender: {$ne: true}}, {senderId: ?1, receiverId: ?0, deletedByReceiver: {$ne: true}}]}")
-    List<DirectMessage> findChatHistory(String userId1, String userId2, Sort sort);
+    List<DirectMessage> findChatHistory(String userId1, String userId2, org.springframework.data.domain.Pageable pageable);
 
     @Query("{$or: [{senderId: ?0, deletedBySender: {$ne: true}}, {receiverId: ?0, deletedByReceiver: {$ne: true}}]}")
     List<DirectMessage> findActiveMessagesForUser(String userId, Sort sort);

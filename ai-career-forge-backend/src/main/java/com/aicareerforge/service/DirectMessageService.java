@@ -63,11 +63,19 @@ public class DirectMessageService {
     }
 
     public List<DirectMessage> getChatHistory(String userId, String otherUserId) {
-        Sort sort = Sort.by(Sort.Direction.ASC, "timestamp");
-        List<DirectMessage> history = directMessageRepository.findChatHistory(userId, otherUserId, sort);
+        return getChatHistory(userId, otherUserId, 0, 30);
+    }
+
+    public List<DirectMessage> getChatHistory(String userId, String otherUserId, int page, int size) {
+        org.springframework.data.domain.Pageable pageable = org.springframework.data.domain.PageRequest.of(
+            page,
+            size,
+            Sort.by(Sort.Direction.DESC, "timestamp")
+        );
+        List<DirectMessage> history = directMessageRepository.findChatHistory(userId, otherUserId, pageable);
         
-        // Auto-mark received messages as read
-        markChatAsRead(userId, otherUserId);
+        // Reverse to return in chronological order (oldest first)
+        java.util.Collections.reverse(history);
         
         return history;
     }
@@ -89,6 +97,42 @@ public class DirectMessageService {
                 );
             } catch (Exception e) {
                 log.error("Failed to push read receipt WS notification: {}", e.getMessage());
+            }
+        }
+    }
+
+    public void markMessagesAsRead(String receiverId, List<String> messageIds) {
+        if (messageIds == null || messageIds.isEmpty()) {
+            return;
+        }
+        List<DirectMessage> messages = directMessageRepository.findAllById(messageIds);
+        List<DirectMessage> toUpdate = new ArrayList<>();
+        java.util.Set<String> sendersToNotify = new java.util.HashSet<>();
+        
+        for (DirectMessage m : messages) {
+            if (m.getReceiverId().equals(receiverId) && !m.isRead()) {
+                m.setRead(true);
+                toUpdate.add(m);
+                sendersToNotify.add(m.getSenderId());
+            }
+        }
+        
+        if (!toUpdate.isEmpty()) {
+            directMessageRepository.saveAll(toUpdate);
+            log.info("Marked {} messages as read for receiver {}", toUpdate.size(), receiverId);
+            
+            for (String senderId : sendersToNotify) {
+                try {
+                    webSocketAppHandler.sendNotification(
+                            senderId,
+                            "READ",
+                            "Messages Read",
+                            "Receiver read messages",
+                            java.util.Map.of("readerId", receiverId)
+                    );
+                } catch (Exception e) {
+                    log.error("Failed to push read receipt WS notification: {}", e.getMessage());
+                }
             }
         }
     }
@@ -131,8 +175,9 @@ public class DirectMessageService {
     }
 
     public void clearConversation(String userId, String otherUserId) {
-        Sort sort = Sort.by(Sort.Direction.ASC, "timestamp");
-        List<DirectMessage> history = directMessageRepository.findChatHistory(userId, otherUserId, sort);
+        List<DirectMessage> history = directMessageRepository.findChatHistory(
+                userId, otherUserId, org.springframework.data.domain.PageRequest.of(0, Integer.MAX_VALUE, Sort.by(Sort.Direction.ASC, "timestamp"))
+        );
         if (!history.isEmpty()) {
             for (DirectMessage msg : history) {
                 if (msg.getSenderId().equals(userId)) {

@@ -13,6 +13,7 @@ import { useTheme } from "next-themes";
 import api, { BACKEND_URL } from "@/lib/api";
 import useAuthStore from "@/store/useAuthStore";
 import { toast } from "sonner";
+import PublicNavbar from "@/components/PublicNavbar";
 
 interface Experience {
   title: string;
@@ -229,40 +230,7 @@ export default function PublicProfileDetailPage() {
   return (
     <div className="min-h-screen bg-background pb-20">
       {/* Header */}
-      <nav className="border-b border-border bg-background/80 backdrop-blur-xl sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2">
-            <div className="w-10 h-10 rounded-lg flex items-center justify-center overflow-hidden">
-              <img 
-                src={resolvedTheme === 'dark' ? '/zenith-dark.png' : '/zenith-light.png'} 
-                alt="Zenith" 
-                className="w-full h-full object-contain" 
-              />
-            </div>
-            <span className="text-xl font-black tracking-tighter uppercase">ZENITH</span>
-          </Link>
-          <div className="hidden md:flex items-center gap-8 text-[11px] font-black uppercase tracking-[0.2em] text-muted-foreground">
-            <Link href="/public/jobs" className="hover:text-foreground transition-colors">Explore Jobs</Link>
-            <Link href="/public/profiles" className="hover:text-foreground transition-colors">Explore Profiles</Link>
-          </div>
-          <div className="flex items-center gap-4">
-            {isAuthenticated ? (
-              <Link href="/dashboard" className="px-5 py-2.5 bg-foreground text-background rounded-full text-xs font-black uppercase tracking-widest hover:opacity-90 transition-all">
-                Dashboard
-              </Link>
-            ) : (
-              <>
-                <Link href="/auth/login" className="text-xs font-black uppercase tracking-widest hover:text-primary transition-colors">
-                  Login
-                </Link>
-                <Link href="/auth/register" className="px-5 py-2.5 bg-foreground text-background rounded-full text-xs font-black uppercase tracking-widest hover:opacity-90 transition-all">
-                  Sign Up
-                </Link>
-              </>
-            )}
-          </div>
-        </div>
-      </nav>
+      <PublicNavbar />
 
       {/* Main Profile Cover & Card */}
       <div className="max-w-5xl mx-auto px-6 pt-12 space-y-8">

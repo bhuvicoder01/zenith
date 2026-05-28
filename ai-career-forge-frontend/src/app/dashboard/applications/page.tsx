@@ -90,7 +90,7 @@ export default function ApplicationTracker() {
   return (
     <div className="space-y-10 animate-in fade-in duration-700">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-        <div className="space-y-1">
+        <div className="space-y-1 hidden md:block">
           <h1 className="text-2xl md:text-5xl font-black text-foreground tracking-tight">Application Arsenal</h1>
           <p className="text-sm md:text-base text-muted-foreground font-semibold">Manage your agent-generated materials and track your mission progress.</p>
         </div>

@@ -9,6 +9,7 @@ import {
 import useAuthStore from "@/store/useAuthStore";
 import { useState, useEffect } from "react";
 import { useTheme } from "next-themes";
+import PublicNavbar from "@/components/PublicNavbar";
 
 export default function Home() {
   const { isAuthenticated } = useAuthStore();
@@ -25,41 +26,7 @@ export default function Home() {
     <div className="min-h-screen bg-background text-foreground selection:bg-foreground selection:text-background font-sans">
       
       {/* Navigation */}
-      <nav className="fixed top-0 w-full z-[100] border-b border-border/40 bg-background/80 backdrop-blur-xl">
-        <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-10 h-10 rounded-lg flex items-center justify-center overflow-hidden">
-              <img 
-                src={resolvedTheme === 'dark' ? '/zenith-dark.png' : '/zenith-light.png'} 
-                alt="Zenith" 
-                className="w-full h-full object-contain" 
-              />
-            </div>
-            <span className="text-xl font-black tracking-tighter uppercase">ZENITH</span>
-          </div>
-          <div className="hidden md:flex items-center gap-8 text-[11px] font-black uppercase tracking-[0.2em] text-muted-foreground">
-            <a href="#features" className="hover:text-foreground transition-colors">Agents</a>
-            <Link href="/public/jobs" className="hover:text-foreground transition-colors">Explore Jobs</Link>
-            <Link href="/public/profiles" className="hover:text-foreground transition-colors">Explore Profiles</Link>
-          </div>
-          <div className="flex items-center gap-4">
-             {isAuthenticated ? (
-               <Link href="/dashboard" className="px-5 py-2.5 bg-foreground text-background rounded-full text-[11px] font-black uppercase tracking-widest hover:opacity-90 transition-all">
-                  Dashboard
-               </Link>
-             ) : (
-               <>
-                <Link href="/auth/login" className="text-[11px] font-black uppercase tracking-widest hover:text-foreground transition-colors hidden sm:block">
-                  Login
-                </Link>
-                <Link href="/auth/register" className="px-5 py-2.5 bg-foreground text-background rounded-full text-[11px] font-black uppercase tracking-widest hover:opacity-90 transition-all">
-                  Get Started
-                </Link>
-               </>
-             )}
-          </div>
-        </div>
-      </nav>
+      <PublicNavbar />
 
       {/* Hero Section */}
       <section className="relative pt-40 pb-24 overflow-hidden">

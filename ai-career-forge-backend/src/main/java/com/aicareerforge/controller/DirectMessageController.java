@@ -35,8 +35,10 @@ public class DirectMessageController {
     @GetMapping("/history/{otherUserId}")
     public ResponseEntity<List<DirectMessage>> getChatHistory(
             @AuthenticationPrincipal User user,
-            @PathVariable String otherUserId) {
-        List<DirectMessage> history = directMessageService.getChatHistory(user.getId(), otherUserId);
+            @PathVariable String otherUserId,
+            @RequestParam(value = "page", defaultValue = "0") int page,
+            @RequestParam(value = "size", defaultValue = "30") int size) {
+        List<DirectMessage> history = directMessageService.getChatHistory(user.getId(), otherUserId, page, size);
         return ResponseEntity.ok(history);
     }
 
@@ -45,6 +47,15 @@ public class DirectMessageController {
             @AuthenticationPrincipal User user,
             @PathVariable String senderId) {
         directMessageService.markChatAsRead(user.getId(), senderId);
+        return ResponseEntity.ok().build();
+    }
+
+    @PostMapping("/read-multiple")
+    public ResponseEntity<Void> markMessagesAsRead(
+            @AuthenticationPrincipal User user,
+            @RequestBody Map<String, List<String>> body) {
+        List<String> messageIds = body.get("messageIds");
+        directMessageService.markMessagesAsRead(user.getId(), messageIds);
         return ResponseEntity.ok().build();
     }
 

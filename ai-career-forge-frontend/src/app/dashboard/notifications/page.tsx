@@ -86,7 +86,7 @@ export default function NotificationsPage() {
     <div className="space-y-8 max-w-4xl mx-auto">
       {/* Title Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="space-y-2">
+        <div className="space-y-2 hidden md:block">
           <h1 className="text-4xl md:text-5xl font-black tracking-tight italic">
             Transmission <span className="text-muted-foreground/30 not-italic">Feed.</span>
           </h1>

@@ -164,7 +164,7 @@ export default function ConnectionsPage() {
     <div className="space-y-8 max-w-5xl mx-auto">
       {/* Title */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="space-y-2">
+        <div className="space-y-2 hidden md:block">
           <h1 className="text-4xl md:text-5xl font-black tracking-tight italic flex items-center gap-3">
             Career <span className="text-muted-foreground/30 not-italic">Nexus.</span>
           </h1>
