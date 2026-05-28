@@ -10,7 +10,7 @@ import api from "@/lib/api";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { useNotificationStore } from "@/store/useNotificationStore";
+import { useWebSocketStore, NotificationItem } from "@/store/useWebSocketStore";
 
 interface Experience {
   title: string;
@@ -42,7 +42,7 @@ interface UserProfile {
 
 export default function DashboardProfile() {
   const router = useRouter();
-  const { notifications, markAsRead } = useNotificationStore();
+  const { notifications, markAsRead } = useWebSocketStore();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isUploading, setIsUploading] = useState(false);
@@ -287,16 +287,16 @@ export default function DashboardProfile() {
                    </div>
                    <h3 className="text-lg font-black uppercase tracking-tight">Live Stream</h3>
                 </div>
-                {notifications.filter(n => !n.read).length > 0 && (
-                   <span className="px-2 py-0.5 bg-primary text-background rounded-full text-[9px] font-black animate-pulse">
-                      {notifications.filter(n => !n.read).length} NEW
-                   </span>
-                )}
+                 {notifications.filter((n: NotificationItem) => !n.read).length > 0 && (
+                    <span className="px-2 py-0.5 bg-primary text-background rounded-full text-[9px] font-black animate-pulse">
+                       {notifications.filter((n: NotificationItem) => !n.read).length} NEW
+                    </span>
+                 )}
              </div>
 
              <div className="space-y-4">
                 {notifications.length > 0 ? (
-                   notifications.slice(0, 3).map((n) => (
+                   notifications.slice(0, 3).map((n: NotificationItem) => (
                       <div 
                          key={n.id}
                          onClick={() => handleNotificationClick(n)}

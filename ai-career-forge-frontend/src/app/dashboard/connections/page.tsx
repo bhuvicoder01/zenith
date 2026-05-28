@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { 
-  Users, Loader2, User, Check, X, Search, ArrowRight, UserMinus
+  Users, Loader2, User, Check, X, Search, ArrowRight, UserMinus, MessageSquare
 } from "lucide-react";
 import api, { BACKEND_URL } from "@/lib/api";
 import { toast } from "sonner";
@@ -270,71 +270,83 @@ export default function ConnectionsPage() {
           {activeTab === "connections" ? (
             <>
               {filteredConnections.length > 0 ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="flex flex-col gap-1">
                   {filteredConnections.map((conn) => {
                     const photo = getPhotoUrl(conn.user.profilePhotoUrl);
                     return (
                       <div 
                         key={conn.id} 
-                        className="group relative bg-card border border-border/80 rounded-3xl p-6 hover:shadow-xl hover:shadow-primary/5 transition-all flex items-start gap-4 overflow-hidden"
+                        className="group relative bg-card border border-border/80 hover:border-primary/30 rounded-2xl p-4 sm:p-5 hover:shadow-md hover:shadow-primary/5 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4 overflow-hidden"
                       >
-                        <div className="absolute inset-0 bg-gradient-to-tr from-primary/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
+                        <div className="absolute inset-0 bg-gradient-to-r from-primary/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
 
-                        {/* Avatar */}
-                        <div className="h-14 w-14 rounded-2xl border border-border bg-muted flex items-center justify-center overflow-hidden shrink-0 shadow-sm">
-                          {photo ? (
-                            <img src={photo} alt={conn.user.fullName} className="w-full h-full object-cover" />
-                          ) : (
-                            <div className="font-bold text-base text-muted-foreground">{getInitials(conn.user.fullName)}</div>
-                          )}
-                        </div>
+                        <div className="flex items-center gap-4 min-w-0">
+                          {/* Avatar */}
+                          <div className="h-12 w-12 rounded-xl border border-border bg-muted flex items-center justify-center overflow-hidden shrink-0 shadow-sm">
+                            {photo ? (
+                              <img src={photo} alt={conn.user.fullName} className="w-full h-full object-cover" />
+                            ) : (
+                              <div className="font-bold text-sm text-muted-foreground">{getInitials(conn.user.fullName)}</div>
+                            )}
+                          </div>
 
-                        {/* Info details */}
-                        <div className="flex-1 min-w-0 space-y-1.5 z-10">
-                          <h3 className="font-bold text-lg leading-tight truncate group-hover:text-primary transition-colors">
-                            {conn.user.fullName}
-                          </h3>
-                          <p className="text-muted-foreground text-xs font-semibold tracking-tight line-clamp-1">
-                            {conn.user.headline || "Zenith Operative"}
-                          </p>
-                          {conn.user.skills && conn.user.skills.length > 0 && (
-                            <div className="flex flex-wrap gap-1.5 pt-1">
-                              {conn.user.skills.slice(0, 3).map((skill, idx) => (
-                                <span 
-                                  key={idx}
-                                  className="px-2 py-0.5 bg-secondary/80 text-muted-foreground rounded-md text-[9px] font-black uppercase tracking-wider border border-border/30"
-                                >
-                                  {skill}
-                                </span>
-                              ))}
-                              {conn.user.skills.length > 3 && (
-                                <span className="text-[9px] text-muted-foreground/60 font-bold self-center ml-0.5">
-                                  +{conn.user.skills.length - 3} more
-                                </span>
-                              )}
+                          {/* Info details */}
+                          <div className="min-w-0 space-y-1 z-10">
+                            <div className="flex flex-col sm:flex-row sm:items-baseline gap-1 sm:gap-3">
+                              <h3 className="font-bold text-base leading-tight truncate group-hover:text-primary transition-colors">
+                                {conn.user.fullName}
+                              </h3>
+                              <p className="text-muted-foreground text-xs font-semibold tracking-tight line-clamp-1 sm:max-w-[250px] md:max-w-[350px]">
+                                {conn.user.headline || "Zenith Operative"}
+                              </p>
                             </div>
-                          )}
+                            {conn.user.skills && conn.user.skills.length > 0 && (
+                              <div className="flex flex-wrap gap-1.5 pt-0.5">
+                                {conn.user.skills.slice(0, 4).map((skill, idx) => (
+                                  <span 
+                                    key={idx}
+                                    className="px-2 py-0.5 bg-secondary/80 text-muted-foreground rounded-md text-[9px] font-black uppercase tracking-wider border border-border/30"
+                                  >
+                                    {skill}
+                                  </span>
+                                ))}
+                                {conn.user.skills.length > 4 && (
+                                  <span className="text-[9px] text-muted-foreground/60 font-bold self-center ml-0.5">
+                                    +{conn.user.skills.length - 4} more
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                          </div>
                         </div>
 
                         {/* Actions */}
-                        <div className="flex flex-col sm:flex-row md:flex-col lg:flex-row gap-2 z-10 shrink-0 self-center">
+                        <div className="flex items-center gap-2 z-10 shrink-0 self-end sm:self-center ml-auto sm:ml-0">
                           <Link
                             href={`/public/profiles/${conn.user.userId}`}
-                            className="p-2.5 bg-foreground text-background hover:opacity-90 rounded-xl transition-all flex items-center justify-center"
+                            className="px-4 py-2 bg-foreground text-background hover:opacity-90 rounded-xl transition-all flex items-center justify-center gap-1.5 text-xs font-bold"
                             title="View Public Profile"
                           >
-                            <ArrowRight className="w-4 h-4" />
+                            <span>View Profile</span>
+                            <ArrowRight className="w-3.5 h-3.5" />
+                          </Link>
+                          <Link
+                            href={`/dashboard/messages?userId=${conn.user.userId}`}
+                            className="p-2 bg-secondary hover:bg-secondary/80 border border-border rounded-xl transition-all flex items-center justify-center text-foreground"
+                            title="Send Message"
+                          >
+                            <MessageSquare className="w-3.5 h-3.5" />
                           </Link>
                           <button
                             onClick={() => handleDisconnect(conn.id, conn.user.fullName)}
                             disabled={actionLoadingId === conn.id}
-                            className="p-2.5 bg-secondary text-destructive hover:bg-destructive/10 border border-border rounded-xl transition-all flex items-center justify-center disabled:opacity-50"
+                            className="p-2 bg-secondary text-destructive hover:bg-destructive/10 border border-border rounded-xl transition-all flex items-center justify-center disabled:opacity-50"
                             title="Disconnect"
                           >
                             {actionLoadingId === conn.id ? (
-                              <Loader2 className="w-4 h-4 animate-spin" />
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
                             ) : (
-                              <UserMinus className="w-4 h-4" />
+                              <UserMinus className="w-3.5 h-3.5" />
                             )}
                           </button>
                         </div>
@@ -369,72 +381,77 @@ export default function ConnectionsPage() {
           ) : activeTab === "requests" ? (
             <>
               {requests.length > 0 ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="flex flex-col gap-4">
                   {requests.map((req) => {
                     const photo = getPhotoUrl(req.user.profilePhotoUrl);
                     return (
                       <div 
                         key={req.id} 
-                        className="group relative bg-card border border-border/80 rounded-3xl p-6 hover:shadow-xl hover:shadow-primary/5 transition-all flex items-start gap-4 overflow-hidden animate-in slide-in-from-bottom-2 duration-300"
+                        className="group relative bg-card border border-border/80 hover:border-primary/30 rounded-2xl p-4 sm:p-5 hover:shadow-md hover:shadow-primary/5 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4 overflow-hidden animate-in slide-in-from-bottom-2 duration-300"
                       >
-                        <div className="absolute inset-0 bg-gradient-to-tr from-primary/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
+                        <div className="absolute inset-0 bg-gradient-to-r from-primary/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
 
-                        {/* Avatar */}
-                        <div className="h-14 w-14 rounded-2xl border border-border bg-muted flex items-center justify-center overflow-hidden shrink-0 shadow-sm">
-                          {photo ? (
-                            <img src={photo} alt={req.user.fullName} className="w-full h-full object-cover" />
-                          ) : (
-                            <div className="font-bold text-base text-muted-foreground">{getInitials(req.user.fullName)}</div>
-                          )}
-                        </div>
-
-                        {/* Info details */}
-                        <div className="flex-1 min-w-0 space-y-1 z-10">
-                          <div className="flex items-center gap-2">
-                            <h3 className="font-bold text-lg leading-tight truncate group-hover:text-primary transition-colors">
-                              {req.user.fullName}
-                            </h3>
+                        <div className="flex items-center gap-4 min-w-0">
+                          {/* Avatar */}
+                          <div className="h-12 w-12 rounded-xl border border-border bg-muted flex items-center justify-center overflow-hidden shrink-0 shadow-sm">
+                            {photo ? (
+                              <img src={photo} alt={req.user.fullName} className="w-full h-full object-cover" />
+                            ) : (
+                              <div className="font-bold text-sm text-muted-foreground">{getInitials(req.user.fullName)}</div>
+                            )}
                           </div>
-                          <p className="text-muted-foreground text-xs font-semibold tracking-tight line-clamp-1">
-                            {req.user.headline || "Zenith Operative"}
-                          </p>
-                          <p className="text-[10px] text-muted-foreground/60 font-black uppercase tracking-wider pt-1">
-                            Received {new Date(req.createdAt).toLocaleDateString()}
-                          </p>
+
+                          {/* Info details */}
+                          <div className="min-w-0 space-y-1 z-10">
+                            <div className="flex flex-col sm:flex-row sm:items-baseline gap-1 sm:gap-3">
+                              <h3 className="font-bold text-base leading-tight truncate group-hover:text-primary transition-colors">
+                                {req.user.fullName}
+                              </h3>
+                              <p className="text-muted-foreground text-xs font-semibold tracking-tight line-clamp-1 sm:max-w-[250px] md:max-w-[350px]">
+                                {req.user.headline || "Zenith Operative"}
+                              </p>
+                            </div>
+                            <p className="text-[10px] text-muted-foreground/60 font-black uppercase tracking-wider pt-0.5">
+                              Received {new Date(req.createdAt).toLocaleDateString()}
+                            </p>
+                          </div>
                         </div>
 
                         {/* Actions */}
-                        <div className="flex items-center gap-2 z-10 shrink-0 self-center">
+                        <div className="flex items-center gap-2 z-10 shrink-0 self-end sm:self-center ml-auto sm:ml-0">
                           <button
                             onClick={() => handleAccept(req.id)}
                             disabled={actionLoadingId === req.id}
-                            className="p-2.5 bg-foreground text-background hover:opacity-90 rounded-xl transition-all flex items-center justify-center disabled:opacity-50"
+                            className="px-4 py-2 bg-foreground text-background hover:opacity-90 rounded-xl transition-all flex items-center justify-center gap-1.5 text-xs font-bold disabled:opacity-50"
                             title="Accept Request"
                           >
                             {actionLoadingId === req.id ? (
-                              <Loader2 className="w-4 h-4 animate-spin" />
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
                             ) : (
-                              <Check className="w-4 h-4" />
+                              <>
+                                <Check className="w-3.5 h-3.5" />
+                                <span>Accept</span>
+                              </>
                             )}
                           </button>
                           <button
                             onClick={() => handleReject(req.id)}
                             disabled={actionLoadingId === req.id}
-                            className="p-2.5 bg-secondary text-destructive hover:bg-destructive/10 border border-border rounded-xl transition-all flex items-center justify-center disabled:opacity-50"
+                            className="p-2 bg-secondary text-destructive hover:bg-destructive/10 border border-border rounded-xl transition-all flex items-center justify-center disabled:opacity-50"
                             title="Ignore Request"
                           >
                             {actionLoadingId === req.id ? (
-                              <Loader2 className="w-4 h-4 animate-spin" />
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
                             ) : (
-                              <X className="w-4 h-4" />
+                              <X className="w-3.5 h-3.5" />
                             )}
                           </button>
                           <Link
                             href={`/public/profiles/${req.user.userId}`}
-                            className="p-2.5 bg-secondary hover:bg-secondary/80 border border-border rounded-xl transition-all flex items-center justify-center text-foreground/80"
+                            className="p-2 bg-secondary hover:bg-secondary/80 border border-border rounded-xl transition-all flex items-center justify-center text-foreground/80"
                             title="View Profile"
                           >
-                            <ArrowRight className="w-4 h-4" />
+                            <ArrowRight className="w-3.5 h-3.5" />
                           </Link>
                         </div>
                       </div>
@@ -458,58 +475,65 @@ export default function ConnectionsPage() {
           ) : (
             <>
               {sentRequests.length > 0 ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="flex flex-col gap-4">
                   {sentRequests.map((req) => {
                     const photo = getPhotoUrl(req.user.profilePhotoUrl);
                     return (
                       <div 
                         key={req.id} 
-                        className="group relative bg-card border border-border/80 rounded-3xl p-6 hover:shadow-xl hover:shadow-primary/5 transition-all flex items-start gap-4 overflow-hidden animate-in slide-in-from-bottom-2 duration-300"
+                        className="group relative bg-card border border-border/80 hover:border-primary/30 rounded-2xl p-4 sm:p-5 hover:shadow-md hover:shadow-primary/5 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4 overflow-hidden animate-in slide-in-from-bottom-2 duration-300"
                       >
-                        <div className="absolute inset-0 bg-gradient-to-tr from-primary/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
+                        <div className="absolute inset-0 bg-gradient-to-r from-primary/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
 
-                        {/* Avatar */}
-                        <div className="h-14 w-14 rounded-2xl border border-border bg-muted flex items-center justify-center overflow-hidden shrink-0 shadow-sm">
-                          {photo ? (
-                            <img src={photo} alt={req.user.fullName} className="w-full h-full object-cover" />
-                          ) : (
-                            <div className="font-bold text-base text-muted-foreground">{getInitials(req.user.fullName)}</div>
-                          )}
-                        </div>
+                        <div className="flex items-center gap-4 min-w-0">
+                          {/* Avatar */}
+                          <div className="h-12 w-12 rounded-xl border border-border bg-muted flex items-center justify-center overflow-hidden shrink-0 shadow-sm">
+                            {photo ? (
+                              <img src={photo} alt={req.user.fullName} className="w-full h-full object-cover" />
+                            ) : (
+                              <div className="font-bold text-sm text-muted-foreground">{getInitials(req.user.fullName)}</div>
+                            )}
+                          </div>
 
-                        {/* Info details */}
-                        <div className="flex-1 min-w-0 space-y-1.5 z-10">
-                          <h3 className="font-bold text-lg leading-tight truncate group-hover:text-primary transition-colors">
-                            {req.user.fullName}
-                          </h3>
-                          <p className="text-muted-foreground text-xs font-semibold tracking-tight line-clamp-1">
-                            {req.user.headline || "Zenith Operative"}
-                          </p>
-                          <p className="text-[10px] text-muted-foreground/60 font-black uppercase tracking-wider pt-1">
-                            Sent {new Date(req.createdAt).toLocaleDateString()}
-                          </p>
+                          {/* Info details */}
+                          <div className="min-w-0 space-y-1 z-10">
+                            <div className="flex flex-col sm:flex-row sm:items-baseline gap-1 sm:gap-3">
+                              <h3 className="font-bold text-base leading-tight truncate group-hover:text-primary transition-colors">
+                                {req.user.fullName}
+                              </h3>
+                              <p className="text-muted-foreground text-xs font-semibold tracking-tight line-clamp-1 sm:max-w-[250px] md:max-w-[350px]">
+                                {req.user.headline || "Zenith Operative"}
+                              </p>
+                            </div>
+                            <p className="text-[10px] text-muted-foreground/60 font-black uppercase tracking-wider pt-0.5">
+                              Sent {new Date(req.createdAt).toLocaleDateString()}
+                            </p>
+                          </div>
                         </div>
 
                         {/* Actions */}
-                        <div className="flex items-center gap-2 z-10 shrink-0 self-center">
+                        <div className="flex items-center gap-2 z-10 shrink-0 self-end sm:self-center ml-auto sm:ml-0">
                           <button
                             onClick={() => handleWithdraw(req.id, req.user.fullName)}
                             disabled={actionLoadingId === req.id}
-                            className="p-2.5 bg-secondary text-destructive hover:bg-destructive/10 border border-border rounded-xl transition-all flex items-center justify-center disabled:opacity-50"
+                            className="px-4 py-2 bg-secondary text-destructive hover:bg-destructive/10 border border-border rounded-xl transition-all flex items-center justify-center gap-1.5 text-xs font-bold disabled:opacity-50"
                             title="Withdraw Request"
                           >
                             {actionLoadingId === req.id ? (
-                              <Loader2 className="w-4 h-4 animate-spin" />
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
                             ) : (
-                              <X className="w-4 h-4" />
+                              <>
+                                <X className="w-3.5 h-3.5" />
+                                <span>Withdraw</span>
+                              </>
                             )}
                           </button>
                           <Link
                             href={`/public/profiles/${req.user.userId}`}
-                            className="p-2.5 bg-secondary hover:bg-secondary/80 border border-border rounded-xl transition-all flex items-center justify-center text-foreground/80"
+                            className="p-2 bg-secondary hover:bg-secondary/80 border border-border rounded-xl transition-all flex items-center justify-center text-foreground/80"
                             title="View Profile"
                           >
-                            <ArrowRight className="w-4 h-4" />
+                            <ArrowRight className="w-3.5 h-3.5" />
                           </Link>
                         </div>
                       </div>

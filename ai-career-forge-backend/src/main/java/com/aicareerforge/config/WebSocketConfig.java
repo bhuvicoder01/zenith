@@ -1,6 +1,6 @@
 package com.aicareerforge.config;
 
-import com.aicareerforge.security.WebSocketNotificationHandler;
+import com.aicareerforge.security.WebSocketAppHandler;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.socket.config.annotation.EnableWebSocket;
@@ -12,11 +12,11 @@ import org.springframework.web.socket.config.annotation.WebSocketHandlerRegistry
 @RequiredArgsConstructor
 public class WebSocketConfig implements WebSocketConfigurer {
 
-    private final WebSocketNotificationHandler webSocketNotificationHandler;
+    private final WebSocketAppHandler webSocketAppHandler;
 
     @Override
     public void registerWebSocketHandlers(WebSocketHandlerRegistry registry) {
-        registry.addHandler(webSocketNotificationHandler, "/ws/notifications")
+        registry.addHandler(webSocketAppHandler, "/ws/app")
                 .setAllowedOrigins("*");
     }
 }

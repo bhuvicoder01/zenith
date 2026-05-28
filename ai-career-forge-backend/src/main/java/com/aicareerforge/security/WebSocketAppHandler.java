@@ -20,7 +20,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 @Slf4j
 @Component
-public class WebSocketNotificationHandler extends TextWebSocketHandler {
+public class WebSocketAppHandler extends TextWebSocketHandler {
 
     private final JwtService jwtService;
     private final UserRepository userRepository;
@@ -29,7 +29,7 @@ public class WebSocketNotificationHandler extends TextWebSocketHandler {
     // Maps User ID to their active WebSocket sessions
     private final Map<String, List<WebSocketSession>> userSessions = new ConcurrentHashMap<>();
 
-    public WebSocketNotificationHandler(JwtService jwtService, UserRepository userRepository, ObjectMapper objectMapper) {
+    public WebSocketAppHandler(JwtService jwtService, UserRepository userRepository, ObjectMapper objectMapper) {
         this.jwtService = jwtService;
         this.userRepository = userRepository;
         this.objectMapper = objectMapper;

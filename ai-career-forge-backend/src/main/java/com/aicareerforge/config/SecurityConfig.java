@@ -65,7 +65,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .dispatcherTypeMatchers(DispatcherType.ASYNC).permitAll()
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-                        .requestMatchers("/", "/api/v1/auth/**", "/api/v1/public/**", "/api/v1/profile/public/**", "/api/v1/assistant/**", "/api/v1/jobs/public", "/ws/notifications", "/error").permitAll()
+                        .requestMatchers("/", "/api/v1/auth/**", "/api/v1/public/**", "/api/v1/profile/public/**", "/api/v1/assistant/**", "/api/v1/jobs/public", "/ws/app", "/error").permitAll()
                         .requestMatchers("/api/v1/recruiter/**").hasRole("RECRUITER")
                         .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
                         .anyRequest().authenticated()

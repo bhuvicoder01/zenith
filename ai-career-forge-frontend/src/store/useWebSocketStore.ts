@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { toast } from 'sonner';
+import api from '@/lib/api';
 
 export interface NotificationItem {
   id: string;
@@ -11,10 +12,11 @@ export interface NotificationItem {
   data?: any;
 }
 
-interface NotificationStore {
+interface WebSocketStore {
   socket: WebSocket | null;
   isConnected: boolean;
   notifications: NotificationItem[];
+  unreadMessageCount: number;
   connect: (routerPush?: (url: string) => void) => void;
   disconnect: () => void;
   loadSavedNotifications: () => void;
@@ -22,15 +24,18 @@ interface NotificationStore {
   markAllAsRead: () => void;
   deleteNotification: (id: string) => void;
   clearAll: () => void;
+  fetchUnreadMessageCount: () => Promise<void>;
+  setUnreadMessageCount: (count: number) => void;
 }
 
 let reconnectTimeout: NodeJS.Timeout | null = null;
 let reconnectAttempts = 0;
 
-export const useNotificationStore = create<NotificationStore>((set, get) => ({
+export const useWebSocketStore = create<WebSocketStore>((set, get) => ({
   socket: null,
   isConnected: false,
   notifications: [],
+  unreadMessageCount: 0,
 
   loadSavedNotifications: () => {
     if (typeof window !== 'undefined') {
@@ -45,19 +50,33 @@ export const useNotificationStore = create<NotificationStore>((set, get) => ({
     }
   },
 
+  fetchUnreadMessageCount: async () => {
+    try {
+      const res = await api.get('/messages/unread-count');
+      set({ unreadMessageCount: res.data.unreadCount || 0 });
+    } catch (err) {
+      console.error('Failed to fetch unread message count:', err);
+    }
+  },
+
+  setUnreadMessageCount: (count: number) => {
+    set({ unreadMessageCount: Math.max(0, count) });
+  },
+
   connect: (routerPush) => {
     // Don't connect if already connected or connecting
     if (get().isConnected || get().socket) return;
 
     // Load initial list from local storage first
     get().loadSavedNotifications();
+    get().fetchUnreadMessageCount();
 
     const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
     if (!token) return;
 
     const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1';
     const wsUrl = `${baseUrl
-      .replace('/api/v1', '/ws/notifications')
+      .replace('/api/v1', '/ws/app')
       .replace('http://', 'ws://')
       .replace('https://', 'wss://')}?token=${token}`;
 
@@ -65,7 +84,7 @@ export const useNotificationStore = create<NotificationStore>((set, get) => ({
       const socket = new WebSocket(wsUrl);
 
       socket.onopen = () => {
-        console.log('Zenith WebSocket Notification channel open.');
+        console.log('Zenith App-wide WebSocket channel open.');
         set({ socket, isConnected: true });
         reconnectAttempts = 0;
         if (reconnectTimeout) {
@@ -77,14 +96,43 @@ export const useNotificationStore = create<NotificationStore>((set, get) => ({
       socket.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
-          console.log('Received notification:', data);
+          console.log('Received socket payload:', data);
 
           if (data.type === 'SYSTEM') {
             console.log('Live Connection:', data.message);
             return; // Don't persist heartbeat system checks
           }
 
-          // Build notification item
+          // Handle MESSAGE & READ events
+          if (data.type === 'MESSAGE' || data.type === 'READ') {
+            // Dispatch a custom event for active chat window updates
+            if (typeof window !== 'undefined') {
+              window.dispatchEvent(new CustomEvent('zenith-app-message', { detail: data }));
+            }
+
+            if (data.type === 'MESSAGE') {
+              // Check if user is currently on the messages page
+              const isChatPage = typeof window !== 'undefined' && window.location.pathname.startsWith('/dashboard/messages');
+              
+              if (!isChatPage) {
+                // Increment reactive unread message count
+                set(state => ({ unreadMessageCount: state.unreadMessageCount + 1 }));
+
+                // Show a reply toast alert
+                toast.info(`New message from ${data.title || 'Connection'}`, {
+                  description: data.message,
+                  action: routerPush ? {
+                    label: 'Reply',
+                    onClick: () => routerPush(`/dashboard/messages?userId=${data.data.senderId}`)
+                  } : undefined,
+                  duration: 5000,
+                });
+              }
+            }
+            return;
+          }
+
+          // Persist and handle notification items
           const newNotif: NotificationItem = {
             id: data.id || Date.now().toString(),
             type: data.type,

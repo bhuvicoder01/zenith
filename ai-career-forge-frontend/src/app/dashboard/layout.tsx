@@ -4,7 +4,7 @@ import Link from "next/link";
 import { 
   User, Briefcase, FileText, CheckCircle, LogOut, Menu, X,
   LayoutDashboard, ClipboardList, BrainCircuit, Loader2, Sun, Moon, TrendingUp, Settings,
-  Users, Bell
+  Users, Bell, MessageSquare
 } from "lucide-react";
 import { useRouter, usePathname } from "next/navigation";
 import Image from "next/image";
@@ -13,7 +13,7 @@ import useAuthStore from "@/store/useAuthStore";
 import AuthGuard from "@/components/AuthGuard";
 
 import useSyncStore from "@/store/useSyncStore";
-import { useNotificationStore } from "@/store/useNotificationStore";
+import { useWebSocketStore } from "@/store/useWebSocketStore";
 import { useEffect, useState } from "react";
 import { useTheme } from "next-themes";
 import api from "@/lib/api";
@@ -32,13 +32,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const { syncStatus, connect, disconnect } = useSyncStore();
   const isSyncing = syncStatus.status === 'SYNCING' || syncStatus.status === 'MATCHING';
 
-  // Global WebSocket connection for notifications
+  // Global WebSocket connection for notifications & messages
   const { 
-    connect: connectNotifications, 
-    disconnect: disconnectNotifications,
+    connect: connectWebSocket, 
+    disconnect: disconnectWebSocket,
     loadSavedNotifications,
-    notifications 
-  } = useNotificationStore();
+    notifications,
+    unreadMessageCount
+  } = useWebSocketStore();
 
   const unreadCount = notifications.filter(n => !n.read).length;
   const [pendingCount, setPendingCount] = useState(0);
@@ -92,12 +93,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     return () => disconnect();
   }, [connect, disconnect]);
 
-  // Connect WebSocket notifications once at layout level
+  // Connect WebSocket channel once at layout level
   useEffect(() => {
     loadSavedNotifications();
-    connectNotifications((url: string) => router.push(url));
-    return () => disconnectNotifications();
-  }, [connectNotifications, disconnectNotifications, loadSavedNotifications, router]);
+    connectWebSocket((url: string) => router.push(url));
+    return () => disconnectWebSocket();
+  }, [connectWebSocket, disconnectWebSocket, loadSavedNotifications, router]);
 
   // Fetch pending connection count on mount and when connection notifications change
   useEffect(() => {
@@ -122,6 +123,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
     { href: "/dashboard/notifications", label: "Notifications", icon: Bell },
     { href: "/dashboard/connections", label: "Connections", icon: Users },
+    { href: "/dashboard/messages", label: "Messages", icon: MessageSquare },
     { href: "/dashboard/jobs", label: "Job Matches", icon: Briefcase },
     { href: "/dashboard/applications", label: "Tracker", icon: CheckCircle },
     // { href: "/dashboard/profile", label: "Profile", icon: User },
@@ -181,6 +183,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                   {link.href === "/dashboard/connections" && pendingCount > 0 && (
                     <span className="ml-auto px-2 py-0.5 bg-primary text-background rounded-full text-[10px] font-black">
                       {pendingCount}
+                    </span>
+                  )}
+                  {link.href === "/dashboard/messages" && unreadMessageCount > 0 && (
+                    <span className="ml-auto px-2 py-0.5 bg-primary text-background rounded-full text-[10px] font-black">
+                      {unreadMessageCount}
                     </span>
                   )}
                 </Link>
@@ -278,6 +285,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                     {link.href === "/dashboard/connections" && pendingCount > 0 && (
                       <span className="ml-auto px-2 py-0.5 bg-white text-black dark:bg-black dark:text-white rounded-full text-[9px] font-black">
                         {pendingCount}
+                      </span>
+                    )}
+                    {link.href === "/dashboard/messages" && unreadMessageCount > 0 && (
+                      <span className="ml-auto px-2 py-0.5 bg-white text-black dark:bg-black dark:text-white rounded-full text-[9px] font-black">
+                        {unreadMessageCount}
                       </span>
                     )}
                   </Link>

@@ -4,7 +4,7 @@ import { useState } from "react";
 import { 
   Bell, Trash2, Check, CheckSquare, BellOff, ArrowRight, Sparkles, UserPlus, UserCheck
 } from "lucide-react";
-import { useNotificationStore, NotificationItem } from "@/store/useNotificationStore";
+import { useWebSocketStore, NotificationItem } from "@/store/useWebSocketStore";
 import { useRouter } from "next/navigation";
 
 export default function NotificationsPage() {
@@ -15,7 +15,7 @@ export default function NotificationsPage() {
     markAllAsRead, 
     deleteNotification, 
     clearAll 
-  } = useNotificationStore();
+  } = useWebSocketStore();
 
   const [filter, setFilter] = useState<"all" | "unread">("all");
 

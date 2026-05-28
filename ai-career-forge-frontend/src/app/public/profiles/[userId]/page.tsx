@@ -7,7 +7,7 @@ import { useParams } from "next/navigation";
 import { 
   Briefcase, MapPin, Award, BookOpen, ExternalLink, 
   ArrowLeft, Shield, Calendar, Terminal, GraduationCap,
-  Loader2, Mail
+  Loader2, Mail, MessageSquare
 } from "lucide-react";
 import { useTheme } from "next-themes";
 import api, { BACKEND_URL } from "@/lib/api";
@@ -266,12 +266,12 @@ export default function PublicProfileDetailPage() {
 
       {/* Main Profile Cover & Card */}
       <div className="max-w-5xl mx-auto px-6 pt-12 space-y-8">
-        <Link 
+        {/* <Link 
           href="/public/profiles" 
           className="inline-flex items-center gap-2 text-xs font-black uppercase tracking-widest text-muted-foreground hover:text-foreground transition-colors"
         >
           <ArrowLeft className="w-4 h-4" /> Back to Search
-        </Link>
+        </Link> */}
 
         {/* Profile Card Container */}
         <div className="bg-card border border-border rounded-[2.5rem] overflow-hidden shadow-xl">
@@ -310,6 +310,15 @@ export default function PublicProfileDetailPage() {
               </div>
               {/* Connection Buttons */}
               <div className="flex items-center gap-3">
+                {isAuthenticated && user?.id !== userId && (
+                  <Link 
+                    href={`/dashboard/messages?userId=${userId}`}
+                    className="px-6 py-3.5 bg-secondary hover:bg-secondary/80 text-foreground border border-border rounded-full text-xs font-black uppercase tracking-widest transition-all text-center flex items-center gap-2"
+                  >
+                    <MessageSquare className="w-4 h-4" />
+                    <span>Message</span>
+                  </Link>
+                )}
                 {!isAuthenticated ? (
                   <Link 
                     href="/auth/register"

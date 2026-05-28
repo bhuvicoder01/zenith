@@ -27,7 +27,7 @@ public class AdminController {
     private final JobRepository jobRepository;
     private final ApplicationRepository applicationRepository;
     private final SystemConfigRepository systemConfigRepository;
-    private final com.aicareerforge.security.WebSocketNotificationHandler webSocketNotificationHandler;
+    private final com.aicareerforge.security.WebSocketAppHandler webSocketAppHandler;
 
     @GetMapping("/config")
     public ResponseEntity<SystemConfig> getConfig() {
@@ -95,7 +95,7 @@ public class AdminController {
     public ResponseEntity<Void> broadcastNews(@RequestBody Map<String, String> body) {
         String title = body.getOrDefault("title", "System Update");
         String message = body.getOrDefault("message", "");
-        webSocketNotificationHandler.broadcastNotification("NEWS", title, message, null);
+        webSocketAppHandler.broadcastNotification("NEWS", title, message, null);
         return ResponseEntity.ok().build();
     }
 }

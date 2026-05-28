@@ -28,7 +28,7 @@ public class ConnectionService {
     private final UserProfileRepository userProfileRepository;
     private final UserRepository userRepository;
     private final UserProfileService userProfileService;
-    private final com.aicareerforge.security.WebSocketNotificationHandler webSocketNotificationHandler;
+    private final com.aicareerforge.security.WebSocketAppHandler webSocketAppHandler;
 
     public Connection sendRequest(String requesterId, String receiverId) {
         if (requesterId == null || receiverId == null) {
@@ -67,7 +67,7 @@ public class ConnectionService {
         // Dispatch live WS notification
         try {
             PublicProfileDTO requesterProfile = getPublicProfileOrFallback(requesterId);
-            webSocketNotificationHandler.sendNotification(
+            webSocketAppHandler.sendNotification(
                     receiverId,
                     "CONNECTION_REQUEST",
                     "New Invitation",
@@ -102,7 +102,7 @@ public class ConnectionService {
         // Dispatch live WS notification
         try {
             PublicProfileDTO receiverProfile = getPublicProfileOrFallback(userId);
-            webSocketNotificationHandler.sendNotification(
+            webSocketAppHandler.sendNotification(
                     connection.getRequesterId(),
                     "CONNECTION_ACCEPTED",
                     "Invitation Accepted",
