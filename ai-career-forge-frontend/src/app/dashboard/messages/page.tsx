@@ -58,7 +58,7 @@ function ChatContainer() {
   const [showNewChatModal, setShowNewChatModal] = useState(false);
   const [newChatSearch, setNewChatSearch] = useState("");
 
-  const { socket, isConnected, fetchUnreadMessageCount } = useWebSocketStore();
+  const { socket, isConnected, fetchUnreadMessageCount, onlineUserIds, setActiveChatUserId } = useWebSocketStore();
   const { user } = useAuthStore();
   const currentUserId = user?.id;
 
@@ -143,6 +143,18 @@ function ChatContainer() {
       window.removeEventListener("click", handleFocus);
     };
   }, [activeUser]);
+
+  // Synchronize activeChatUserId with useWebSocketStore
+  useEffect(() => {
+    if (activeUser) {
+      setActiveChatUserId(activeUser.userId);
+    } else {
+      setActiveChatUserId(null);
+    }
+    return () => {
+      setActiveChatUserId(null);
+    };
+  }, [activeUser, setActiveChatUserId]);
 
   // Scroll to bottom when messages load/change
   useEffect(() => {
@@ -364,7 +376,7 @@ function ChatContainer() {
   });
 
   return (
-    <div className="h-[calc(100vh-8rem)] min-h-[450px] max-w-6xl mx-auto flex bg-card border border-border/80 rounded-[2rem] overflow-hidden shadow-xl relative animate-in fade-in duration-300">
+    <div className="h-full w-full flex bg-card overflow-hidden relative animate-in fade-in duration-300">
       
       {/* LEFT COLUMN: Conversation List */}
       <div className={`w-full md:w-80 lg:w-96 border-r border-border/60 flex flex-col shrink-0 bg-secondary/15 ${
@@ -425,13 +437,18 @@ function ChatContainer() {
                   )}
 
                   {/* Avatar */}
-                  <div className="h-11 w-11 rounded-xl border border-border bg-muted flex items-center justify-center overflow-hidden shrink-0 shadow-sm relative">
-                    {photo ? (
-                      <img src={photo} alt={other.fullName} className="w-full h-full object-cover" />
-                    ) : (
-                      <div className={`font-bold text-sm ${isActive ? 'text-background' : 'text-muted-foreground'}`}>
-                        {getInitials(other.fullName)}
-                      </div>
+                  <div className="relative shrink-0">
+                    <div className="h-11 w-11 rounded-xl border border-border bg-muted flex items-center justify-center overflow-hidden shadow-sm">
+                      {photo ? (
+                        <img src={photo} alt={other.fullName} className="w-full h-full object-cover" />
+                      ) : (
+                        <div className={`font-bold text-sm ${isActive ? 'text-background' : 'text-muted-foreground'}`}>
+                          {getInitials(other.fullName)}
+                        </div>
+                      )}
+                    </div>
+                    {onlineUserIds.includes(other.userId) && (
+                      <div className="absolute -bottom-1 -right-1 w-3.5 h-3.5 bg-green-500 rounded-full border-2 border-background shadow-md shadow-green-500/20 z-20" />
                     )}
                   </div>
 
@@ -509,18 +526,33 @@ function ChatContainer() {
                 </button>
 
                 {/* Avatar */}
-                <div className="h-11 w-11 rounded-xl border border-border bg-muted flex items-center justify-center overflow-hidden shrink-0 shadow-sm">
-                  {getPhotoUrl(activeUser.profilePhotoUrl) ? (
-                    <img src={getPhotoUrl(activeUser.profilePhotoUrl)!} alt={activeUser.fullName} className="w-full h-full object-cover" />
-                  ) : (
-                    <div className="font-bold text-sm text-muted-foreground">{getInitials(activeUser.fullName)}</div>
+                <div className="relative shrink-0">
+                  <div className="h-11 w-11 rounded-xl border border-border bg-muted flex items-center justify-center overflow-hidden shadow-sm">
+                    {getPhotoUrl(activeUser.profilePhotoUrl) ? (
+                      <img src={getPhotoUrl(activeUser.profilePhotoUrl)!} alt={activeUser.fullName} className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="font-bold text-sm text-muted-foreground">{getInitials(activeUser.fullName)}</div>
+                    )}
+                  </div>
+                  {onlineUserIds.includes(activeUser.userId) && (
+                    <div className="absolute -bottom-1 -right-1 w-3.5 h-3.5 bg-green-500 rounded-full border-2 border-background shadow-md shadow-green-500/20 z-20 animate-pulse" />
                   )}
                 </div>
 
                 {/* Name details */}
                 <div className="min-w-0">
-                  <h3 className="font-bold text-sm sm:text-base leading-tight truncate">
+                  <h3 className="font-bold text-sm sm:text-base leading-tight truncate flex items-center gap-2">
                     {activeUser.fullName}
+                    {onlineUserIds.includes(activeUser.userId) ? (
+                      <span className="flex items-center gap-1 text-[9px] text-emerald-500 font-extrabold uppercase bg-emerald-500/10 px-2 py-0.5 rounded-full select-none">
+                        <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-ping shrink-0" />
+                        Online
+                      </span>
+                    ) : (
+                      <span className="flex items-center gap-1 text-[9px] text-muted-foreground font-extrabold uppercase bg-secondary px-2 py-0.5 rounded-full select-none">
+                        Offline
+                      </span>
+                    )}
                   </h3>
                   <p className="text-muted-foreground text-[10px] sm:text-xs truncate font-medium">
                     {activeUser.headline || "Zenith Operative"}
@@ -533,8 +565,9 @@ function ChatContainer() {
                 <Link
                   href={`/public/profiles/${activeUser.userId}`}
                   className="px-3.5 py-2 bg-secondary border border-border text-foreground hover:bg-secondary/80 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 shadow-sm"
+                  title="View Profile"
                 >
-                  <span>Profile</span>
+                  <span className="hidden sm:inline">Profile</span>
                   <ExternalLink className="w-3.5 h-3.5" />
                 </Link>
                 <button
@@ -542,7 +575,7 @@ function ChatContainer() {
                   className="px-3.5 py-2 bg-destructive/10 hover:bg-destructive/20 text-destructive border border-destructive/20 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 shadow-sm"
                   title="Clear Conversation"
                 >
-                  <span>Clear Chat</span>
+                  <span className="hidden sm:inline">Clear Chat</span>
                   <Trash2 className="w-3.5 h-3.5" />
                 </button>
               </div>
@@ -565,11 +598,11 @@ function ChatContainer() {
                     return (
                       <div 
                         key={msg.id} 
-                        className={`flex flex-col max-w-[75%] sm:max-w-[65%] group relative ${
+                        className={`flex flex-col max-w-[75%] sm:max-w-[65%] w-fit group relative ${
                           isSelf ? "ml-auto items-end" : "mr-auto items-start"
                         }`}
                       >
-                        <div className={`p-3.5 rounded-2xl text-sm leading-relaxed relative ${
+                        <div className={`p-3.5 rounded-2xl text-sm leading-relaxed relative w-fit ${
                           isSelf 
                             ? "bg-foreground text-background rounded-tr-none shadow-md" 
                             : "bg-card border border-border rounded-tl-none text-foreground shadow-sm"
@@ -626,7 +659,7 @@ function ChatContainer() {
                   <Loader2 className="w-4 h-4 animate-spin" />
                 ) : (
                   <>
-                    <span>Send</span>
+                    <span className="hidden sm:inline">Send</span>
                     <Send className="w-3.5 h-3.5" />
                   </>
                 )}
@@ -700,11 +733,16 @@ function ChatContainer() {
                       }}
                       className="w-full text-left p-3 hover:bg-secondary/50 rounded-xl flex items-center gap-3.5 transition-colors group"
                     >
-                      <div className="h-10 w-10 rounded-lg border border-border bg-muted flex items-center justify-center overflow-hidden shrink-0 shadow-sm">
-                        {photo ? (
-                          <img src={photo} alt={conn.user.fullName} className="w-full h-full object-cover" />
-                        ) : (
-                          <div className="font-bold text-xs text-muted-foreground">{getInitials(conn.user.fullName)}</div>
+                      <div className="relative shrink-0">
+                        <div className="h-10 w-10 rounded-lg border border-border bg-muted flex items-center justify-center overflow-hidden shadow-sm">
+                          {photo ? (
+                            <img src={photo} alt={conn.user.fullName} className="w-full h-full object-cover" />
+                          ) : (
+                            <div className="font-bold text-xs text-muted-foreground">{getInitials(conn.user.fullName)}</div>
+                          )}
+                        </div>
+                        {onlineUserIds.includes(conn.user.userId) && (
+                          <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-green-500 rounded-full border-2 border-background shadow-md shadow-green-500/20 z-20" />
                         )}
                       </div>
                       <div className="min-w-0">

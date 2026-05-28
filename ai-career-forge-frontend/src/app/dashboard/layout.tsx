@@ -345,7 +345,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </div>
         )}
 
-        <main className={`flex-1 bg-background ${isMobile ? 'p-4' : 'p-8'} overflow-y-auto w-full`}>
+        <main className={`flex-1 bg-background w-full ${
+          pathname === "/dashboard/messages" 
+            ? "p-0 overflow-hidden" 
+            : `${isMobile ? 'p-4' : 'p-8'} overflow-y-auto`
+        }`}>
           {/* Global sync status indicator */}
           {isSyncing && (
             <div className="mb-6 flex position-sticky items-center gap-3 bg-secondary border border-border text-foreground px-5 py-3 rounded-2xl animate-in fade-in slide-in-from-top-2 duration-300 shadow-sm">

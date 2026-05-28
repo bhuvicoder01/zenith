@@ -17,6 +17,7 @@ interface WebSocketStore {
   isConnected: boolean;
   notifications: NotificationItem[];
   unreadMessageCount: number;
+  onlineUserIds: string[];
   connect: (routerPush?: (url: string) => void) => void;
   disconnect: () => void;
   loadSavedNotifications: () => void;
@@ -26,6 +27,9 @@ interface WebSocketStore {
   clearAll: () => void;
   fetchUnreadMessageCount: () => Promise<void>;
   setUnreadMessageCount: (count: number) => void;
+  fetchOnlineUsers: () => Promise<void>;
+  activeChatUserId: string | null;
+  setActiveChatUserId: (userId: string | null) => void;
 }
 
 let reconnectTimeout: NodeJS.Timeout | null = null;
@@ -36,6 +40,18 @@ export const useWebSocketStore = create<WebSocketStore>((set, get) => ({
   isConnected: false,
   notifications: [],
   unreadMessageCount: 0,
+  onlineUserIds: [],
+  activeChatUserId: null,
+  setActiveChatUserId: (userId) => set({ activeChatUserId: userId }),
+
+  fetchOnlineUsers: async () => {
+    try {
+      const res = await api.get('/messages/presence');
+      set({ onlineUserIds: res.data || [] });
+    } catch (err) {
+      console.error('Failed to fetch online presence:', err);
+    }
+  },
 
   loadSavedNotifications: () => {
     if (typeof window !== 'undefined') {
@@ -70,6 +86,7 @@ export const useWebSocketStore = create<WebSocketStore>((set, get) => ({
     // Load initial list from local storage first
     get().loadSavedNotifications();
     get().fetchUnreadMessageCount();
+    get().fetchOnlineUsers();
 
     const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
     if (!token) return;
@@ -99,8 +116,32 @@ export const useWebSocketStore = create<WebSocketStore>((set, get) => ({
           console.log('Received socket payload:', data);
 
           if (data.type === 'SYSTEM') {
+            if (data.data && data.data.onlineUserIds) {
+              set({ onlineUserIds: data.data.onlineUserIds });
+            }
             console.log('Live Connection:', data.message);
-            return; // Don't persist heartbeat system checks
+            return;
+          }
+
+          if (data.type === 'PRESENCE') {
+            const { userId, status } = data.data;
+            if (userId) {
+              set(state => {
+                const current = [...state.onlineUserIds];
+                if (status === 'ONLINE') {
+                  if (!current.includes(userId)) {
+                    current.push(userId);
+                  }
+                } else {
+                  const idx = current.indexOf(userId);
+                  if (idx > -1) {
+                    current.splice(idx, 1);
+                  }
+                }
+                return { onlineUserIds: current };
+              });
+            }
+            return;
           }
 
           // Handle MESSAGE & READ events
@@ -114,7 +155,11 @@ export const useWebSocketStore = create<WebSocketStore>((set, get) => ({
               // Check if user is currently on the messages page
               const isChatPage = typeof window !== 'undefined' && window.location.pathname.startsWith('/dashboard/messages');
               
-              if (!isChatPage) {
+              // Only notify if they aren't on the chat page OR if the tab is blurred OR if the message is from a different chat
+              const isCurrentChat = isChatPage && get().activeChatUserId === data.data.senderId;
+              const shouldNotify = !isCurrentChat || !document.hasFocus();
+              
+              if (shouldNotify) {
                 // Increment reactive unread message count
                 set(state => ({ unreadMessageCount: state.unreadMessageCount + 1 }));
 
@@ -127,6 +172,21 @@ export const useWebSocketStore = create<WebSocketStore>((set, get) => ({
                   } : undefined,
                   duration: 5000,
                 });
+
+                // Save as a notification item so it shows up in their Feed
+                const newNotif: NotificationItem = {
+                  id: `msg_${data.data.id || Date.now().toString()}`,
+                  type: 'NEW_MESSAGE',
+                  title: `New Message from ${data.title || 'Connection'}`,
+                  message: data.message || '',
+                  timestamp: data.timestamp || new Date().toISOString(),
+                  read: false,
+                  data: data.data,
+                };
+
+                const updatedNotifications = [newNotif, ...get().notifications];
+                set({ notifications: updatedNotifications });
+                localStorage.setItem('zenith_notifications', JSON.stringify(updatedNotifications));
               }
             }
             return;

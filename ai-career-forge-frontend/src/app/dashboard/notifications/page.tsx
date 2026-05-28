@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { 
-  Bell, Trash2, Check, CheckSquare, BellOff, ArrowRight, Sparkles, UserPlus, UserCheck
+  Bell, Trash2, Check, CheckSquare, BellOff, ArrowRight, Sparkles, UserPlus, UserCheck, MessageSquare
 } from "lucide-react";
 import { useWebSocketStore, NotificationItem } from "@/store/useWebSocketStore";
 import { useRouter } from "next/navigation";
@@ -32,6 +32,8 @@ export default function NotificationsPage() {
         return <UserCheck className="w-5 h-5 text-emerald-500" />;
       case "NEWS":
         return <Sparkles className="w-5 h-5 text-violet-500" />;
+      case "NEW_MESSAGE":
+        return <MessageSquare className="w-5 h-5 text-blue-500" />;
       default:
         return <Bell className="w-5 h-5 text-primary" />;
     }
@@ -46,6 +48,8 @@ export default function NotificationsPage() {
         return "border-emerald-500/20 bg-emerald-500/5 shadow-md shadow-emerald-500/5";
       case "NEWS":
         return "border-violet-500/20 bg-violet-500/5 shadow-md shadow-violet-500/5";
+      case "NEW_MESSAGE":
+        return "border-blue-500/20 bg-blue-500/5 shadow-md shadow-blue-500/5";
       default:
         return "border-primary/20 bg-primary/5 shadow-md shadow-primary/5";
     }
@@ -73,6 +77,8 @@ export default function NotificationsPage() {
       router.push(`/public/profiles/${item.data.user.userId}`);
     } else if (item.type === "CONNECTION_REQUEST" || item.type === "CONNECTION_ACCEPTED") {
       router.push("/dashboard/connections");
+    } else if (item.type === "NEW_MESSAGE" && item.data?.senderId) {
+      router.push(`/dashboard/messages?userId=${item.data.senderId}`);
     }
   };
 

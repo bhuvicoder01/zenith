@@ -23,6 +23,7 @@ public class UserProfileService {
     private final JobService jobService;
     private final JobSyncService jobSyncService;
     private final org.springframework.ai.chat.client.ChatClient chatClient;
+    private final com.aicareerforge.security.WebSocketAppHandler webSocketAppHandler;
 
     public UserProfile getProfile(String userId) {
         UserProfile profile = userProfileRepository.findByUserId(userId)
@@ -116,6 +117,9 @@ public class UserProfileService {
     public UserProfile updateProfile(String userId, UserProfile updatedData) {
         UserProfile profile = userProfileRepository.findByUserId(userId)
                 .orElse(UserProfile.builder().userId(userId).build());
+        
+        boolean oldShowOnline = profile.getSettings() == null || profile.getSettings().isShowOnlineStatus();
+
         if (updatedData.getFullName() != null) profile.setFullName(updatedData.getFullName());
         if (updatedData.getHeadline() != null) profile.setHeadline(updatedData.getHeadline());
         if (updatedData.getBio() != null) profile.setBio(updatedData.getBio());
@@ -130,9 +134,16 @@ public class UserProfileService {
         if (updatedData.getPreferredLifestyle() != null) profile.setPreferredLifestyle(updatedData.getPreferredLifestyle());
         if (updatedData.getSettings() != null) profile.setSettings(updatedData.getSettings());
         
+        boolean newShowOnline = profile.getSettings() == null || profile.getSettings().isShowOnlineStatus();
+
         // Only purge THIS user's jobs, not all jobs
         jobService.purgeJobsForUser(userId);
         userProfileRepository.save(profile);
+
+        if (oldShowOnline != newShowOnline) {
+            webSocketAppHandler.handlePresenceToggle(userId, newShowOnline);
+        }
+
         jobSyncService.syncJobsForUser(userId);
         hydrateUrls(profile);
         return profile;

@@ -69,5 +69,10 @@ public class DirectMessageController {
         directMessageService.clearConversation(user.getId(), otherUserId);
         return ResponseEntity.ok().build();
     }
+
+    @GetMapping("/presence")
+    public ResponseEntity<List<String>> getOnlineUsers() {
+        return ResponseEntity.ok(directMessageService.getOnlineUsers());
+    }
 }
 

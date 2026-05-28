@@ -9,6 +9,7 @@ import { useRouter } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import api from "@/lib/api";
+import { toast } from "sonner";
 
 interface ChatAction {
   label: string;
@@ -41,6 +42,83 @@ export default function AssistantWidget() {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
+
+  const [isTucked, setIsTucked] = useState(false);
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const touchStartRef = useRef<number | null>(null);
+  const touchDeltaRef = useRef<number>(0);
+
+  const handleTuck = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setIsTucked(true);
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+    }
+  };
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartRef.current = e.touches[0].clientX;
+    touchDeltaRef.current = 0;
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (touchStartRef.current === null) return;
+    const currentX = e.touches[0].clientX;
+    touchDeltaRef.current = currentX - touchStartRef.current;
+  };
+
+  const handleTouchEnd = () => {
+    if (touchStartRef.current === null) return;
+    const delta = touchDeltaRef.current;
+    
+    // Swipe right (positive delta) to tuck in
+    if (delta > 30 && !isTucked) {
+      setIsTucked(true);
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+    }
+    // Swipe left (negative delta) to untuck/slide out
+    else if (delta < -30 && isTucked) {
+      setIsTucked(false);
+      resetInactivityTimer();
+    }
+    
+    touchStartRef.current = null;
+    touchDeltaRef.current = 0;
+  };
+
+
+  const resetInactivityTimer = () => {
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+    }
+    if (isOpen) {
+      setIsTucked(false);
+      return;
+    }
+    timeoutRef.current = setTimeout(() => {
+      setIsTucked(true);
+    }, 10000); // 10 seconds of inactivity
+  };
+
+  useEffect(() => {
+    resetInactivityTimer();
+    return () => {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    };
+  }, [isOpen]);
+
+  const handleMouseEnter = () => {
+    setIsTucked(false);
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+    }
+  };
+
+  const handleMouseLeave = () => {
+    resetInactivityTimer();
+  };
 
   useEffect(() => {
     // Initial greeting for a fresh session
@@ -96,6 +174,8 @@ export default function AssistantWidget() {
       console.log("Custom action:", action);
     }
   };
+
+
 
   return (
     <div className="fixed bottom-8 right-8 z-50 flex flex-col items-end gap-4">
@@ -201,19 +281,56 @@ export default function AssistantWidget() {
       )}
 
       {/* Toggle Button */}
-      <button 
-        onClick={() => setIsOpen(!isOpen)}
-        className={`w-16 h-16 rounded-[24px] flex items-center justify-center shadow-2xl transition-all hover:scale-110 active:scale-90 ${
-          isOpen 
-            ? "bg-foreground text-background" 
-            : "bg-blue-600 text-white shadow-blue-600/40"
-        }`}
-      >
-        {isOpen ? <X className="w-8 h-8" /> : <Bot className="w-8 h-8" />}
-        {!isOpen && (
-          <div className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 border-4 border-background rounded-full"></div>
-        )}
-      </button>
+      {!isOpen ? (
+        <div 
+          className="relative group/toggle"
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
+        >
+          {!isTucked && (
+            <button
+              onClick={handleTuck}
+              className="absolute -top-2 -left-2 bg-muted text-muted-foreground hover:bg-primary hover:text-primary-foreground border border-border rounded-full p-1 shadow-md opacity-0 group-hover/toggle:opacity-100 transition-opacity z-50 hidden md:flex items-center justify-center"
+              title="Tuck into side"
+            >
+              <ChevronRight className="w-3.5 h-3.5" />
+            </button>
+          )}
+          <button 
+            onClick={() => setIsOpen(!isOpen)}
+            onMouseEnter={handleMouseEnter}
+            onMouseLeave={handleMouseLeave}
+            className={`w-16 h-16 rounded-[24px] flex items-center justify-center shadow-2xl transition-all hover:scale-110 active:scale-90 ${
+              isOpen 
+                ? "bg-foreground text-background" 
+                : "bg-blue-600 text-white shadow-blue-600/40"
+            } ${
+              !isOpen && isTucked 
+                ? "translate-x-[80px] opacity-35 hover:translate-x-0 hover:opacity-100" 
+                : "translate-x-0 opacity-100"
+            }`}
+          >
+            {isOpen ? <X className="w-8 h-8" /> : <Bot className="w-8 h-8" />}
+            {!isOpen && !isTucked && (
+              <div className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 border-4 border-background rounded-full"></div>
+            )}
+          </button>
+        </div>
+      ) : (
+        <button 
+          onClick={() => setIsOpen(!isOpen)}
+          onMouseEnter={handleMouseEnter}
+          onMouseLeave={handleMouseLeave}
+          className={`w-16 h-16 rounded-[24px] flex items-center justify-center shadow-2xl transition-all hover:scale-110 active:scale-90 ${
+            isOpen 
+              ? "bg-foreground text-background" 
+              : "bg-blue-600 text-white shadow-blue-600/40"
+          }`}
+        >
+          {isOpen ? <X className="w-8 h-8" /> : <Bot className="w-8 h-8" />}
+        </button>
+      )}
     </div>
   );
 }

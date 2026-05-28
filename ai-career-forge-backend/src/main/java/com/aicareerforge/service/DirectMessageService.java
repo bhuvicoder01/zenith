@@ -147,6 +147,10 @@ public class DirectMessageService {
         }
     }
 
+    public List<String> getOnlineUsers() {
+        return webSocketAppHandler.getOnlineUserIds();
+    }
+
 
     private String getUserFullName(String userId) {
         try {

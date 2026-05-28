@@ -2,6 +2,7 @@ package com.aicareerforge.security;
 
 import com.aicareerforge.model.User;
 import com.aicareerforge.repository.UserRepository;
+import com.aicareerforge.repository.UserProfileRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -24,14 +25,16 @@ public class WebSocketAppHandler extends TextWebSocketHandler {
 
     private final JwtService jwtService;
     private final UserRepository userRepository;
+    private final UserProfileRepository userProfileRepository;
     private final ObjectMapper objectMapper;
 
     // Maps User ID to their active WebSocket sessions
     private final Map<String, List<WebSocketSession>> userSessions = new ConcurrentHashMap<>();
 
-    public WebSocketAppHandler(JwtService jwtService, UserRepository userRepository, ObjectMapper objectMapper) {
+    public WebSocketAppHandler(JwtService jwtService, UserRepository userRepository, UserProfileRepository userProfileRepository, ObjectMapper objectMapper) {
         this.jwtService = jwtService;
         this.userRepository = userRepository;
+        this.userProfileRepository = userProfileRepository;
         this.objectMapper = objectMapper;
     }
 
@@ -63,13 +66,26 @@ public class WebSocketAppHandler extends TextWebSocketHandler {
             userSessions.computeIfAbsent(userId, k -> Collections.synchronizedList(new ArrayList<>())).add(session);
             log.info("WebSocket connection established for user: {} (Session ID: {})", userId, session.getId());
 
-            // Send initial connection confirmation
+            // Send initial connection confirmation along with currently online users
+            List<String> onlineUserIds = new ArrayList<>();
+            userSessions.forEach((uId, sessions) -> {
+                if (!sessions.isEmpty() && getShowOnlineStatus(uId)) {
+                    onlineUserIds.add(uId);
+                }
+            });
+
             sendNotificationToSession(session, Map.of(
                     "type", "SYSTEM",
                     "title", "Connected",
                     "message", "Zenith Live Link Established.",
-                    "timestamp", java.time.Instant.now().toString()
+                    "timestamp", java.time.Instant.now().toString(),
+                    "data", Map.of("onlineUserIds", onlineUserIds)
             ));
+
+            // Broadcast presence
+            if (getShowOnlineStatus(userId)) {
+                broadcastPresence(userId, "ONLINE");
+            }
 
         } catch (Exception e) {
             log.error("Error establishing WebSocket session: {}", e.getMessage());
@@ -86,6 +102,7 @@ public class WebSocketAppHandler extends TextWebSocketHandler {
                 sessions.remove(session);
                 if (sessions.isEmpty()) {
                     userSessions.remove(userId);
+                    broadcastPresence(userId, "OFFLINE");
                 }
             }
             log.info("WebSocket connection closed for user: {} (Session ID: {})", userId, session.getId());
@@ -170,5 +187,49 @@ public class WebSocketAppHandler extends TextWebSocketHandler {
             }
         }
         return null;
+    }
+
+    public void broadcastPresence(String userId, String status) {
+        broadcastNotification("PRESENCE", userId, status, Map.of("userId", userId, "status", status));
+    }
+
+    public void handlePresenceToggle(String userId, boolean showOnline) {
+        List<WebSocketSession> sessions = userSessions.get(userId);
+        if (sessions != null && !sessions.isEmpty()) {
+            if (showOnline) {
+                broadcastPresence(userId, "ONLINE");
+            } else {
+                broadcastPresence(userId, "OFFLINE");
+            }
+        }
+    }
+
+
+    public boolean isUserOnline(String userId) {
+        List<WebSocketSession> sessions = userSessions.get(userId);
+        if (sessions == null || sessions.isEmpty()) {
+            return false;
+        }
+        return getShowOnlineStatus(userId);
+    }
+
+    public List<String> getOnlineUserIds() {
+        List<String> onlineUserIds = new ArrayList<>();
+        userSessions.forEach((uId, sessions) -> {
+            if (!sessions.isEmpty() && getShowOnlineStatus(uId)) {
+                onlineUserIds.add(uId);
+            }
+        });
+        return onlineUserIds;
+    }
+
+    private boolean getShowOnlineStatus(String userId) {
+        try {
+            return userProfileRepository.findByUserId(userId)
+                    .map(profile -> profile.getSettings() == null || profile.getSettings().isShowOnlineStatus())
+                    .orElse(true);
+        } catch (Exception e) {
+            return true;
+        }
     }
 }
