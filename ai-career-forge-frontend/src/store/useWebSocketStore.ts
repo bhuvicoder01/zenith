@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { toast } from 'sonner';
 import api from '@/lib/api';
+import useAuthStore from './useAuthStore';
 
 export interface NotificationItem {
   id: string;
@@ -58,7 +59,14 @@ export const useWebSocketStore = create<WebSocketStore>((set, get) => ({
       const saved = localStorage.getItem('zenith_notifications');
       if (saved) {
         try {
-          set({ notifications: JSON.parse(saved) });
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed)) {
+            const filtered = parsed.filter((n: any) => n.type !== 'PRESENCE' && n.type !== 'SYSTEM');
+            set({ notifications: filtered });
+            localStorage.setItem('zenith_notifications', JSON.stringify(filtered));
+          } else {
+            set({ notifications: parsed });
+          }
         } catch (e) {
           console.error('Failed to parse saved notifications:', e);
         }
@@ -99,10 +107,11 @@ export const useWebSocketStore = create<WebSocketStore>((set, get) => ({
 
     try {
       const socket = new WebSocket(wsUrl);
+      set({ socket });
 
       socket.onopen = () => {
         console.log('Zenith App-wide WebSocket channel open.');
-        set({ socket, isConnected: true });
+        set({ isConnected: true });
         reconnectAttempts = 0;
         if (reconnectTimeout) {
           clearTimeout(reconnectTimeout);
@@ -152,6 +161,12 @@ export const useWebSocketStore = create<WebSocketStore>((set, get) => ({
             }
 
             if (data.type === 'MESSAGE') {
+              // Ignore if we are the sender
+              const currentUserId = useAuthStore.getState().user?.id;
+              if (currentUserId && data.data.senderId === currentUserId) {
+                return;
+              }
+
               // Check if user is currently on the messages page
               const isChatPage = typeof window !== 'undefined' && window.location.pathname.startsWith('/dashboard/messages');
               
@@ -193,6 +208,10 @@ export const useWebSocketStore = create<WebSocketStore>((set, get) => ({
           }
 
           // Persist and handle notification items
+          if (data.type === 'PRESENCE' || data.type === 'SYSTEM') {
+            return;
+          }
+
           const newNotif: NotificationItem = {
             id: data.id || Date.now().toString(),
             type: data.type,
