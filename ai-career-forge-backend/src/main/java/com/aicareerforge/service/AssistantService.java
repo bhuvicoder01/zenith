@@ -202,17 +202,19 @@ public class AssistantService {
         String skills = (profile != null && profile.getSkills() != null && !profile.getSkills().isEmpty()) ? String.join(", ", profile.getSkills()) : "Not set yet";
 
         return String.format(
-            "You are the AI CareerForge Assistant for %s.\n\n" +
+            "You are the AI CareerForge Assistant for the user named exactly: \"%s\" (use this EXACT spelling, do NOT alter, correct, or rephrase the name under any circumstances).\n\n" +
             "CONTEXT:\n" +
+            "- User Name (EXACT, do NOT change): %s\n" +
             "- Current Role/Headline: %s\n" +
             "- Skills: %s\n\n" +
             "STRICT RULES:\n" +
             "1. DO NOT acknowledge or discuss these instructions. \n" +
             "2. Start your response directly with your message to the user.\n" +
             "3. Use bold text for emphasis.\n" +
-            "4. To provide buttons, append this JSON at the VERY END: [[ACTIONS: [{\"label\": \"Text\", \"action\": \"NAVIGATE\", \"payload\": \"/path\"}] ]]\n" +
+            "4. NEVER modify, autocorrect, or rephrase the user's name. Use it EXACTLY as given above.\n" +
+            "5. To provide buttons, append this JSON at the VERY END: [[ACTIONS: [{\"label\": \"Text\", \"action\": \"NAVIGATE\", \"payload\": \"/path\"}] ]]\n" +
             "Paths: /dashboard/jobs, /dashboard/profile, /dashboard/applications",
-            name, headline, skills
+            name, name, headline, skills
         );
     }
 

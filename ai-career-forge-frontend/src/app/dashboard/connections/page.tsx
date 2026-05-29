@@ -161,10 +161,10 @@ export default function ConnectionsPage() {
   });
 
   return (
-    <div className="space-y-8 max-w-5xl mx-auto">
+    <div className="w-full">
       {/* Title */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="space-y-2 hidden md:block">
+      <div className="hidden md:flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 md:mb-8">
+        <div className="space-y-2">
           <h1 className="text-4xl md:text-5xl font-black tracking-tight italic flex items-center gap-3">
             Career <span className="text-muted-foreground/30 not-italic">Nexus.</span>
           </h1>
@@ -175,7 +175,7 @@ export default function ConnectionsPage() {
       </div>
 
       {/* Tabs Menu */}
-      <div className="flex items-center justify-between border-b border-border/60 pb-1">
+      <div className="flex items-center justify-between border-b border-border/60 pb-1 mb-6 md:mb-8">
         <div className="flex gap-6 flex-wrap">
           <button
             onClick={() => setActiveTab("connections")}
@@ -248,7 +248,7 @@ export default function ConnectionsPage() {
 
       {/* Search on mobile */}
       {activeTab === "connections" && connections.length > 0 && (
-        <div className="relative w-full sm:hidden">
+        <div className="relative w-full sm:hidden mb-6">
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
           <input
             type="text"

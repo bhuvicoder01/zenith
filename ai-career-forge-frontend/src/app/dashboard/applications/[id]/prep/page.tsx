@@ -80,7 +80,7 @@ export default function ApplicationMaterialsPage({ params }: { params: Promise<{
   if (!app) return null;
 
   return (
-    <div className="max-w-6xl mx-auto px-4 py-8 space-y-8 animate-in fade-in duration-500 pb-20">
+    <div className="w-full px-4 py-8 space-y-8 animate-in fade-in duration-500 pb-20">
       <Link 
         href="/dashboard/applications" 
         className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors group font-black uppercase text-[10px] tracking-widest"

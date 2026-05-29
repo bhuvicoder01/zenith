@@ -19,9 +19,7 @@ export default function ThemeToggle() {
   const isMobileFooterVisible = !pathname.startsWith("/auth") && !pathname.startsWith("/admin");
 
   return (
-    <div className={`fixed left-6 z-[2000] transition-all duration-300 ${
-      isMobileFooterVisible ? "bottom-24 md:bottom-6" : "bottom-6"
-    }`}>
+    <div className="hidden md:block fixed md:top-6 md:right-6 z-[2000] transition-all duration-300">
       <button
         onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
         className="p-3 rounded-full bg-background border border-border shadow-2xl hover:bg-secondary transition-all active:scale-95 group focus:outline-none focus:ring-2 focus:ring-foreground/20"

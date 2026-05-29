@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense } from "react";
 import { 
   Settings, Bell, Shield, Moon, Sun, Monitor, Trash2, 
   Mail, Key, UserCircle, LogOut, ChevronRight, Sparkles,
@@ -10,14 +10,21 @@ import { useTheme } from "next-themes";
 import useAuthStore from "@/store/useAuthStore";
 import { toast } from "sonner";
 import api from "@/lib/api";
+import { useSearchParams, useRouter } from "next/navigation";
 
-export default function SettingsPage() {
+function SettingsContent() {
   const { theme, setTheme, resolvedTheme } = useTheme();
   const { user, logout } = useAuthStore();
   const [mounted, setMounted] = useState(false);
+  const router = useRouter();
+  const searchParams = useSearchParams();
   
   // Settings states
-  const [activeTab, setActiveTab] = useState<'appearance' | 'account' | 'matching' | 'notifications' | 'privacy' | 'security'>('appearance');
+  const validTabs = ['appearance', 'account', 'matching', 'notifications', 'privacy', 'security'];
+  const tabParam = searchParams.get("tab");
+  const initialTab = (tabParam && validTabs.includes(tabParam)) ? tabParam : 'appearance';
+
+  const [activeTab, setActiveTab] = useState<'appearance' | 'account' | 'matching' | 'notifications' | 'privacy' | 'security'>(initialTab as any);
   const [profile, setProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -35,6 +42,18 @@ export default function SettingsPage() {
     const savedPass = sessionStorage.getItem('zenith_temp_pass');
     if (savedPass) setTempPass(savedPass);
   }, []);
+
+  useEffect(() => {
+    const tab = searchParams.get("tab");
+    if (tab && validTabs.includes(tab) && tab !== activeTab) {
+      setActiveTab(tab as any);
+    }
+  }, [searchParams]);
+
+  const handleTabChange = (tabId: string) => {
+    setActiveTab(tabId as any);
+    router.replace(`/dashboard/settings?tab=${tabId}`, { scroll: false });
+  };
 
   const fetchProfile = async () => {
     try {
@@ -125,7 +144,7 @@ export default function SettingsPage() {
   };
 
   return (
-    <div className="max-w-4xl mx-auto space-y-10 pb-20">
+    <div className="w-full space-y-10 pb-20">
       <div className="flex flex-col gap-2 hidden md:flex">
         <h1 className="text-3xl md:text-5xl font-black tracking-tight text-foreground">Settings</h1>
         <p className="text-muted-foreground font-medium">Manage your ZENITH experience and account security.</p>
@@ -144,11 +163,11 @@ export default function SettingsPage() {
           ].map((item) => (
             <button
               key={item.id}
-              onClick={() => setActiveTab(item.id as any)}
+              onClick={() => handleTabChange(item.id)}
               className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl font-bold transition-all border ${
                 activeTab === item.id 
                   ? 'bg-foreground text-background border-transparent shadow-lg' 
-                  : 'text-muted-foreground hover:bg-secondary/50 border-transparent'
+                  : 'text-muted-foreground hover:bg-secondary/50 hover:text-foreground border-transparent'
               }`}
             >
               <item.icon className="w-5 h-5" />
@@ -561,5 +580,18 @@ export default function SettingsPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function SettingsPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex flex-col items-center justify-center py-20 gap-4 min-h-[400px]">
+        <Loader2 className="w-10 h-10 animate-spin text-primary" />
+        <p className="text-muted-foreground text-sm animate-pulse">Establishing settings dashboard...</p>
+      </div>
+    }>
+      <SettingsContent />
+    </Suspense>
   );
 }

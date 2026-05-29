@@ -98,7 +98,7 @@ export default function JobDetailsPage({ params }: { params: Promise<{ id: strin
   const { job, matchedSkills, matchScore } = data;
 
   return (
-    <div className="max-w-6xl mx-auto px-4 py-8 font-sans pb-24">
+    <div className="w-full px-4 py-8 font-sans pb-24">
       {/* Back Button */}
       <Link 
         href="/dashboard/jobs" 

@@ -86,7 +86,7 @@ export default function RecruiterSettings() {
   ];
 
   return (
-    <div className="max-w-6xl mx-auto space-y-12 animate-in fade-in slide-in-from-bottom-4 duration-700">
+    <div className="w-full space-y-12 animate-in fade-in slide-in-from-bottom-4 duration-700">
       <header>
         <h1 className="text-4xl font-black uppercase tracking-tighter mb-2">Protocol Settings</h1>
         <p className="text-muted-foreground font-medium">Configure your recruitment terminal and corporate identity.</p>

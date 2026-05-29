@@ -25,7 +25,7 @@ public class AiProviderConfig {
     @Value("${GOOGLE_AI_API_KEY:}")
     private String apiKey;
 
-    @Value("${GOOGLE_AI_MODEL:gemini-2.0-flash}")
+    @Value("${GOOGLE_AI_MODEL:gemini-2.5-flash}")
     private String modelName;
 
     @Bean

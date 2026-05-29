@@ -171,7 +171,11 @@ public class DirectMessageService {
     }
 
     public long getOverallUnreadCount(String userId) {
-        return directMessageRepository.countByReceiverIdAndIsReadAndDeletedByReceiverFalse(userId, false);
+        List<DirectMessage> unread = directMessageRepository.findByReceiverIdAndIsReadAndDeletedByReceiverFalse(userId, false);
+        return unread.stream()
+                .map(DirectMessage::getSenderId)
+                .distinct()
+                .count();
     }
 
     public void clearConversation(String userId, String otherUserId) {

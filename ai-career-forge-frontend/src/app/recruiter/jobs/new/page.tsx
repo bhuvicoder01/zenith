@@ -40,7 +40,7 @@ export default function NewJobPosting() {
   };
 
   return (
-    <div className="max-w-4xl mx-auto space-y-10 animate-in slide-in-from-bottom-5 duration-700">
+    <div className="w-full space-y-10 animate-in slide-in-from-bottom-5 duration-700">
       <div className="flex items-center gap-4">
         <Link href="/recruiter/jobs" className="p-3 rounded-2xl bg-secondary hover:bg-border transition-all">
           <ArrowLeft className="w-5 h-5" />

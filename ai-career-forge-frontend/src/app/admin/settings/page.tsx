@@ -51,7 +51,7 @@ export default function AdminSettings() {
   if (!mounted) return null;
 
   return (
-    <div className="max-w-5xl mx-auto space-y-12 animate-in fade-in duration-700">
+    <div className="w-full space-y-12 animate-in fade-in duration-700">
       <header className="flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
           <h1 className="text-4xl font-black uppercase tracking-tighter mb-2">Global Authority</h1>

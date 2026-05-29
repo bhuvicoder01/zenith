@@ -20,4 +20,7 @@ public interface DirectMessageRepository extends MongoRepository<DirectMessage, 
     
     @Query(value = "{receiverId: ?0, isRead: ?1, deletedByReceiver: {$ne: true}}", count = true)
     long countByReceiverIdAndIsReadAndDeletedByReceiverFalse(String receiverId, boolean isRead);
+
+    @Query("{receiverId: ?0, isRead: ?1, deletedByReceiver: {$ne: true}}")
+    List<DirectMessage> findByReceiverIdAndIsReadAndDeletedByReceiverFalse(String receiverId, boolean isRead);
 }

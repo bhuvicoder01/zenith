@@ -83,9 +83,11 @@ export default function NotificationsPage() {
   };
 
   return (
-    <div className="space-y-8 max-w-4xl mx-auto">
+    <div className="w-full">
       {/* Title Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className={`flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 md:mb-8 ${
+        notifications.length > 0 ? 'flex' : 'hidden md:flex'
+      }`}>
         <div className="space-y-2 hidden md:block">
           <h1 className="text-4xl md:text-5xl font-black tracking-tight italic">
             Transmission <span className="text-muted-foreground/30 not-italic">Feed.</span>
@@ -96,7 +98,7 @@ export default function NotificationsPage() {
         </div>
 
         {notifications.length > 0 && (
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 w-full md:w-auto justify-end">
             <button
               onClick={markAllAsRead}
               className="px-4 py-2.5 bg-secondary text-secondary-foreground border border-border hover:bg-secondary/80 rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-2 transition-all shadow-sm"
@@ -114,7 +116,7 @@ export default function NotificationsPage() {
       </div>
 
       {/* Tabs Menu */}
-      <div className="flex items-center gap-6 border-b border-border pb-1">
+      <div className="flex items-center gap-6 border-b border-border pb-1 mb-6 md:mb-8">
         <button
           onClick={() => setFilter("all")}
           className={`pb-4 text-xs font-black uppercase tracking-widest border-b-2 transition-all relative ${

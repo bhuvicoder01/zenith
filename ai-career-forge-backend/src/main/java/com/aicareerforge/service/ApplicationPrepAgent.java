@@ -21,8 +21,10 @@ public class ApplicationPrepAgent {
 
     public Map<String, Object> tailorResume(UserProfile profile, String jobDescription) {
         log.info("Tailoring resume for job description with full profile context.");
+        String userName = profile.getFullName() != null ? profile.getFullName() : "";
         String prompt = String.format("""
                 SYSTEM: You are an ATS expert and professional resume tailor.
+                CRITICAL: The user's name is exactly "%s". You MUST use this EXACT spelling in all generated content. Do NOT alter, correct, or rephrase any names from the profile.
                 USER: Analyze the following user profile and job description.
                 Filter and optimize the content to create a high-impact, ATS-optimized version.
                 
@@ -38,7 +40,7 @@ public class ApplicationPrepAgent {
                 
                 JD: %s
                 PROFILE DATA: %s
-                """, jobDescription, profile.toString());
+                """, userName, jobDescription, profile.toString());
 
         try {
             String response = chatClient.prompt().user(prompt).call().content();
@@ -62,6 +64,7 @@ public class ApplicationPrepAgent {
         log.info("Generating consolidated communication kit (Cover Letter + Email Intro)");
         String prompt = String.format("""
                 SYSTEM: You are a professional career coach and networking expert.
+                CRITICAL: Any person's name found in the resume MUST be used with its EXACT original spelling. Do NOT alter, correct, or rephrase any names.
                 USER: Based on the resume and job description, generate two items:
                 1. A compelling, personalized cover letter.
                 2. A concise email introduction for a hiring manager.
@@ -90,6 +93,7 @@ public class ApplicationPrepAgent {
     public String generateInterviewPrepKit(String jobDescription, String company, String resumeText) {
         String prompt = String.format("""
                 SYSTEM: You are an expert interviewer.
+                CRITICAL: Any person's name found in the resume MUST be used with its EXACT original spelling. Do NOT alter, correct, or rephrase any names.
                 USER: Generate a full interview prep kit.
                 Include:
                 1. Technical Q&A (10 detailed pairs).

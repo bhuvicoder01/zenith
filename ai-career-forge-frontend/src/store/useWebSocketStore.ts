@@ -171,9 +171,9 @@ export const useWebSocketStore = create<WebSocketStore>((set, get) => ({
               const isChatPage = typeof window !== 'undefined' && window.location.pathname.startsWith('/dashboard/messages');
               const isCurrentChat = isChatPage && get().activeChatUserId === data.data.senderId;
               
-              // Increment reactive unread message count if not actively viewing the current chat
+              // Re-fetch the correct unread chat count from the backend if not actively viewing the current chat
               if (!isCurrentChat) {
-                set(state => ({ unreadMessageCount: state.unreadMessageCount + 1 }));
+                get().fetchUnreadMessageCount();
               }
 
               // Only show toast and add to notifications feed if user is not active/online (tab is blurred/out of focus)
