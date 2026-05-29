@@ -23,7 +23,7 @@ spring:
         base-url: https://generativelanguage.googleapis.com/v1beta/openai
         api-key: ${GOOGLE_AI_API_KEY}
         options:
-          model: ${GOOGLE_AI_MODEL:gemini-2.0-flash}
+          model: ${GOOGLE_AI_MODEL:gemini-2.5-flash}
       embedding:
         enabled: false 
     vectorstore:
