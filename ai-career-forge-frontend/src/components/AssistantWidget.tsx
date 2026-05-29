@@ -5,7 +5,7 @@ import {
   Bot, Send, X, MessageSquare, Sparkles, 
   ChevronRight, BrainCircuit, Terminal, Globe 
 } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import api from "@/lib/api";
@@ -42,6 +42,7 @@ export default function AssistantWidget() {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
+  const pathname = usePathname();
 
   const [isTucked, setIsTucked] = useState(false);
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -177,8 +178,14 @@ export default function AssistantWidget() {
 
 
 
+  const isMobileFooterVisible = !pathname.startsWith("/auth") && !pathname.startsWith("/admin");
+
   return (
-    <div className="fixed bottom-4 right-4 sm:bottom-8 sm:right-8 z-50 flex flex-col items-end gap-2 sm:gap-4">
+    <div className={`fixed z-50 flex flex-col items-end gap-2 md:gap-4 transition-all duration-300 ${
+      isMobileFooterVisible 
+        ? "bottom-24 right-4 md:bottom-8 md:right-8" 
+        : "bottom-4 right-4 md:bottom-8 md:right-8"
+    }`}>
       {/* Chat Window */}
       {isOpen && (
         <div className="w-[calc(100vw-2rem)] sm:w-[400px] h-[calc(100vh-6rem)] sm:h-[600px] max-h-[600px] bg-card/80 backdrop-blur-3xl border border-border rounded-[30px] sm:rounded-[40px] shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-bottom-8 duration-500">

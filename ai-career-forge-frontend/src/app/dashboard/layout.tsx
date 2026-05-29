@@ -399,7 +399,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <main className={`flex-1 bg-background w-full ${
           pathname === "/dashboard/messages" 
             ? "p-0 overflow-hidden" 
-            : `${isMobile ? 'p-4' : 'p-8'} overflow-y-auto`
+            : `${isMobile ? 'p-4 pb-24' : 'p-8'} overflow-y-auto`
         }`}>
           {/* Global sync status indicator */}
           {isSyncing && (

@@ -9,6 +9,7 @@ import { Analytics } from '@vercel/analytics/react'
 import { ThemeProvider } from '@/components/ThemeProvider'
 import ThemeToggle from '@/components/ThemeToggle'
 import AssistantWidget from '@/components/AssistantWidget'
+import MobileFooterTabs from '@/components/MobileFooterTabs'
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -36,6 +37,7 @@ export default function RootLayout({
               {children}
               <ThemeToggle />
               <AssistantWidget />
+              <MobileFooterTabs />
               <SpeedInsights />
               <Analytics />
             </AuthGuard>
