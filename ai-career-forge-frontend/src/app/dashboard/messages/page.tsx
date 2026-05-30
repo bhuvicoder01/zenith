@@ -18,6 +18,7 @@ interface PublicProfile {
   headline: string;
   profilePhotoUrl?: string;
   skills?: string[];
+  lastOnline?: string;
 }
 
 interface DirectMessage {
@@ -64,17 +65,25 @@ function ChatContainer() {
   const isInitialLoadRef = useRef(true);
   const intersectingMessageIdsRef = useRef<Set<string>>(new Set());
   const [visibleTimeMessageId, setVisibleTimeMessageId] = useState<string | null>(null);
+  const [isOtherUserTyping, setIsOtherUserTyping] = useState(false);
 
-  const { socket, isConnected, fetchUnreadMessageCount, onlineUserIds, setActiveChatUserId } = useWebSocketStore();
+  const { socket, isConnected, fetchUnreadMessageCount, onlineUserIds, setActiveChatUserId, sendTypingStatus } = useWebSocketStore();
   const { user } = useAuthStore();
   const currentUserId = user?.id;
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const localTypingStateRef = useRef(false);
 
   useEffect(() => {
     fetchConversations();
     fetchConnections();
+    return () => {
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
+    };
   }, []);
 
   // Handle active user change or targetUserId query parameter change
@@ -120,6 +129,12 @@ function ChatContainer() {
             prev.map(m => m.senderId === currentUserId ? { ...m, read: true } : m)
           );
         }
+      } else if (payload.type === "TYPING") {
+        const senderId = payload.data?.senderId;
+        const isTyping = payload.data?.isTyping;
+        if (activeUser && senderId === activeUser.userId) {
+          setIsOtherUserTyping(!!isTyping);
+        }
       }
     };
 
@@ -160,6 +175,7 @@ function ChatContainer() {
   useEffect(() => {
     intersectingMessageIdsRef.current.clear();
     setVisibleTimeMessageId(null);
+    setIsOtherUserTyping(false);
   }, [activeUser]);
 
   // Handle marking visible messages as read when tab/window gains focus or user clicks inside
@@ -405,9 +421,51 @@ function ChatContainer() {
     }
   };
 
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setNewMessage(value);
+
+    if (!activeUser) return;
+
+    // Send typing: true if not already typing
+    if (!localTypingStateRef.current && value.trim().length > 0) {
+      localTypingStateRef.current = true;
+      sendTypingStatus(activeUser.userId, true);
+    }
+
+    // Reset local typing status if input is cleared
+    if (value.trim().length === 0 && localTypingStateRef.current) {
+      localTypingStateRef.current = false;
+      sendTypingStatus(activeUser.userId, false);
+    }
+
+    // Set a timeout to clear the typing status after 3 seconds of inactivity
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
+
+    typingTimeoutRef.current = setTimeout(() => {
+      if (localTypingStateRef.current) {
+        localTypingStateRef.current = false;
+        if (activeUser) {
+          sendTypingStatus(activeUser.userId, false);
+        }
+      }
+    }, 3000);
+  };
+
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!activeUser || !newMessage.trim() || sending) return;
+
+    // Clear typing indicator immediately
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
+    if (localTypingStateRef.current) {
+      localTypingStateRef.current = false;
+      sendTypingStatus(activeUser.userId, false);
+    }
 
     const content = newMessage.trim();
     setNewMessage("");
@@ -485,6 +543,32 @@ function ChatContainer() {
       });
     } catch (e) {
       return "";
+    }
+  };
+
+  const formatLastSeen = (isoString?: string) => {
+    if (!isoString) return "Offline";
+    try {
+      const date = new Date(isoString);
+      const now = new Date();
+      const diffMs = now.getTime() - date.getTime();
+      const diffMins = Math.floor(diffMs / 60000);
+      const diffHours = Math.floor(diffMins / 60);
+      const diffDays = Math.floor(diffHours / 24);
+
+      if (diffMins < 1) {
+        return "Last seen just now";
+      } else if (diffMins < 60) {
+        return `Last seen ${diffMins}m ago`;
+      } else if (diffHours < 24) {
+        return `Last seen ${diffHours}h ago`;
+      } else if (diffDays === 1) {
+        return "Last seen yesterday";
+      } else {
+        return `Last seen ${date.toLocaleDateString()}`;
+      }
+    } catch (e) {
+      return "Offline";
     }
   };
 
@@ -708,7 +792,7 @@ function ChatContainer() {
                       </span>
                     ) : (
                       <span className="flex items-center gap-1 text-[9px] text-muted-foreground font-extrabold uppercase bg-secondary px-2 py-0.5 rounded-full select-none">
-                        Offline
+                        {formatLastSeen(activeUser.lastOnline)}
                       </span>
                     )}
                   </h3>
@@ -810,6 +894,24 @@ function ChatContainer() {
                       </Fragment>
                     );
                   })}
+                  
+                  {isOtherUserTyping && (
+                    <div className="flex items-center gap-2.5 mr-auto pl-1 animate-in fade-in duration-200 shrink-0">
+                      <div className="h-9 w-9 rounded-xl border border-border bg-muted flex items-center justify-center overflow-hidden shadow-sm shrink-0">
+                        {getPhotoUrl(activeUser.profilePhotoUrl) ? (
+                          <img src={getPhotoUrl(activeUser.profilePhotoUrl)!} alt={activeUser.fullName} className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="font-bold text-xs text-muted-foreground">{getInitials(activeUser.fullName)}</div>
+                        )}
+                      </div>
+                      <div className="bg-card border border-border px-4 py-3.5 rounded-2xl rounded-tl-none flex items-center gap-1.5 shadow-sm">
+                        <span className="w-1.5 h-1.5 bg-muted-foreground rounded-full animate-bounce [animation-duration:1000ms]"></span>
+                        <span className="w-1.5 h-1.5 bg-muted-foreground rounded-full animate-bounce [animation-duration:1000ms] [animation-delay:150ms]"></span>
+                        <span className="w-1.5 h-1.5 bg-muted-foreground rounded-full animate-bounce [animation-duration:1000ms] [animation-delay:300ms]"></span>
+                      </div>
+                    </div>
+                  )}
+                  
                   <div ref={messagesEndRef} />
                 </div>
               ) : (
@@ -834,7 +936,7 @@ function ChatContainer() {
                 type="text"
                 placeholder="Write a message..."
                 value={newMessage}
-                onChange={(e) => setNewMessage(e.target.value)}
+                onChange={handleInputChange}
                 className="flex-1 bg-card border border-border/80 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-1 focus:ring-primary/20 font-medium"
               />
               <button

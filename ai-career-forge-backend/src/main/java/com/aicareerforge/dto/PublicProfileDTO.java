@@ -25,6 +25,7 @@ public class PublicProfileDTO {
     private List<UserProfile.AcademicProject> academicProjects;
     private List<UserProfile.Certification> certifications;
     private List<UserProfile.Internship> internships;
+    private java.time.Instant lastOnline;
 
     public static PublicProfileDTO fromEntity(UserProfile profile) {
         if (profile == null) return null;
@@ -32,6 +33,9 @@ public class PublicProfileDTO {
         boolean anonymize = profile.getSettings() != null && profile.getSettings().isAnonymizeData();
         boolean showEmail = profile.getSettings() == null || profile.getSettings().isShowEmail();
         String resolvedEmail = (showEmail && !anonymize) ? profile.getEmail() : null;
+
+        boolean showOnline = profile.getSettings() == null || profile.getSettings().isShowOnlineStatus();
+        java.time.Instant resolvedLastOnline = (showOnline && !anonymize) ? profile.getLastOnline() : null;
 
         return PublicProfileDTO.builder()
                 .userId(profile.getUserId())
@@ -46,6 +50,7 @@ public class PublicProfileDTO {
                 .academicProjects(profile.getAcademicProjects())
                 .certifications(profile.getCertifications())
                 .internships(profile.getInternships())
+                .lastOnline(resolvedLastOnline)
                 .build();
     }
 }

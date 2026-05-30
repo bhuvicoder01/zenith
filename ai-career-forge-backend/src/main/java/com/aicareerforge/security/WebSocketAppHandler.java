@@ -103,9 +103,44 @@ public class WebSocketAppHandler extends TextWebSocketHandler {
                 if (sessions.isEmpty()) {
                     userSessions.remove(userId);
                     broadcastPresence(userId, "OFFLINE");
+                    try {
+                        userProfileRepository.findByUserId(userId).ifPresent(profile -> {
+                            profile.setLastOnline(java.time.Instant.now());
+                            userProfileRepository.save(profile);
+                        });
+                    } catch (Exception e) {
+                        log.error("Failed to update lastOnline status for user ID: {}, error: {}", userId, e.getMessage());
+                    }
                 }
             }
             log.info("WebSocket connection closed for user: {} (Session ID: {})", userId, session.getId());
+        }
+    }
+
+    @Override
+    protected void handleTextMessage(WebSocketSession session, TextMessage message) throws Exception {
+        String senderId = (String) session.getAttributes().get("userId");
+        if (senderId == null) return;
+
+        try {
+            Map<String, Object> payload = objectMapper.readValue(message.getPayload(), Map.class);
+            String type = (String) payload.get("type");
+
+            if ("TYPING".equals(type)) {
+                Map<String, Object> data = (Map<String, Object>) payload.get("data");
+                if (data != null) {
+                    String receiverId = (String) data.get("receiverId");
+                    Boolean isTyping = (Boolean) data.get("isTyping");
+                    if (receiverId != null && isTyping != null) {
+                        sendNotification(receiverId, "TYPING", "Typing", isTyping ? "typing" : "stopped", Map.of(
+                                "senderId", senderId,
+                                "isTyping", isTyping
+                        ));
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.error("Error processing incoming WebSocket message: {}", e.getMessage());
         }
     }
 

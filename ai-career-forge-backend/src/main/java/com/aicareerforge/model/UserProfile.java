@@ -48,6 +48,8 @@ public class UserProfile {
     @Builder.Default
     private List<Internship> internships = new java.util.ArrayList<>();
 
+    private java.time.Instant lastOnline;
+
     @Builder.Default
     private UserSettings settings = new UserSettings();
 

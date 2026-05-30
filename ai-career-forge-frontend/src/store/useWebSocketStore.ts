@@ -31,6 +31,7 @@ interface WebSocketStore {
   fetchOnlineUsers: () => Promise<void>;
   activeChatUserId: string | null;
   setActiveChatUserId: (userId: string | null) => void;
+  sendTypingStatus: (receiverId: string, isTyping: boolean) => void;
 }
 
 let reconnectTimeout: NodeJS.Timeout | null = null;
@@ -44,6 +45,19 @@ export const useWebSocketStore = create<WebSocketStore>((set, get) => ({
   onlineUserIds: [],
   activeChatUserId: null,
   setActiveChatUserId: (userId) => set({ activeChatUserId: userId }),
+  sendTypingStatus: (receiverId, isTyping) => {
+    const socket = get().socket;
+    const isConnected = get().isConnected;
+    if (socket && isConnected && socket.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify({
+        type: 'TYPING',
+        data: {
+          receiverId,
+          isTyping
+        }
+      }));
+    }
+  },
 
   fetchOnlineUsers: async () => {
     try {
@@ -153,8 +167,8 @@ export const useWebSocketStore = create<WebSocketStore>((set, get) => ({
             return;
           }
 
-          // Handle MESSAGE & READ events
-          if (data.type === 'MESSAGE' || data.type === 'READ') {
+          // Handle MESSAGE, READ & TYPING events
+          if (data.type === 'MESSAGE' || data.type === 'READ' || data.type === 'TYPING') {
             // Dispatch a custom event for active chat window updates
             if (typeof window !== 'undefined') {
               window.dispatchEvent(new CustomEvent('zenith-app-message', { detail: data }));
