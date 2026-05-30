@@ -34,7 +34,17 @@ export default function ApplicationMaterialsPage({ params }: { params: Promise<{
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'RESUME' | 'LETTER' | 'INTRO' | 'PREP'>('RESUME');
   const [isComparing, setIsComparing] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
 
+  useEffect(() => {
+    const checkMobile = () => {
+      const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+      setIsMobile(isMobileDevice || window.innerWidth < 768);
+    };
+    checkMobile();
+    window.addEventListener("resize", checkMobile);
+    return () => window.removeEventListener("resize", checkMobile);
+  }, []);
   useEffect(() => {
     const fetchApp = async () => {
       try {
@@ -157,11 +167,41 @@ export default function ApplicationMaterialsPage({ params }: { params: Promise<{
                     <div className="space-y-3">
                        <p className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em] text-center italic">Baseline Record</p>
                        <div className="aspect-[1/1.414] w-full bg-muted rounded-2xl border border-border overflow-hidden ring-1 ring-border relative flex items-center justify-center">
-                          {isValidS3Url(profile?.resumeS3Url) ? (
-                             <iframe src={profile?.resumeS3Url} className="w-full h-full border-none opacity-40 grayscale" />
-                          ) : (
-                             <div className="text-muted-foreground font-black uppercase tracking-widest text-[8px] md:text-xs opacity-50 text-center px-4">No baseline resume found in your profile</div>
-                          )}
+                           {isValidS3Url(profile?.resumeS3Url) ? (
+                              isMobile ? (
+                                 <div className="flex flex-col items-center justify-center p-6 text-center space-y-4">
+                                    <FileText className="w-12 h-12 text-muted-foreground opacity-40 animate-pulse" />
+                                    <div className="space-y-1">
+                                       <h4 className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Baseline Resume</h4>
+                                       <p className="text-[10px] text-muted-foreground max-w-[200px] leading-relaxed">
+                                          Click below to view your baseline document.
+                                       </p>
+                                    </div>
+                                    <a
+                                       href={profile?.resumeS3Url}
+                                       target="_blank"
+                                       rel="noopener noreferrer"
+                                       className="px-4 py-2.5 bg-secondary text-foreground border border-border text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-foreground/5 transition-all flex items-center gap-1.5 shadow-sm"
+                                    >
+                                       <Eye className="w-3.5 h-3.5" /> Open Document
+                                    </a>
+                                 </div>
+                              ) : (
+                                 <object
+                                    data={profile?.resumeS3Url}
+                                    type="application/pdf"
+                                    className="w-full h-full border-none opacity-40 grayscale"
+                                 >
+                                    <embed
+                                       src={profile?.resumeS3Url}
+                                       type="application/pdf"
+                                       className="w-full h-full border-none"
+                                    />
+                                 </object>
+                              )
+                           ) : (
+                              <div className="text-muted-foreground font-black uppercase tracking-widest text-[8px] md:text-xs opacity-50 text-center px-4">No baseline resume found in your profile</div>
+                           )}
                        </div>
                     </div>
                  )}
@@ -169,7 +209,37 @@ export default function ApplicationMaterialsPage({ params }: { params: Promise<{
                     <p className="text-[10px] font-black text-foreground uppercase tracking-[0.2em] text-center">{isComparing ? 'Optimized Intelligence' : ''}</p>
                     <div className="aspect-[1/1.414] w-full bg-white rounded-2xl border border-border overflow-hidden shadow-2xl relative flex items-center justify-center">
                        {isValidS3Url(app.tailoredResumeS3Url) ? (
-                          <iframe src={app.tailoredResumeS3Url} className="w-full h-full border-none" />
+                          isMobile ? (
+                             <div className="flex flex-col items-center justify-center p-6 text-center space-y-4">
+                                <FileText className="w-12 h-12 text-muted-foreground opacity-40 animate-pulse" />
+                                <div className="space-y-1">
+                                   <h4 className="text-[10px] font-black uppercase tracking-wider text-foreground">Tailored Resume</h4>
+                                   <p className="text-[10px] text-muted-foreground max-w-[200px] leading-relaxed">
+                                      Click below to view your tailored document.
+                                   </p>
+                                </div>
+                                <a
+                                   href={app.tailoredResumeS3Url}
+                                   target="_blank"
+                                   rel="noopener noreferrer"
+                                   className="px-4 py-2.5 bg-foreground text-background text-[10px] font-black uppercase tracking-widest rounded-xl hover:opacity-90 transition-all flex items-center gap-1.5 shadow-md"
+                                >
+                                   <Eye className="w-3.5 h-3.5" /> Open Document
+                                </a>
+                             </div>
+                          ) : (
+                             <object
+                                data={app.tailoredResumeS3Url}
+                                type="application/pdf"
+                                className="w-full h-full border-none"
+                             >
+                                <embed
+                                   src={app.tailoredResumeS3Url}
+                                   type="application/pdf"
+                                   className="w-full h-full border-none"
+                                />
+                             </object>
+                          )
                        ) : (
                           <div className="text-muted-foreground font-black uppercase tracking-widest text-[8px] md:text-xs opacity-50 text-center px-4">Intelligence generation in progress...</div>
                        )}
