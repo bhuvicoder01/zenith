@@ -158,26 +158,7 @@ export default function ApplicationMaterialsPage({ params }: { params: Promise<{
                        <p className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em] text-center italic">Baseline Record</p>
                        <div className="aspect-[1/1.414] w-full bg-muted rounded-2xl border border-border overflow-hidden ring-1 ring-border relative flex items-center justify-center">
                           {isValidS3Url(profile?.resumeS3Url) ? (
-                             <>
-                                <iframe src={profile?.resumeS3Url} className="hidden md:block w-full h-full border-none opacity-40 grayscale" />
-                                <div className="md:hidden flex flex-col items-center justify-center p-6 text-center space-y-4">
-                                   <div className="w-12 h-12 rounded-2xl bg-secondary flex items-center justify-center text-muted-foreground border border-border shadow-sm">
-                                      <FileText className="w-6 h-6" />
-                                   </div>
-                                   <div className="space-y-1">
-                                      <p className="font-black text-xs uppercase tracking-wider text-muted-foreground">Baseline Resume</p>
-                                      <p className="text-[10px] text-muted-foreground max-w-[200px] leading-relaxed">PDF rendering is not supported natively on mobile browsers.</p>
-                                   </div>
-                                   <a 
-                                      href={profile?.resumeS3Url} 
-                                      target="_blank" 
-                                      rel="noopener noreferrer"
-                                      className="inline-flex items-center gap-1.5 px-4 py-2 bg-secondary border border-border rounded-xl text-[10px] font-black uppercase tracking-widest text-foreground hover:bg-secondary/80 transition-all shadow-sm"
-                                   >
-                                      <Eye className="w-3.5 h-3.5" /> View Baseline
-                                   </a>
-                                </div>
-                             </>
+                             <iframe src={profile?.resumeS3Url} className="w-full h-full border-none opacity-40 grayscale" />
                           ) : (
                              <div className="text-muted-foreground font-black uppercase tracking-widest text-[8px] md:text-xs opacity-50 text-center px-4">No baseline resume found in your profile</div>
                           )}
@@ -186,32 +167,9 @@ export default function ApplicationMaterialsPage({ params }: { params: Promise<{
                  )}
                  <div className="space-y-3">
                     <p className="text-[10px] font-black text-foreground uppercase tracking-[0.2em] text-center">{isComparing ? 'Optimized Intelligence' : ''}</p>
-                    <div className="aspect-[1/1.414] w-full bg-card rounded-2xl border border-border overflow-hidden shadow-2xl relative flex items-center justify-center">
+                    <div className="aspect-[1/1.414] w-full bg-white rounded-2xl border border-border overflow-hidden shadow-2xl relative flex items-center justify-center">
                        {isValidS3Url(app.tailoredResumeS3Url) ? (
-                          <>
-                             <iframe src={app.tailoredResumeS3Url} className="hidden md:block w-full h-full border-none" />
-                             <div className="md:hidden flex flex-col items-center justify-center p-6 text-center space-y-4">
-                                <div className="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center text-primary border border-primary/20 shadow-sm relative">
-                                   <Sparkles className="w-7 h-7" />
-                                   <span className="absolute -top-1 -right-1 flex h-3 w-3">
-                                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary/20 opacity-75"></span>
-                                      <span className="relative inline-flex rounded-full h-3 w-3 bg-primary"></span>
-                                   </span>
-                                </div>
-                                <div className="space-y-1">
-                                   <p className="font-black text-sm uppercase tracking-widest text-foreground">Optimized Resume</p>
-                                   <p className="text-[10px] text-muted-foreground max-w-[200px] leading-relaxed">Zenith AI tailoring applied. Tap below to view full document in native resolution.</p>
-                                </div>
-                                <a 
-                                   href={app.tailoredResumeS3Url} 
-                                   target="_blank" 
-                                   rel="noopener noreferrer"
-                                   className="inline-flex items-center gap-1.5 px-6 py-3 bg-foreground text-background rounded-xl text-[10px] font-black uppercase tracking-widest hover:opacity-90 transition-all shadow-lg"
-                                >
-                                   <Eye className="w-3.5 h-3.5" /> View Optimized
-                                </a>
-                             </div>
-                          </>
+                          <iframe src={app.tailoredResumeS3Url} className="w-full h-full border-none" />
                        ) : (
                           <div className="text-muted-foreground font-black uppercase tracking-widest text-[8px] md:text-xs opacity-50 text-center px-4">Intelligence generation in progress...</div>
                        )}

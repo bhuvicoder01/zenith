@@ -26,6 +26,7 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+import org.springframework.security.web.util.matcher.AntPathRequestMatcher;
 
 import java.util.List;
 
@@ -64,10 +65,22 @@ public class SecurityConfig {
                 )
                 .authorizeHttpRequests(auth -> auth
                         .dispatcherTypeMatchers(DispatcherType.ASYNC).permitAll()
-                        .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-                        .requestMatchers("/", "/api/v1/auth/register", "/api/v1/auth/authenticate", "/api/v1/auth/forgot-password", "/api/v1/auth/reset-password", "/api/v1/public/**", "/api/v1/profile/public/**", "/api/v1/assistant/**", "/api/v1/jobs/public", "/ws/app", "/error").permitAll()
-                        .requestMatchers("/api/v1/recruiter/**").hasRole("RECRUITER")
-                        .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
+                        .requestMatchers(AntPathRequestMatcher.antMatcher(HttpMethod.OPTIONS, "/**")).permitAll()
+                        .requestMatchers(
+                                AntPathRequestMatcher.antMatcher("/"),
+                                AntPathRequestMatcher.antMatcher("/api/v1/auth/register"),
+                                AntPathRequestMatcher.antMatcher("/api/v1/auth/authenticate"),
+                                AntPathRequestMatcher.antMatcher("/api/v1/auth/forgot-password"),
+                                AntPathRequestMatcher.antMatcher("/api/v1/auth/reset-password"),
+                                AntPathRequestMatcher.antMatcher("/api/v1/public/**"),
+                                AntPathRequestMatcher.antMatcher("/api/v1/profile/public/**"),
+                                AntPathRequestMatcher.antMatcher("/api/v1/assistant/**"),
+                                AntPathRequestMatcher.antMatcher("/api/v1/jobs/public"),
+                                AntPathRequestMatcher.antMatcher("/ws/app"),
+                                AntPathRequestMatcher.antMatcher("/error")
+                        ).permitAll()
+                        .requestMatchers(AntPathRequestMatcher.antMatcher("/api/v1/recruiter/**")).hasRole("RECRUITER")
+                        .requestMatchers(AntPathRequestMatcher.antMatcher("/api/v1/admin/**")).hasRole("ADMIN")
                         .anyRequest().authenticated()
                 )
                 .exceptionHandling(handler -> handler
