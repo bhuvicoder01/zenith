@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { 
   Bot, Send, X, 
-  ChevronRight, BrainCircuit 
+  ChevronRight, BrainCircuit, RotateCcw 
 } from "lucide-react";
 import { useRouter, usePathname } from "next/navigation";
 import ReactMarkdown from "react-markdown";
@@ -42,6 +42,7 @@ export default function AssistantWidget() {
   const [sessionId, setSessionId] = useState<string | null>(null);
   
   const scrollRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   
   const router = useRouter();
   const pathname = usePathname();
@@ -64,7 +65,20 @@ export default function AssistantWidget() {
     setPosition({ x: initialX, y: initialY });
   }, []);
 
+  // Prevent background scrolling when drawer is open
+  useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "";
+    }
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [isOpen]);
+
   const handlePointerDown = (e: React.PointerEvent<HTMLButtonElement>) => {
+    e.stopPropagation();
     if (e.button !== 0) return; // Only drag with left click/primary touch
     setIsDragging(true);
     setHasMoved(false);
@@ -74,6 +88,7 @@ export default function AssistantWidget() {
   };
 
   const handlePointerMove = (e: React.PointerEvent<HTMLButtonElement>) => {
+    e.stopPropagation();
     if (!isDragging) return;
     const deltaX = e.clientX - dragStart.current.x;
     const deltaY = e.clientY - dragStart.current.y;
@@ -97,6 +112,7 @@ export default function AssistantWidget() {
   };
 
   const handlePointerUp = (e: React.PointerEvent<HTMLButtonElement>) => {
+    e.stopPropagation();
     if (!isDragging) return;
     setIsDragging(false);
     e.currentTarget.releasePointerCapture(e.pointerId);
@@ -112,10 +128,6 @@ export default function AssistantWidget() {
     
     setPosition({ x: finalX, y: finalY });
     setIsSnappedLeft(snapLeft);
-    
-    if (!hasMoved) {
-      setIsOpen(true);
-    }
   };
 
   useEffect(() => {
@@ -132,15 +144,38 @@ export default function AssistantWidget() {
     return () => window.removeEventListener("resize", handleResize);
   }, [isMounted, isSnappedLeft, position.y]);
 
+  // Set welcome message only on first mount
   useEffect(() => {
-    // Initial greeting for a fresh session
+    if (messages.length === 0) {
+      setMessages([{
+        id: "welcome",
+        role: "ASSISTANT",
+        content: "Hello! I'm your AI Career Assistant. How can I help you optimize your trajectory today?"
+      }]);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Focus input when chat opens (works on mobile)
+  useEffect(() => {
+    if (isOpen) {
+      scrollToBottom();
+      setTimeout(() => {
+        inputRef.current?.focus({ preventScroll: true });
+      }, 350);
+    }
+  }, [isOpen]);
+
+  const handleReset = () => {
     setMessages([{
       id: "welcome",
       role: "ASSISTANT",
       content: "Hello! I'm your AI Career Assistant. How can I help you optimize your trajectory today?"
     }]);
+    setSessionId(null);
+    setInput("");
     scrollToBottom();
-  }, [isOpen]);
+  };
 
   const scrollToBottom = () => {
     // Delay to let React render the messages first
@@ -201,6 +236,28 @@ export default function AssistantWidget() {
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
+          onMouseDown={(e) => {
+            e.stopPropagation();
+          }}
+          onMouseUp={(e) => {
+            e.stopPropagation();
+          }}
+          onTouchStart={(e) => {
+            e.stopPropagation();
+          }}
+          onTouchEnd={(e) => {
+            e.stopPropagation();
+          }}
+          onTouchMove={(e) => {
+            e.stopPropagation();
+          }}
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (!hasMoved) {
+              setIsOpen(true);
+            }
+          }}
           style={{
             position: "fixed",
             left: `${position.x}px`,
@@ -217,7 +274,13 @@ export default function AssistantWidget() {
           } transition-[transform,opacity,border-radius] duration-300`}
           title="Drag to reposition · Tap to open"
         >
-          <Bot className={`w-5 h-5 transition-transform duration-300 ${isDragging ? "animate-pulse" : "group-hover:scale-110"}`} />
+          <div className="w-7 h-7 rounded-lg border border-border/15 overflow-hidden shadow-sm transition-transform duration-300 group-hover:scale-110">
+            <img 
+              src="/assistant_avatar.png" 
+              alt="AI Logo" 
+              className={`w-full h-full object-cover ${isDragging ? "animate-pulse" : ""}`} 
+            />
+          </div>
           <span className="text-[9px] font-black uppercase tracking-widest flex flex-col items-center leading-[1.1] opacity-75 group-hover:opacity-100 transition-opacity">
             <span>A</span>
             <span>I</span>
@@ -232,10 +295,18 @@ export default function AssistantWidget() {
 
       {/* Slide-out Side Drawer */}
       {isOpen && (
-        <div className="fixed right-0 top-0 bottom-0 h-screen w-full max-w-[400px] bg-card/85 backdrop-blur-3xl border-l border-border shadow-2xl flex flex-col z-[1200] animate-in slide-in-from-right duration-300">
+        <div 
+          onClick={(e) => e.stopPropagation()}
+          onPointerDown={(e) => e.stopPropagation()}
+          className="fixed right-0 top-0 bottom-0 h-screen w-full md:max-w-[400px] bg-card/85 backdrop-blur-3xl border-l border-border shadow-2xl flex flex-col z-[1200] animate-in slide-in-from-right duration-300"
+        >
           {/* Left Edge Tucked-In Close Tab (Desktop only to prevent off-screen positioning on mobile) */}
           <button 
-            onClick={() => setIsOpen(false)}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setIsOpen(false);
+            }}
             className="hidden md:flex absolute left-0 top-1/2 -translate-y-1/2 -translate-x-full bg-foreground text-background border-l border-t border-b border-border/20 rounded-l-2xl py-4 px-2.5 hover:bg-foreground/90 transition-all shadow-xl flex flex-col items-center gap-2 cursor-pointer"
             title="Close Assistant"
           >
@@ -254,8 +325,9 @@ export default function AssistantWidget() {
             {/* Header */}
             <div className="p-6 border-b border-border bg-foreground/5 flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-foreground text-background rounded-2xl flex items-center justify-center shadow-lg">
-                  <BrainCircuit className="w-6 h-6" />
+                <div className="w-12 h-12 rounded-2xl border border-border bg-muted flex items-center justify-center overflow-hidden shadow-lg relative group">
+                  <img src="/assistant_avatar.png" alt="Zenith Core AI" className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
+                  <div className="absolute inset-0 bg-primary/10 opacity-0 group-hover:opacity-100 transition-opacity" />
                 </div>
                 <div>
                   <h3 className="text-sm font-black uppercase tracking-tighter">Zenith Core AI</h3>
@@ -265,12 +337,25 @@ export default function AssistantWidget() {
                   </div>
                 </div>
               </div>
-              <button 
-                onClick={() => setIsOpen(false)}
-                className="p-2 hover:bg-foreground/5 rounded-full transition-colors"
-              >
-                <X className="w-5 h-5 text-muted-foreground" />
-              </button>
+              <div className="flex items-center gap-1">
+                <button 
+                  onClick={handleReset}
+                  className="p-2 hover:bg-foreground/10 rounded-full transition-colors group"
+                  title="Reset conversation"
+                >
+                  <RotateCcw className="w-4 h-4 text-muted-foreground group-hover:text-foreground transition-colors" />
+                </button>
+                <button 
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setIsOpen(false);
+                  }}
+                  className="p-2 hover:bg-foreground/5 rounded-full transition-colors"
+                >
+                  <X className="w-5 h-5 text-muted-foreground" />
+                </button>
+              </div>
             </div>
 
             {/* Messages */}
@@ -306,7 +391,11 @@ export default function AssistantWidget() {
                       {msg.actions.map((action, idx) => (
                         <button
                           key={idx}
-                          onClick={() => handleAction(action)}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            handleAction(action);
+                          }}
                           className="px-4 py-2 bg-foreground/5 hover:bg-foreground hover:text-background border border-border rounded-xl text-[10px] font-black uppercase tracking-widest transition-all active:scale-95"
                         >
                           {action.label}
@@ -334,6 +423,7 @@ export default function AssistantWidget() {
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && handleSend()}
                   placeholder="Ask Zenith anything..."
+                  ref={inputRef}
                   className="w-full bg-background border border-border rounded-2xl py-4 pl-6 pr-14 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-foreground/20 transition-all"
                 />
                 <button 

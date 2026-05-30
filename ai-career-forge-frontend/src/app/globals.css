@@ -71,8 +71,67 @@
     @apply border-border;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground antialiased selection:bg-foreground selection:text-background;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
   }
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-display;
+  }
+  
+  /* Promising and professionally spaced headers */
+  h1 {
+    @apply tracking-tighter font-black;
+    line-height: 1.05;
+  }
+  h2 {
+    @apply tracking-tight font-black;
+    line-height: 1.15;
+  }
+  h3 {
+    @apply tracking-tight font-bold;
+    line-height: 1.2;
+  }
+  h4 {
+    @apply tracking-tight font-semibold;
+    line-height: 1.25;
+  }
+  
+  p {
+    @apply leading-relaxed;
+    letter-spacing: -0.006em;
+  }
+}
+
+/* 
+ * Typographic Correction: Uppercase elements must have letter spacing (tracking)
+ * to be legible. We override the cramped "tracking-tight" utility for all uppercase text.
+ */
+.uppercase {
+  letter-spacing: 0.075em !important; /* default tracking-wide */
+}
+.uppercase.tracking-tighter,
+.tracking-tighter.uppercase {
+  letter-spacing: 0.025em !important;
+}
+.uppercase.tracking-tight,
+.tracking-tight.uppercase {
+  letter-spacing: 0.05em !important;
+}
+.uppercase.tracking-normal,
+.tracking-normal.uppercase {
+  letter-spacing: 0.075em !important;
+}
+.uppercase.tracking-wide,
+.tracking-wide.uppercase {
+  letter-spacing: 0.1em !important;
+}
+.uppercase.tracking-wider,
+.tracking-wider.uppercase {
+  letter-spacing: 0.15em !important;
+}
+.uppercase.tracking-widest,
+.tracking-widest.uppercase {
+  letter-spacing: 0.25em !important;
 }
 
 .flexbox {
