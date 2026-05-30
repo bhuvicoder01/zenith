@@ -8,6 +8,7 @@ import { Analytics } from '@vercel/analytics/react'
 
 import { ThemeProvider } from '@/components/ThemeProvider'
 import ThemeToggle from '@/components/ThemeToggle'
+import OrientationLock from '@/components/OrientationLock'
 import AssistantWidget from '@/components/AssistantWidget'
 import MobileFooterTabs from '@/components/MobileFooterTabs'
 
@@ -46,6 +47,7 @@ export default function RootLayout({
             <AuthGuard>
               {children}
               <ThemeToggle />
+              <OrientationLock />
               <AssistantWidget />
               <MobileFooterTabs />
               <SpeedInsights />
