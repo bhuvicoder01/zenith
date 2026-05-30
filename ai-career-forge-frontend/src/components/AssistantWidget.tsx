@@ -298,7 +298,7 @@ export default function AssistantWidget() {
         <div 
           onClick={(e) => e.stopPropagation()}
           onPointerDown={(e) => e.stopPropagation()}
-          className="fixed right-0 top-0 bottom-0 h-screen w-full md:max-w-[400px] bg-card/85 backdrop-blur-3xl border-l border-border shadow-2xl flex flex-col z-[1200] animate-in slide-in-from-right duration-300"
+          className="fixed right-0 top-0 bottom-0 h-[100dvh] w-full md:max-w-[400px] bg-card/85 backdrop-blur-3xl border-l border-border shadow-2xl flex flex-col z-[1200] animate-in slide-in-from-right duration-300"
         >
           {/* Left Edge Tucked-In Close Tab (Desktop only to prevent off-screen positioning on mobile) */}
           <button 
@@ -323,7 +323,7 @@ export default function AssistantWidget() {
           {/* Chat Container */}
           <div className="flex flex-col h-full overflow-hidden">
             {/* Header */}
-            <div className="p-6 border-b border-border bg-foreground/5 flex items-center justify-between">
+            <div className="p-4 md:p-6 border-b border-border bg-foreground/5 flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="w-12 h-12 rounded-2xl border border-border bg-muted flex items-center justify-center overflow-hidden shadow-lg relative group">
                   <img src="/assistant_avatar.png" alt="Zenith Core AI" className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
@@ -361,7 +361,7 @@ export default function AssistantWidget() {
             {/* Messages */}
             <div 
               ref={scrollRef}
-              className="flex-1 overflow-y-auto p-6 space-y-6 scrollbar-hide"
+              className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4 md:space-y-6 scrollbar-hide"
             >
               {messages.map((msg) => (
                 <div 
@@ -415,7 +415,7 @@ export default function AssistantWidget() {
             </div>
 
             {/* Input */}
-            <div className="p-6 border-t border-border bg-foreground/5">
+            <div className="p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] md:p-6 border-t border-border bg-card sticky bottom-0 z-20 shrink-0">
               <div className="relative">
                 <input 
                   type="text" 
@@ -424,12 +424,12 @@ export default function AssistantWidget() {
                   onKeyDown={(e) => e.key === "Enter" && handleSend()}
                   placeholder="Ask Zenith anything..."
                   ref={inputRef}
-                  className="w-full bg-background border border-border rounded-2xl py-4 pl-6 pr-14 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-foreground/20 transition-all"
+                  className="w-full bg-background border border-border rounded-2xl py-3 pl-4 pr-12 md:py-4 md:pl-6 md:pr-14 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-foreground/20 transition-all"
                 />
                 <button 
                   onClick={handleSend}
                   disabled={isLoading || !input.trim()}
-                  className="absolute right-2 top-2 w-10 h-10 bg-foreground text-background rounded-xl flex items-center justify-center hover:scale-105 active:scale-95 transition-all disabled:opacity-50"
+                  className="absolute right-1.5 top-1.5 w-9 h-9 md:right-2 md:top-2 md:w-10 md:h-10 bg-foreground text-background rounded-xl flex items-center justify-center hover:scale-105 active:scale-95 transition-all disabled:opacity-50"
                 >
                   <Send className="w-4 h-4" />
                 </button>

@@ -74,7 +74,7 @@ export default function FloatingAiAssistant() {
         <div 
           onClick={(e) => e.stopPropagation()}
           onPointerDown={(e) => e.stopPropagation()}
-          className="fixed inset-0 md:inset-auto md:relative bg-card border border-border w-full h-full md:w-[400px] md:h-[550px] md:rounded-3xl shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-bottom-5 duration-300 z-[2000]"
+          className="fixed inset-0 md:inset-auto md:relative bg-card border border-border w-full h-[100dvh] md:w-[400px] md:h-[550px] md:rounded-3xl shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-bottom-5 duration-300 z-[2000]"
         >
           {/* Header */}
           <div className="bg-foreground p-5 flex items-center justify-between">
@@ -130,7 +130,7 @@ export default function FloatingAiAssistant() {
           </div>
 
           {/* Input */}
-          <form onSubmit={handleSend} className="p-5 bg-card border-t border-border flex gap-2">
+          <form onSubmit={handleSend} className="p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] md:p-5 bg-card border-t border-border flex gap-2 sticky bottom-0 z-20 shrink-0">
             <input
               value={input}
               onChange={(e) => setInput(e.target.value)}

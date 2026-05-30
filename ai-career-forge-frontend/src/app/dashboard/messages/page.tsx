@@ -826,7 +826,10 @@ function ChatContainer() {
             </div>
 
             {/* Chat input submit footer */}
-            <form onSubmit={handleSendMessage} className="p-4 flex items-center gap-3 bg-secondary/10">
+            <form 
+              onSubmit={handleSendMessage} 
+              className="p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] md:pb-4 flex items-center gap-3 bg-card border-t border-border/40 sticky bottom-0 z-20 shrink-0"
+            >
               <input
                 type="text"
                 placeholder="Write a message..."
