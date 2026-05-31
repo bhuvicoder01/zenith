@@ -27,6 +27,9 @@ const plusJakarta = Plus_Jakarta_Sans({
 export const metadata: Metadata = {
   title: 'ZENITH | AI Career Orchestrator',
   description: 'Next-Gen Agentic Application Intelligence',
+  icons:{
+    icon: "/zenith-favicon.png",
+  },
 }
 
 export default function RootLayout({
