@@ -46,6 +46,22 @@ public class Job {
     private String companyLogoTheme;
     private String companyLogoColor;
     
+    // Lifecycle tracking
+    @Builder.Default
+    private JobStatus status = JobStatus.ACTIVE;
+    private LocalDateTime firstSeenAt;
+    private LocalDateTime lastSeenAt;
+    
     @org.springframework.data.annotation.Transient
     private Double matchScore;
+
+    /**
+     * Lifecycle status for catalog-style job management.
+     * ACTIVE  — currently available from source APIs.
+     * STALE   — not seen in the latest sync; may have been filled or removed.
+     * EXPIRED — stale for too long; hidden from recommendations but preserved for history.
+     */
+    public enum JobStatus {
+        ACTIVE, STALE, EXPIRED
+    }
 }

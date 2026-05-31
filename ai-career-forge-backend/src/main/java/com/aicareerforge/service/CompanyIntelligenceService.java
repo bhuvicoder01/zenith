@@ -56,30 +56,21 @@ public class CompanyIntelligenceService {
     }
 
     public LogoMetaData findCompanyLogoUrl(String companyName) {
-        log.info("AI Researching logo for company: {}", companyName);
+        log.info("Researching logo for company: {}", companyName);
         try {
-            String prompt = String.format("""
-                SYSTEM: You are a corporate branding analyst and domain intelligence expert. 
-                Your task is to identify the official global primary web domain for the given company name.
-                Instructions:
-                1. Ignore regional suffixes if possible (e.g., for 'Amazon India' use 'amazon.com').
-                2. Choose the most common consumer-facing domain.
-                3. For large conglomerates, provide the parent headquarters domain.
-                4. Do not provide subdomains (e.g., use 'apple.com' not 'developer.apple.com').
-                
-                USER: What is the primary official web domain for the company '%s'? 
-                Only return the domain name (e.g., netflix.com, stripe.com). 
-                Do not include any other text, protocols, or paths.
-                """, companyName);
-
-            String domain = chatClient.prompt().user(prompt).call().content().trim().toLowerCase();
+            // Clean company name to guess domain without invoking LLM quota
+            String domain = companyName.toLowerCase()
+                .replaceAll("\\b(inc|ltd|corp|llc|gmbh|co|corporation|group|solutions|technologies|systems|services|wellness|software|analytics|global|partners|international|solutions|llp)\\b", "")
+                .replaceAll("[^a-z0-9]", "")
+                .trim();
             
-            // Basic sanity check/cleaning of the LLM output
-            if (domain.contains(" ")) domain = domain.split(" ")[0];
-            if (domain.startsWith("http")) domain = domain.replaceAll("https?://(www\\.)?", "");
-            if (domain.endsWith("/")) domain = domain.substring(0, domain.length() - 1);
+            if (!domain.isEmpty()) {
+                domain = domain + ".com";
+            } else {
+                domain = "google.com";
+            }
             
-            log.info("Logo Agency identified domain: {} for company: {}", domain, companyName);
+            log.info("Logo Agency identified domain via heuristic: {} for company: {}", domain, companyName);
             
             // Check cache first
             if (logoCache.containsKey(domain)) {

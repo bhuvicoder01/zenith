@@ -20,12 +20,16 @@ spring:
     openai:
       chat:
         enabled: true
-        base-url: https://generativelanguage.googleapis.com/v1beta/openai
-        api-key: ${GOOGLE_AI_API_KEY}
+        base-url: ${SPRING_AI_OPENAI_CHAT_BASE_URL:https://integrate.api.nvidia.com}
+        api-key: ${SPRING_AI_OPENAI_CHAT_API_KEY}
         options:
-          model: ${GOOGLE_AI_MODEL:gemini-2.5-flash}
+          model: ${SPRING_AI_OPENAI_CHAT_OPTIONS_MODEL:meta/llama-3.1-70b-instruct}
       embedding:
-        enabled: false 
+        enabled: false
+        base-url: ${SPRING_AI_OPENAI_EMBEDDING_BASE_URL:}
+        api-key: ${SPRING_AI_OPENAI_EMBEDDING_API_KEY:}
+        options:
+          model: ${SPRING_AI_OPENAI_EMBEDDING_MODEL:nvidia/nv-embedqa-e5-v5}
     vectorstore:
       mongodb:
         collection-name: vector_store
