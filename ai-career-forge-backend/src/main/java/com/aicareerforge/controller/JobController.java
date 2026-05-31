@@ -94,6 +94,30 @@ public class JobController {
         UserProfile profile = userProfileService.getProfile(user.getId());
         List<String> matchedSkills = jobService.detectMatchedSkills(job, String.join(", ", profile.getSkills()));
         
+        // 1. Lazy-load culture analysis on-demand if null/blank
+        if (job.getCultureAnalysis() == null || job.getCultureAnalysis().isBlank()) {
+            try {
+                String culture = jobService.generateAndSaveCultureInsights(id);
+                if (culture != null) {
+                    job.setCultureAnalysis(culture);
+                }
+            } catch (Exception e) {
+                log.error("Failed to generate culture insights on-demand: {}", e.getMessage());
+            }
+        }
+        
+        // 2. Lazy-load relevance explanation on-demand if null/blank/placeholder
+        if (job.getRelevanceExplanation() == null || job.getRelevanceExplanation().isBlank() || job.getRelevanceExplanation().contains("match")) {
+            try {
+                String explanation = jobService.generateAndSaveRelevanceExplanation(id, profile);
+                if (explanation != null) {
+                    job.setRelevanceExplanation(explanation);
+                }
+            } catch (Exception e) {
+                log.error("Failed to generate relevance explanation on-demand: {}", e.getMessage());
+            }
+        }
+        
         // Priority: Cached Score (from list view) > Fresh Calculation (baseline)
         Double score = jobService.getCachedScore(user.getId(), id);
         if (score == null) {

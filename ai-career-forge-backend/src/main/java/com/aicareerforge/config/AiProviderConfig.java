@@ -1,9 +1,6 @@
 package com.aicareerforge.config;
 
 import org.springframework.ai.chat.model.ChatModel;
-import org.springframework.ai.openai.OpenAiChatModel;
-import org.springframework.ai.openai.api.OpenAiApi;
-import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.ai.embedding.EmbeddingModel;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -23,10 +20,25 @@ import java.util.Map;
 public class AiProviderConfig {
 
     @Value("${GOOGLE_AI_API_KEY:}")
-    private String apiKey;
+    private String googleApiKey;
 
-    @Value("${GOOGLE_AI_MODEL:gemini-2.5-flash}")
-    private String modelName;
+    @Value("${spring.ai.openai.chat.api-key:}")
+    private String chatApiKey;
+
+    @Value("${spring.ai.openai.chat.base-url:https://integrate.api.nvidia.com}")
+    private String chatBaseUrl;
+
+    @Value("${spring.ai.openai.chat.options.model:meta/llama-3.1-70b-instruct}")
+    private String chatModelName;
+
+    @Value("${spring.ai.openai.embedding.api-key:}")
+    private String embeddingApiKey;
+
+    @Value("${spring.ai.openai.embedding.base-url:}")
+    private String embeddingBaseUrl;
+
+    @Value("${spring.ai.openai.embedding.options.model:nvidia/nv-embedqa-e5-v5}")
+    private String embeddingModelName;
 
     @Bean
     public RetryTemplate aiRetryTemplate() {
@@ -46,32 +58,65 @@ public class AiProviderConfig {
         return retryTemplate;
     }
 
+    private String getEmbeddingApiKey() {
+        if (embeddingApiKey != null && !embeddingApiKey.trim().isEmpty()) {
+            return embeddingApiKey;
+        }
+        return chatApiKey;
+    }
+
+    private String getEmbeddingBaseUrl() {
+        if (embeddingBaseUrl != null && !embeddingBaseUrl.trim().isEmpty()) {
+            return embeddingBaseUrl;
+        }
+        return chatBaseUrl;
+    }
+
+    private String cleanBaseUrl(String url) {
+        if (url == null || url.trim().isEmpty()) {
+            return "https://integrate.api.nvidia.com/v1";
+        }
+        url = url.trim();
+        if (!url.endsWith("/v1") && !url.endsWith("/v1/")) {
+            if (url.endsWith("/")) {
+                url = url + "v1";
+            } else {
+                url = url + "/v1";
+            }
+        }
+        return url;
+    }
+
     /**
-     * Custom Gemini EmbeddingModel for production (Render).
-     * This bypasses the buggy Spring AI OpenAI starter NPE.
+     * Custom EmbeddingModel for production/development.
+     * Instantiates NvidiaNimEmbeddingModel if configure, otherwise Gemini.
      */
     @Bean(name = "embeddingModel")
     @Primary
     public EmbeddingModel prodEmbeddingModel() {
-        return new GeminiEmbeddingModel(apiKey);
+        String key = getEmbeddingApiKey();
+        if (key != null && !key.trim().isEmpty()) {
+            String baseUrl = cleanBaseUrl(getEmbeddingBaseUrl());
+            System.out.println("[AI Configuration] Initializing NVIDIA NIM EmbeddingModel with model: " + embeddingModelName + " at " + baseUrl);
+            return new NvidiaNimEmbeddingModel(key, embeddingModelName, baseUrl);
+        }
+        System.out.println("[AI Configuration] NVIDIA NIM API key not configured. Falling back to Google Gemini EmbeddingModel.");
+        return new GeminiEmbeddingModel(googleApiKey);
     }
 
     /**
-     * Manual ChatModel definition for production (Gemini via OpenAI endpoint).
+     * ChatModel for production/development.
+     * Instantiates NvidiaNimChatModel if configured, otherwise Gemini.
      */
     @Bean
     @Primary
     public ChatModel chatModel(RetryTemplate aiRetryTemplate) {
-        OpenAiApi openAiApi = new OpenAiApi(
-            "https://generativelanguage.googleapis.com/v1beta/openai", 
-            apiKey
-        );
-        
-        return new OpenAiChatModel(openAiApi, OpenAiChatOptions.builder()
-            .withModel(modelName)
-            .withTemperature(0.7f)
-            .build(), 
-            null, // Observation registry
-            aiRetryTemplate);
+        if (chatApiKey != null && !chatApiKey.trim().isEmpty()) {
+            String baseUrl = cleanBaseUrl(chatBaseUrl);
+            System.out.println("[AI Configuration] Initializing NVIDIA NIM ChatModel with model: " + chatModelName + " at " + baseUrl);
+            return new NvidiaNimChatModel(chatApiKey, chatModelName, baseUrl);
+        }
+        System.out.println("[AI Configuration] NVIDIA NIM API key not configured. Falling back to Google Gemini ChatModel.");
+        return new GeminiChatModel(googleApiKey, "gemini-1.5-flash");
     }
 }
