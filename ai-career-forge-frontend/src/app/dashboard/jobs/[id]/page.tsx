@@ -11,6 +11,8 @@ import {
 } from "lucide-react";
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { useWebSocketStore } from "@/store/useWebSocketStore";
+import { toast } from "sonner";
 
 interface Job {
   id: string;
@@ -29,25 +31,89 @@ interface Job {
   companyLogoTheme?: string;
 }
 
+interface Application {
+  id: string;
+  userId: string;
+  jobId: string;
+  jobTitle: string;
+  company: string;
+  status: string;
+  tailoredResumeS3Url?: string;
+  coverLetterText?: string;
+  emailIntroduction?: string;
+  interviewPrepText?: string;
+  templateStyle?: string;
+}
+
 interface JobDetailResponse {
   job: Job;
   matchedSkills: string[];
   matchScore: number;
+  existingApplications?: Application[];
 }
 
 export default function JobDetailsPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const [data, setData] = useState<JobDetailResponse | null>(null);
   const [loading, setLoading] = useState(true);
-  const [isGenerating, setIsGenerating] = useState(false);
   const [selectedTemplate, setSelectedTemplate] = useState("MODERN");
   const [showTemplates, setShowTemplates] = useState(false);
+  const [isPending, setIsPending] = useState(false);
+
+  const { prepStatus, setPrepStatus } = useWebSocketStore();
+  const isCurrentlyGenerating = prepStatus && prepStatus.step && prepStatus.step !== "COMPLETED" && prepStatus.step !== "FAILED";
+  const isGeneratingOrPending = isCurrentlyGenerating || isPending;
+
+  const [culture, setCulture] = useState<string>("");
+  const [cultureLoading, setCultureLoading] = useState(false);
+  const [relevance, setRelevance] = useState<string>("");
+  const [relevanceLoading, setRelevanceLoading] = useState(false);
+
+  const existingAppForStyle = data?.existingApplications?.find(
+    app => app.templateStyle === selectedTemplate && app.status !== "SAVED"
+  );
+
+  // Reactively mark application as completed when background prep finishes
+  useEffect(() => {
+    if (prepStatus?.step === "COMPLETED" && data) {
+      setData(prev => {
+        if (!prev) return prev;
+        const currentApps = prev.existingApplications || [];
+        const updated = currentApps.map(app => 
+          app.templateStyle === selectedTemplate ? { ...app, status: "APPLIED" } : app
+        );
+        return { ...prev, existingApplications: updated };
+      });
+    }
+  }, [prepStatus?.step]);
 
   useEffect(() => {
     const fetchJob = async () => {
       try {
         const response = await api.get(`/jobs/${id}`);
         setData(response.data);
+
+        // Load existing culture analysis if cached, otherwise lazy-load
+        if (response.data.job.cultureAnalysis) {
+          setCulture(response.data.job.cultureAnalysis);
+        } else {
+          setCultureLoading(true);
+          api.get(`/jobs/${id}/culture`)
+            .then(res => setCulture(res.data.culture || ""))
+            .catch(err => console.error("Failed to lazy-load culture:", err))
+            .finally(() => setCultureLoading(false));
+        }
+
+        // Load existing relevance explanation if cached, otherwise lazy-load
+        if (response.data.job.relevanceExplanation && !response.data.job.relevanceExplanation.includes("match")) {
+          setRelevance(response.data.job.relevanceExplanation);
+        } else {
+          setRelevanceLoading(true);
+          api.get(`/jobs/${id}/relevance`)
+            .then(res => setRelevance(res.data.relevance || ""))
+            .catch(err => console.error("Failed to lazy-load relevance:", err))
+            .finally(() => setRelevanceLoading(false));
+        }
       } catch (error) {
         console.error("Failed to fetch job details:", error);
       } finally {
@@ -59,29 +125,70 @@ export default function JobDetailsPage({ params }: { params: Promise<{ id: strin
 
   const handleOneClickTailor = async () => {
     if (!data) return;
-    setIsGenerating(true);
+    setIsPending(true);
+
+    setPrepStatus({
+      step: "STARTING",
+      title: "Preparation Started",
+      message: "Initializing preparation request...",
+      company: data.job.company
+    });
+
+    toast.info(`Starting AI tailoring for ${data.job.company}. Track progress in the bottom-right corner!`, {
+      duration: 5000
+    });
+
     try {
-      // 1. Create Application
+      // 1. Create Application (fast REST call)
       const appRes = await api.post("/applications", {
         jobId: data.job.id,
         jobTitle: data.job.title,
         company: data.job.company,
         templateStyle: selectedTemplate
       });
-      
-      // 2. Trigger generation
-      await api.post(`/applications/${appRes.data.id}/prepare`, {
+
+      // Optimistically append application so button state updates
+      setData(prev => {
+        if (!prev) return prev;
+        const currentApps = prev.existingApplications || [];
+        const isAlreadyPrepared = appRes.data.tailoredResumeS3Url && appRes.data.coverLetterText;
+        const appWithStatus = {
+          ...appRes.data,
+          status: isAlreadyPrepared ? "APPLIED" : "SAVED"
+        };
+        return {
+          ...prev,
+          existingApplications: [...currentApps.filter(a => a.id !== appWithStatus.id), appWithStatus]
+        };
+      });
+
+      // 2. Trigger preparation asynchronously in background (non-awaited promise!)
+      api.post(`/applications/${appRes.data.id}/prepare`, {
         jobDescription: data.job.description,
         company: data.job.company
+      }).catch(error => {
+         console.error("Tailoring preparation failed in background:", error);
+         setPrepStatus({
+           step: "FAILED",
+           title: "Preparation Failed",
+           message: "Failed to generate materials in the background.",
+           company: data.job.company,
+           error: error.response?.data?.message || error.message || "An unexpected error occurred."
+         });
+      }).finally(() => {
+         setIsPending(false);
       });
-      
-      // Redirect to tracker
-      window.location.href = "/dashboard/applications";
-    } catch (error) {
-       console.error("Tailoring failed:", error);
-       alert("AI generation encountered an issue. Please try again.");
-    } finally {
-      setIsGenerating(false);
+
+    } catch (error: any) {
+       console.error("Create application failed:", error);
+       setPrepStatus({
+         step: "FAILED",
+         title: "Preparation Failed",
+         message: "Failed to initialize application.",
+         company: data.job.company,
+         error: error.response?.data?.message || error.message || "An unexpected error occurred."
+       });
+       setIsPending(false);
     }
   };
 
@@ -187,23 +294,33 @@ export default function JobDetailsPage({ params }: { params: Promise<{ id: strin
                     )}
                  </div>
 
-                 <button 
-                   onClick={handleOneClickTailor}
-                   disabled={isGenerating}
-                   className="w-full bg-foreground hover:bg-foreground/90 text-background px-8 py-5 rounded-2xl font-black text-lg flex items-center justify-center gap-3 shadow-2xl transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 uppercase tracking-tighter"
-                 >
-                   {isGenerating ? (
-                     <>
-                        <Loader2 className="w-6 h-6 animate-spin" />
-                        ENGAGING...
-                     </>
-                   ) : (
-                     <>
-                        <Sparkles className="w-6 h-6 fill-current" />
-                        One-Click Tailor
-                     </>
-                   )}
-                 </button>
+                  {existingAppForStyle ? (
+                    <Link 
+                      href={`/dashboard/applications/${existingAppForStyle.id}/prep`}
+                      className="w-full bg-green-600 hover:bg-green-700 text-white px-8 py-5 rounded-2xl font-black text-lg flex items-center justify-center gap-3 shadow-2xl transition-all hover:scale-[1.02] active:scale-[0.98] uppercase tracking-tighter"
+                    >
+                      <CheckCircle className="w-6 h-6" />
+                      View Materials
+                    </Link>
+                  ) : (
+                    <button 
+                      onClick={handleOneClickTailor}
+                      disabled={!!isGeneratingOrPending}
+                      className="w-full bg-foreground hover:bg-foreground/90 text-background px-8 py-5 rounded-2xl font-black text-lg flex items-center justify-center gap-3 shadow-2xl transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 uppercase tracking-tighter"
+                    >
+                      {isGeneratingOrPending ? (
+                        <>
+                           <Loader2 className="w-6 h-6 animate-spin" />
+                           TAILORING...
+                        </>
+                      ) : (
+                        <>
+                           <Sparkles className="w-6 h-6 fill-current" />
+                           One-Click Tailor
+                        </>
+                      )}
+                    </button>
+                  )}
 
                  {job.url && (
                     <a 
@@ -227,9 +344,16 @@ export default function JobDetailsPage({ params }: { params: Promise<{ id: strin
                    <Target className="w-4 h-4 opacity-50" />
                    Match Intelligence
                 </h3>
-                <p className="text-foreground leading-relaxed text-sm font-medium">
-                  {job.relevanceExplanation || "Generating real-time explanation for match..."}
-                </p>
+                <div className="text-foreground leading-relaxed text-sm font-medium">
+                  {relevanceLoading ? (
+                    <div className="flex items-center gap-3 opacity-60">
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Synthesizing alignment intelligence...</span>
+                    </div>
+                  ) : (
+                    relevance || "Alignment intelligence is currently unavailable."
+                  )}
+                </div>
              </div>
              
              <div className="bg-card border border-border rounded-3xl p-8 space-y-4 shadow-sm">
@@ -253,17 +377,19 @@ export default function JobDetailsPage({ params }: { params: Promise<{ id: strin
                 <Building2 className="w-6 h-6 opacity-40" />
                 Company Culture Analysis
              </h3>
-               {job.cultureAnalysis ? (
-                 <div className="prose prose-sm md:prose-base dark:prose-invert prose-neutral max-w-none prose-p:leading-relaxed prose-headings:font-black prose-li:text-foreground/80">
+               {culture ? (
+                 <div className="prose prose-sm md:prose-base dark:prose-invert prose-neutral max-w-none prose-p:leading-relaxed prose-headings:font-black prose-li:text-foreground/80 animate-in fade-in duration-500">
                     <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                       {job.cultureAnalysis}
+                       {culture}
                     </ReactMarkdown>
                  </div>
-               ) : (
-                 <div className="flex flex-col items-center justify-center py-10 gap-4 opacity-50">
-                    <Loader2 className="w-10 h-10 animate-spin" />
-                    <p className="font-black text-xs uppercase tracking-widest">Crawling intelligence nodes...</p>
+               ) : cultureLoading ? (
+                 <div className="flex flex-col items-center justify-center py-10 gap-4 opacity-70">
+                    <Loader2 className="w-8 h-8 animate-spin" />
+                    <p className="font-black text-xs uppercase tracking-widest animate-pulse">Crawling culture nodes & Glassdoor reviews...</p>
                  </div>
+               ) : (
+                 <p className="text-sm text-muted-foreground font-medium">Culture analysis data is currently unavailable.</p>
                )}
           </div>
 
@@ -318,4 +444,3 @@ export default function JobDetailsPage({ params }: { params: Promise<{ id: strin
     </div>
   );
 }
-

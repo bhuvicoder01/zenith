@@ -10,4 +10,6 @@ import java.util.List;
 public interface ApplicationRepository extends MongoRepository<Application, String> {
     List<Application> findByUserId(String userId);
     List<Application> findByJobIdIn(java.util.List<String> jobIds);
+    java.util.Optional<Application> findFirstByUserIdAndJobIdAndTemplateStyle(String userId, String jobId, String templateStyle);
+    List<Application> findByUserIdAndJobId(String userId, String jobId);
 }

@@ -13,12 +13,24 @@ export interface NotificationItem {
   data?: any;
 }
 
+export interface PrepStatus {
+  step: "STARTING" | "AI_GENERATION" | "PDF_RENDERING" | "COMPLETED" | "FAILED" | "";
+  title: string;
+  message: string;
+  company?: string;
+  error?: string;
+}
+
 interface WebSocketStore {
   socket: WebSocket | null;
   isConnected: boolean;
   notifications: NotificationItem[];
   unreadMessageCount: number;
   onlineUserIds: string[];
+  prepStatus: PrepStatus | null;
+  showPrepDialog: boolean;
+  setPrepStatus: (status: PrepStatus | null) => void;
+  setShowPrepDialog: (show: boolean) => void;
   connect: (routerPush?: (url: string) => void) => void;
   disconnect: () => void;
   loadSavedNotifications: () => void;
@@ -44,6 +56,10 @@ export const useWebSocketStore = create<WebSocketStore>((set, get) => ({
   unreadMessageCount: 0,
   onlineUserIds: [],
   activeChatUserId: null,
+  prepStatus: null,
+  showPrepDialog: false,
+  setPrepStatus: (prepStatus) => set({ prepStatus }),
+  setShowPrepDialog: (showPrepDialog) => set({ showPrepDialog }),
   setActiveChatUserId: (userId) => set({ activeChatUserId: userId }),
   sendTypingStatus: (receiverId, isTyping) => {
     const socket = get().socket;
@@ -137,6 +153,22 @@ export const useWebSocketStore = create<WebSocketStore>((set, get) => ({
         try {
           const data = JSON.parse(event.data);
           console.log('Received socket payload:', data);
+
+          if (data.type === 'PREP_STATUS') {
+            if (data.data) {
+              set({
+                prepStatus: {
+                  step: data.data.step,
+                  title: data.title || "",
+                  message: data.message || "",
+                  company: get().prepStatus?.company || data.data.company,
+                  error: data.data.error || ""
+                },
+                showPrepDialog: true
+              });
+            }
+            return;
+          }
 
           if (data.type === 'SYSTEM') {
             if (data.data && data.data.onlineUserIds) {

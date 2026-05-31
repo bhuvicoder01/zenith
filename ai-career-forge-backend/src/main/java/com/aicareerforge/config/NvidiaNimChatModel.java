@@ -58,7 +58,8 @@ public class NvidiaNimChatModel implements ChatModel {
         Map<String, Object> requestBody = Map.of(
             "model", modelName,
             "messages", messages,
-            "temperature", 0.2
+            "temperature", 0.2,
+            "max_tokens", 2048
         );
 
         HttpHeaders headers = new HttpHeaders();

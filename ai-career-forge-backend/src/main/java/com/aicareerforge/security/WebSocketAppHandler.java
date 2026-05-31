@@ -31,6 +31,9 @@ public class WebSocketAppHandler extends TextWebSocketHandler {
     // Maps User ID to their active WebSocket sessions
     private final Map<String, List<WebSocketSession>> userSessions = new ConcurrentHashMap<>();
 
+    // Cache to maintain the latest active preparation status for recovery
+    private final Map<String, Map<String, Object>> activePrepStatuses = new ConcurrentHashMap<>();
+
     public WebSocketAppHandler(JwtService jwtService, UserRepository userRepository, UserProfileRepository userProfileRepository, ObjectMapper objectMapper) {
         this.jwtService = jwtService;
         this.userRepository = userRepository;
@@ -81,6 +84,13 @@ public class WebSocketAppHandler extends TextWebSocketHandler {
                     "timestamp", java.time.Instant.now().toString(),
                     "data", Map.of("onlineUserIds", onlineUserIds)
             ));
+
+            // Resend active preparation status to the newly connected session if exists
+            Map<String, Object> activePrep = activePrepStatuses.get(userId);
+            if (activePrep != null) {
+                log.info("Replaying active prep status for user: {} on connection established", userId);
+                sendNotificationToSession(session, activePrep);
+            }
 
             // Broadcast presence
             if (getShowOnlineStatus(userId)) {
@@ -145,6 +155,24 @@ public class WebSocketAppHandler extends TextWebSocketHandler {
     }
 
     public void sendNotification(String userId, String type, String title, String message, Object data) {
+        if ("PREP_STATUS".equals(type)) {
+            if (data instanceof Map) {
+                Map<String, Object> dataMap = (Map<String, Object>) data;
+                String step = (String) dataMap.get("step");
+                if ("COMPLETED".equals(step) || "FAILED".equals(step)) {
+                    activePrepStatuses.remove(userId);
+                } else {
+                    activePrepStatuses.put(userId, Map.of(
+                            "type", type,
+                            "title", title,
+                            "message", message,
+                            "timestamp", java.time.Instant.now().toString(),
+                            "data", data != null ? data : Map.of()
+                    ));
+                }
+            }
+        }
+
         List<WebSocketSession> sessions = userSessions.get(userId);
         if (sessions == null || sessions.isEmpty()) {
             log.debug("No active WebSocket sessions for user ID: {}, buffering skipped", userId);

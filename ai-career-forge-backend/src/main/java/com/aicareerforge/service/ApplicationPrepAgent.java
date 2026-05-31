@@ -42,12 +42,17 @@ public class ApplicationPrepAgent {
                 PROFILE DATA: %s
                 """, userName, jobDescription, profile.toString());
 
+        String response = null;
         try {
-            String response = chatClient.prompt().user(prompt).call().content();
-            String jsonRaw = response.replace("```json", "").replace("```", "").trim();
-            return objectMapper.readValue(jsonRaw, new TypeReference<Map<String, Object>>() {});
+            response = chatClient.prompt().user(prompt).call().content();
+            String jsonRaw = extractJson(response);
+            
+            ObjectMapper localMapper = objectMapper.copy()
+                .configure(com.fasterxml.jackson.core.JsonParser.Feature.ALLOW_UNQUOTED_CONTROL_CHARS, true);
+                
+            return localMapper.readValue(jsonRaw, new TypeReference<Map<String, Object>>() {});
         } catch (Exception e) {
-            log.error("Failed to tailor resume: {}", e.getMessage());
+            log.error("Failed to tailor resume: {}. Raw response was: {}", e.getMessage(), response);
             // Fallback to basic profile mapping
             return Map.of(
                 "resumeSummary", "Professional profile optimized for the role.",
@@ -76,13 +81,17 @@ public class ApplicationPrepAgent {
                 RESUME: %s
                 """, jobDescription, resumeText);
         
+        String response = null;
         try {
-            String response = chatClient.prompt().user(prompt).call().content();
-            // Basic cleanup in case of markdown blocks
-            String jsonRaw = response.replace("```json", "").replace("```", "").trim();
-            return objectMapper.readValue(jsonRaw, new TypeReference<Map<String, String>>() {});
+            response = chatClient.prompt().user(prompt).call().content();
+            String jsonRaw = extractJson(response);
+            
+            ObjectMapper localMapper = objectMapper.copy()
+                .configure(com.fasterxml.jackson.core.JsonParser.Feature.ALLOW_UNQUOTED_CONTROL_CHARS, true);
+                
+            return localMapper.readValue(jsonRaw, new TypeReference<Map<String, String>>() {});
         } catch (Exception e) {
-            log.error("Failed to generate communication kit: {}", e.getMessage());
+            log.error("Failed to generate communication kit: {}. Raw response was: {}", e.getMessage(), response);
             return Map.of(
                 "coverLetter", "Professional cover letter draft - AI quota limit reached, please retry later.",
                 "emailIntro", "Networking email draft - AI quota limit reached."
@@ -107,5 +116,40 @@ public class ApplicationPrepAgent {
                 RESUME: %s
                 """, jobDescription, company, resumeText);
         return chatClient.prompt().user(prompt).call().content();
+    }
+
+    private String extractJson(String rawResponse) {
+        if (rawResponse == null) return "";
+        rawResponse = rawResponse.trim();
+        int firstBrace = rawResponse.indexOf('{');
+        if (firstBrace == -1) {
+            return rawResponse.replace("```json", "").replace("```", "").trim();
+        }
+        
+        String jsonSub = rawResponse.substring(firstBrace);
+        // Clean markdown backticks at the end if present
+        if (jsonSub.endsWith("```")) {
+            jsonSub = jsonSub.substring(0, jsonSub.length() - 3).trim();
+        }
+        
+        // Count quotes - if odd, the final quote was truncated
+        long quoteCount = jsonSub.chars().filter(ch -> ch == '"').count();
+        if (quoteCount % 2 != 0) {
+            jsonSub = jsonSub + "\"";
+        }
+        
+        // Count braces and close any that were left open
+        long openBraces = jsonSub.chars().filter(ch -> ch == '{').count();
+        long closeBraces = jsonSub.chars().filter(ch -> ch == '}').count();
+        if (openBraces > closeBraces) {
+            long diff = openBraces - closeBraces;
+            StringBuilder sb = new StringBuilder(jsonSub);
+            for (int i = 0; i < diff; i++) {
+                sb.append("}");
+            }
+            jsonSub = sb.toString();
+        }
+        
+        return jsonSub;
     }
 }

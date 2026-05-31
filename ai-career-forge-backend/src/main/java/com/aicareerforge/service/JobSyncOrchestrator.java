@@ -213,10 +213,10 @@ public class JobSyncOrchestrator {
     /**
      * Trigger initial job sync asynchronously at server startup.
      */
-    @Async
-    @EventListener(ApplicationReadyEvent.class)
-    public void onApplicationReady() {
-        log.info("Application ready. Triggering initial job sync at startup...");
-        scheduledJobSync();
-    }
+    // @Async
+    // @EventListener(ApplicationReadyEvent.class)
+    // public void onApplicationReady() {
+    //     log.info("Application ready. Triggering initial job sync at startup...");
+    //     scheduledJobSync();
+    // }
 }

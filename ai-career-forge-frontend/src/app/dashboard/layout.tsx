@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { 
-  User, Briefcase, FileText, CheckCircle, LogOut, Menu, X,
+  User, Briefcase, FileText, CheckCircle, LogOut, Menu, X, Sparkles,
   LayoutDashboard, ClipboardList, BrainCircuit, Loader2, Sun, Moon, TrendingUp, Settings,
   Users, Bell, MessageSquare, PanelLeftClose, PanelLeftOpen
 } from "lucide-react";
@@ -39,7 +39,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     disconnect: disconnectWebSocket,
     loadSavedNotifications,
     notifications,
-    unreadMessageCount
+    unreadMessageCount,
+    prepStatus,
+    setPrepStatus,
+    showPrepDialog,
+    setShowPrepDialog
   } = useWebSocketStore();
 
   const unreadCount = notifications.filter(n => !n.read).length;
@@ -540,6 +544,92 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </main>
       </div>
 
+      {/* Floating Global Progress Card */}
+      {showPrepDialog && prepStatus && prepStatus.step && (
+        <div className="fixed bottom-6 right-6 z-[9999] w-[350px] bg-card/90 backdrop-blur-lg border border-border rounded-3xl p-6 shadow-2xl flex flex-col gap-4 animate-in slide-in-from-bottom-5 fade-in duration-300 border-zinc-200 dark:border-zinc-800">
+          {/* Header */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-foreground fill-current animate-pulse" />
+              <span className="text-[10px] font-black uppercase tracking-wider text-foreground">
+                AI Tailoring Engine
+              </span>
+            </div>
+            <button 
+              onClick={() => setShowPrepDialog(false)}
+              className="p-1 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors flex items-center justify-center"
+              title="Dismiss tracker"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
+          {/* Body */}
+          <div className="space-y-1">
+            <h4 className="text-sm font-black text-foreground truncate">
+              {prepStatus.company ? `Job: ${prepStatus.company}` : "Preparing Materials"}
+            </h4>
+            <p className="text-xs text-muted-foreground font-medium flex items-center gap-2">
+              {prepStatus.step !== "COMPLETED" && prepStatus.step !== "FAILED" && (
+                <Loader2 className="w-3 h-3 animate-spin shrink-0" />
+              )}
+              {prepStatus.message}
+            </p>
+          </div>
+
+          {/* Progress Bar */}
+          <div className="space-y-1.5">
+            <div className="w-full bg-secondary h-2 rounded-full overflow-hidden border border-border">
+              <div 
+                className={`h-full transition-all duration-500 rounded-full ${
+                  prepStatus.step === "FAILED" 
+                    ? "bg-red-500" 
+                    : prepStatus.step === "COMPLETED" 
+                      ? "bg-green-500" 
+                      : "bg-foreground dark:bg-white"
+                }`}
+                style={{ width: `${getPrepPercent(prepStatus.step)}%` }}
+              ></div>
+            </div>
+            <div className="flex justify-between text-[9px] font-black uppercase tracking-wider text-muted-foreground">
+              <span>{prepStatus.step}</span>
+              <span>{getPrepPercent(prepStatus.step)}%</span>
+            </div>
+          </div>
+
+          {/* Error Message if Failed */}
+          {prepStatus.step === "FAILED" && prepStatus.error && (
+            <div className="bg-red-500/10 border border-red-500/20 p-2.5 rounded-xl text-[10px] text-red-600 dark:text-red-400 font-bold leading-normal max-h-[80px] overflow-y-auto">
+              {prepStatus.error}
+            </div>
+          )}
+
+          {/* Actions */}
+          {prepStatus.step === "COMPLETED" && (
+            <button
+              onClick={() => {
+                setPrepStatus(null);
+                router.push("/dashboard/applications");
+              }}
+              className="w-full bg-foreground hover:bg-foreground/90 text-background py-2.5 rounded-xl font-black text-xs uppercase tracking-widest transition-all text-center flex items-center justify-center gap-2 active:scale-95"
+            >
+              <CheckCircle className="w-4 h-4" />
+              View Application
+            </button>
+          )}
+        </div>
+      )}
     </>
   );
+
+  function getPrepPercent(step: string) {
+    switch (step) {
+      case "STARTING": return 25;
+      case "AI_GENERATION": return 50;
+      case "PDF_RENDERING": return 75;
+      case "COMPLETED": return 100;
+      case "FAILED": return 100;
+      default: return 10;
+    }
+  }
 }

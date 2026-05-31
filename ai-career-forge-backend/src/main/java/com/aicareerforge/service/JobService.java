@@ -113,4 +113,8 @@ public class JobService {
     public String generateAndSaveRelevanceExplanation(String jobId, UserProfile profile) {
         return enrichmentService.generateAndSaveRelevanceExplanation(jobId, profile);
     }
+
+    public String getCachedRelevanceExplanation(String jobId, String userId) {
+        return enrichmentService.getCachedRelevanceExplanation(jobId, userId);
+    }
 }

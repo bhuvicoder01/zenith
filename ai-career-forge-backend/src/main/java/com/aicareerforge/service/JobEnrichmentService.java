@@ -182,4 +182,11 @@ public class JobEnrichmentService {
             return "Failed to analyze profile alignment due to service constraints.";
         }
     }
+
+    public String getCachedRelevanceExplanation(String jobId, String userId) {
+        return userJobMatchRepository.findFirstByUserIdAndJobId(userId, jobId)
+                .map(UserJobMatch::getRelevanceExplanation)
+                .orElse(null);
+    }
 }
+

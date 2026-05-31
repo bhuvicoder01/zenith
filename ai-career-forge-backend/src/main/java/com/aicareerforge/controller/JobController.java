@@ -6,6 +6,8 @@ import com.aicareerforge.model.JobSyncStatus;
 import com.aicareerforge.model.User;
 import com.aicareerforge.model.UserActivity;
 import com.aicareerforge.model.UserProfile;
+import com.aicareerforge.model.Application;
+import com.aicareerforge.repository.ApplicationRepository;
 import com.aicareerforge.service.JobService;
 import com.aicareerforge.service.JobSyncService;
 import com.aicareerforge.service.PersonalizedJobService;
@@ -33,6 +35,7 @@ public class JobController {
     private final JobSyncService jobSyncService;
     private final SyncSseEmitterRegistry sseRegistry;
     private final PersonalizedJobService personalizedJobService;
+    private final ApplicationRepository applicationRepository;
 
     @GetMapping("/public")
     public ResponseEntity<List<Job>> getPublicJobs() {
@@ -94,28 +97,10 @@ public class JobController {
         UserProfile profile = userProfileService.getProfile(user.getId());
         List<String> matchedSkills = jobService.detectMatchedSkills(job, String.join(", ", profile.getSkills()));
         
-        // 1. Lazy-load culture analysis on-demand if null/blank
-        if (job.getCultureAnalysis() == null || job.getCultureAnalysis().isBlank()) {
-            try {
-                String culture = jobService.generateAndSaveCultureInsights(id);
-                if (culture != null) {
-                    job.setCultureAnalysis(culture);
-                }
-            } catch (Exception e) {
-                log.error("Failed to generate culture insights on-demand: {}", e.getMessage());
-            }
-        }
-        
-        // 2. Lazy-load relevance explanation on-demand if null/blank/placeholder
-        if (job.getRelevanceExplanation() == null || job.getRelevanceExplanation().isBlank() || job.getRelevanceExplanation().contains("match")) {
-            try {
-                String explanation = jobService.generateAndSaveRelevanceExplanation(id, profile);
-                if (explanation != null) {
-                    job.setRelevanceExplanation(explanation);
-                }
-            } catch (Exception e) {
-                log.error("Failed to generate relevance explanation on-demand: {}", e.getMessage());
-            }
+        // Load cached relevance explanation if present, avoiding blocking generation
+        String cachedRelevance = jobService.getCachedRelevanceExplanation(id, user.getId());
+        if (cachedRelevance != null && !cachedRelevance.isBlank()) {
+            job.setRelevanceExplanation(cachedRelevance);
         }
         
         // Priority: Cached Score (from list view) > Fresh Calculation (baseline)
@@ -124,8 +109,35 @@ public class JobController {
             score = jobService.calculateMatchScore(job, profile, 0.7); // Baseline fallback
         }
         
-        return ResponseEntity.ok(new JobDetailResponse(job, matchedSkills, score));
+        List<Application> existingApps = applicationRepository.findByUserIdAndJobId(user.getId(), id);
+        return ResponseEntity.ok(new JobDetailResponse(job, matchedSkills, score, existingApps));
     }
+
+    @GetMapping("/{id}/culture")
+    public ResponseEntity<java.util.Map<String, String>> getCultureInsights(@PathVariable String id) {
+        try {
+            String culture = jobService.generateAndSaveCultureInsights(id);
+            return ResponseEntity.ok(java.util.Map.of("culture", culture != null ? culture : ""));
+        } catch (Exception e) {
+            log.error("Failed to fetch/generate culture insights for job {}: {}", id, e.getMessage());
+            return ResponseEntity.status(500).body(java.util.Map.of("error", e.getMessage()));
+        }
+    }
+
+    @GetMapping("/{id}/relevance")
+    public ResponseEntity<java.util.Map<String, String>> getRelevanceExplanation(
+            @PathVariable String id, 
+            @AuthenticationPrincipal User user) {
+        try {
+            UserProfile profile = userProfileService.getProfile(user.getId());
+            String explanation = jobService.generateAndSaveRelevanceExplanation(id, profile);
+            return ResponseEntity.ok(java.util.Map.of("relevance", explanation != null ? explanation : ""));
+        } catch (Exception e) {
+            log.error("Failed to fetch/generate relevance explanation for job {}: {}", id, e.getMessage());
+            return ResponseEntity.status(500).body(java.util.Map.of("error", e.getMessage()));
+        }
+    }
+
 
     @GetMapping("/search")
     public ResponseEntity<List<Job>> searchAndSyncJobs(
