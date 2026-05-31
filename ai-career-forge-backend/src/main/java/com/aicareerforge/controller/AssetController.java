@@ -109,13 +109,23 @@ public class AssetController {
             else if (key.endsWith(".png")) contentType = "image/png";
             else if (key.endsWith(".pdf")) contentType = "application/pdf";
             
-            return ResponseEntity.ok()
+            String filename = key.contains("/") ? key.substring(key.lastIndexOf("/") + 1) : key;
+            String downloadParam = request.getParameter("download");
+            
+            org.springframework.http.ResponseEntity.BodyBuilder responseBuilder = ResponseEntity.ok()
                     .contentType(MediaType.parseMediaType(contentType))
                     .header("Cache-Control", "no-store, no-cache, must-revalidate")
                     .header("X-Content-Type-Options", "nosniff")
                     .header("X-Frame-Options", "ALLOWALL")
-                    .header("X-ZENITH-ASSET", "TRUE")
-                    .body(content);
+                    .header("X-ZENITH-ASSET", "TRUE");
+            
+            if ("true".equalsIgnoreCase(downloadParam)) {
+                responseBuilder.header("Content-Disposition", "attachment; filename=\"" + filename + "\"");
+            } else {
+                responseBuilder.header("Content-Disposition", "inline; filename=\"" + filename + "\"");
+            }
+            
+            return responseBuilder.body(content);
         } catch (Exception e) {
             log.error("Failed to serve asset for key: {}", key, e);
             return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
