@@ -37,6 +37,7 @@ interface Certification {
 
 interface UserProfile {
   fullName: string;
+  username?: string;
   headline: string;
   bio: string;
   profilePhotoUrl: string;
@@ -912,6 +913,9 @@ export default function ProfilePage() {
             ) : (
               <>
                 <h1 className="text-4xl font-black text-foreground">{displayName || "Your Full Name"}</h1>
+                {profile.username && (
+                  <p className="text-xs font-mono text-primary font-bold">@{profile.username}</p>
+                )}
                 <p className="text-xl text-muted-foreground font-medium">{profile.headline || "Professional Headline"}</p>
                 {displayEmail && (
                   <p className="text-muted-foreground text-sm flex items-center gap-2 pt-0.5 font-semibold animate-in fade-in duration-200">

@@ -37,10 +37,46 @@ public class UserProfileService {
         userRepository.findById(userId).ifPresent(user -> {
             profile.setEmail(user.getEmail());
             profile.setPasswordGenerated(user.isPasswordGenerated());
+            
+            // Self-healing usernames for legacy profiles
+            if (profile.getUsername() == null || profile.getUsername().isBlank()) {
+                String baseUsername = generateBaseUsername(user.getName(), user.getEmail());
+                String uniqueUsername = makeUsernameUnique(baseUsername);
+                profile.setUsername(uniqueUsername);
+                userProfileRepository.save(profile);
+            }
+            
+            if (user.getUsername() == null || user.getUsername().isBlank()) {
+                user.setUsername(profile.getUsername());
+                userRepository.save(user);
+            }
         });
 
         hydrateUrls(profile);
         return profile;
+    }
+
+    private String generateBaseUsername(String name, String email) {
+        String base = "";
+        if (name != null && !name.isBlank()) {
+            base = name.toLowerCase().replaceAll("[^a-z0-9_]", "_");
+        } else if (email != null && !email.isBlank()) {
+            base = email.split("@")[0].toLowerCase().replaceAll("[^a-z0-9_]", "_");
+        }
+        if (base.isBlank()) {
+            base = "user";
+        }
+        return base;
+    }
+
+    private String makeUsernameUnique(String base) {
+        String attempt = base;
+        int count = 1;
+        while (userProfileRepository.existsByUsername(attempt) || userRepository.existsByUsername(attempt)) {
+            attempt = base + count;
+            count++;
+        }
+        return attempt;
     }
 
     public PublicProfileDTO getPublicProfile(String userId) {
@@ -119,6 +155,18 @@ public class UserProfileService {
                 .orElse(UserProfile.builder().userId(userId).build());
         
         boolean oldShowOnline = profile.getSettings() == null || profile.getSettings().isShowOnlineStatus();
+
+        if (updatedData.getUsername() != null && !updatedData.getUsername().isBlank() && !updatedData.getUsername().equals(profile.getUsername())) {
+            String newUsername = updatedData.getUsername().toLowerCase().replaceAll("[^a-z0-9_]", "_");
+            if (userProfileRepository.existsByUsername(newUsername) || userRepository.existsByUsername(newUsername)) {
+                throw new IllegalArgumentException("Username already in use");
+            }
+            profile.setUsername(newUsername);
+            userRepository.findById(userId).ifPresent(user -> {
+                user.setUsername(newUsername);
+                userRepository.save(user);
+            });
+        }
 
         if (updatedData.getFullName() != null) profile.setFullName(updatedData.getFullName());
         if (updatedData.getHeadline() != null) profile.setHeadline(updatedData.getHeadline());

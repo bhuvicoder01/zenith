@@ -79,6 +79,8 @@ export default function NotificationsPage() {
       router.push("/dashboard/connections");
     } else if (item.type === "NEW_MESSAGE" && item.data?.senderId) {
       router.push(`/dashboard/messages?userId=${item.data.senderId}`);
+    } else if ((item.type === "COMMENT" || item.type === "MENTION") && item.data?.postId) {
+      router.push(`/posts/${item.data.postId}`);
     }
   };
 

@@ -114,7 +114,7 @@ public class AssetController {
             
             org.springframework.http.ResponseEntity.BodyBuilder responseBuilder = ResponseEntity.ok()
                     .contentType(MediaType.parseMediaType(contentType))
-                    .header("Cache-Control", "no-store, no-cache, must-revalidate")
+                    .header("Cache-Control", "public, max-age=31536000, immutable")
                     .header("X-Content-Type-Options", "nosniff")
                     .header("X-Frame-Options", "ALLOWALL")
                     .header("X-ZENITH-ASSET", "TRUE");

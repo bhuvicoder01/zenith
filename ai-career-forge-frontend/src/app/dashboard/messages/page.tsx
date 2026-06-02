@@ -4,7 +4,8 @@ import { useState, useEffect, useRef, Suspense, useLayoutEffect, Fragment } from
 import { useSearchParams, useRouter } from "next/navigation";
 import { 
   Search, Send, MessageSquare, ArrowLeft, User, Loader2, 
-  ExternalLink, Mail, Circle, PhoneCall, Plus, X, CheckCheck, Trash2, Menu
+  ExternalLink, Mail, Circle, PhoneCall, Plus, X, CheckCheck, Trash2, Menu,
+  Globe, ArrowRight
 } from "lucide-react";
 import api, { BACKEND_URL } from "@/lib/api";
 import { useWebSocketStore } from "@/store/useWebSocketStore";
@@ -848,6 +849,16 @@ function ChatContainer() {
                     const prevDateLabel = prevMsg ? getDividerDateLabel(prevMsg.timestamp) : null;
                     const showDivider = dateLabel && dateLabel !== prevDateLabel;
 
+                    // Parse post share payload if present
+                    let sharedPost: any = null;
+                    if (msg.content.trim().startsWith('{"type":"POST_SHARE"')) {
+                      try {
+                        sharedPost = JSON.parse(msg.content);
+                      } catch (e) {
+                        // ignore
+                      }
+                    }
+
                     return (
                       <Fragment key={msg.id}>
                         {showDivider && (
@@ -867,13 +878,60 @@ function ChatContainer() {
                             isSelf ? "ml-auto items-end" : "mr-auto items-start"
                           }`}
                         >
-                          <div className={`p-3.5 rounded-2xl text-sm leading-relaxed relative w-fit ${
-                            isSelf 
-                              ? "bg-foreground text-background rounded-tr-none shadow-md" 
-                              : "bg-card border border-border rounded-tl-none text-foreground shadow-sm"
-                          }`}>
-                            <p className="whitespace-pre-wrap select-text">{msg.content}</p>
-                          </div>
+                          {sharedPost ? (
+                            <div className={`rounded-2xl text-xs overflow-hidden border border-border/80 shadow-md transition-all hover:border-primary/40 relative w-64 sm:w-72 ${
+                              isSelf 
+                                ? "bg-card text-foreground rounded-tr-none" 
+                                : "bg-card text-foreground rounded-tl-none"
+                            }`}>
+                              {/* Card Header */}
+                              <div className="p-3 border-b border-border/50 bg-secondary/25 flex items-center justify-between">
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <Globe className="w-3.5 h-3.5 text-primary shrink-0" />
+                                  <span className="font-black uppercase tracking-tight truncate text-[10px]">
+                                    {sharedPost.postAuthor}
+                                  </span>
+                                </div>
+                                <span className="text-[9px] text-muted-foreground font-semibold shrink-0">Broadcast</span>
+                              </div>
+
+                              {/* Card Body */}
+                              <div className="p-3 space-y-2">
+                                {sharedPost.postText && (
+                                  <p className="text-muted-foreground font-medium line-clamp-3 leading-relaxed text-[11px] select-text">
+                                    {sharedPost.postText}
+                                  </p>
+                                )}
+                                
+                                {sharedPost.postImage && (
+                                  <div className="w-full h-24 overflow-hidden rounded-lg border border-border/50 bg-secondary/10">
+                                    <img 
+                                      src={sharedPost.postImage} 
+                                      alt="Shared attachment" 
+                                      className="w-full h-full object-cover" 
+                                    />
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Card Footer action */}
+                              <Link 
+                                href={`/posts/${sharedPost.postId}`}
+                                className="w-full p-2.5 bg-secondary/40 hover:bg-secondary/70 border-t border-border/50 text-[9px] font-black uppercase tracking-widest text-center flex items-center justify-center gap-1 text-primary hover:text-primary-hover transition-colors"
+                              >
+                                Inspect Intel
+                                <ArrowRight className="w-3 h-3" />
+                              </Link>
+                            </div>
+                          ) : (
+                            <div className={`p-3.5 rounded-2xl text-sm leading-relaxed relative w-fit ${
+                              isSelf 
+                                ? "bg-foreground text-background rounded-tr-none shadow-md" 
+                                : "bg-card border border-border rounded-tl-none text-foreground shadow-sm"
+                            }`}>
+                              <p className="whitespace-pre-wrap select-text">{msg.content}</p>
+                            </div>
+                          )}
                           
                           {/* Detailed time and checkmarks */}
                           <div className="flex items-center gap-1.5 mt-1 px-1">

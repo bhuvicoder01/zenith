@@ -62,11 +62,17 @@ export default function PublicNavbar() {
 
         {/* Desktop Navigation Links */}
         <div className="hidden md:flex items-center gap-8 text-[11px] font-black uppercase tracking-[0.2em] text-muted-foreground">
-          {pathname === "/" && (
+          {pathname === "/about" && (
             <a href="#features" className="hover:text-foreground transition-colors">
               Agents
             </a>
           )}
+          <Link 
+            href="/about" 
+            className={`transition-colors ${pathname === "/about" ? "text-foreground" : "hover:text-foreground"}`}
+          >
+            About
+          </Link>
           <Link 
             href="/public/jobs" 
             className={`transition-colors ${pathname === "/public/jobs" ? "text-foreground" : "hover:text-foreground"}`}
@@ -127,7 +133,7 @@ export default function PublicNavbar() {
             
             {/* Primary navigation links */}
             <div className="flex flex-col space-y-2">
-              {pathname === "/" && (
+              {pathname === "/about" && (
                 <a 
                   href="#features"
                   onClick={() => setIsOpen(false)}
@@ -137,6 +143,17 @@ export default function PublicNavbar() {
                   <span>Agents</span>
                 </a>
               )}
+              <Link 
+                href="/about"
+                className={`flex items-center gap-4 px-5 py-4 rounded-2xl transition-all font-bold border text-sm ${
+                  pathname === "/about" 
+                    ? "bg-foreground text-background border-transparent" 
+                    : "hover:bg-secondary/40 text-foreground border-transparent"
+                }`}
+              >
+                <span className="w-5 h-5 flex items-center justify-center font-bold">ℹ️</span>
+                <span>About</span>
+              </Link>
               <Link 
                 href="/public/jobs"
                 className={`flex items-center gap-4 px-5 py-4 rounded-2xl transition-all font-bold border text-sm ${

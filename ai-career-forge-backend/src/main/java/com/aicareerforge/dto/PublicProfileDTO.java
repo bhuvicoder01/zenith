@@ -15,6 +15,7 @@ import java.util.List;
 public class PublicProfileDTO {
     private String userId;
     private String email;
+    private String username;
     private String fullName;
     private String headline;
     private String bio;
@@ -40,6 +41,7 @@ public class PublicProfileDTO {
         return PublicProfileDTO.builder()
                 .userId(profile.getUserId())
                 .email(resolvedEmail)
+                .username(profile.getUsername())
                 .fullName(anonymize ? "Anonymous User" : profile.getFullName())
                 .profilePhotoUrl(anonymize ? null : profile.getProfilePhotoUrl())
                 .headline(profile.getHeadline())

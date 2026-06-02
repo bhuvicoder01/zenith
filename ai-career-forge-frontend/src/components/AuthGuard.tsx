@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import useAuthStore from "@/store/useAuthStore";
 import api from "@/lib/api";
+import { registerServiceWorker, subscribeUserToPush } from "@/lib/pushNotification";
 
 export default function AuthGuard({ children }: { children: React.ReactNode }) {
   const { user, isAuthenticated, needsOnboarding, setNeedsOnboarding, setToken, setAuth } = useAuthStore();
@@ -11,6 +12,19 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [isReady, setIsReady] = useState(false);
+
+  useEffect(() => {
+    registerServiceWorker();
+  }, []);
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      const timer = setTimeout(() => {
+        subscribeUserToPush();
+      }, 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [isAuthenticated]);
 
   useEffect(() => {
     const initializeAuth = async () => {

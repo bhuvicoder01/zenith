@@ -60,6 +60,8 @@ export default function DashboardProfile() {
       router.push(`/public/profiles/${item.data.requester.userId}`);
     } else if (item.type === "CONNECTION_ACCEPTED" && item.data?.user?.userId) {
       router.push(`/public/profiles/${item.data.user.userId}`);
+    } else if ((item.type === "COMMENT" || item.type === "MENTION") && item.data?.postId) {
+      router.push(`/posts/${item.data.postId}`);
     } else {
       router.push("/dashboard/notifications");
     }

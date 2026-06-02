@@ -22,6 +22,10 @@ public class UserProfile {
     private String userId; // Link to User
     private String email; // Transient/Stored for UI
     private boolean isPasswordGenerated; // For security UI
+    
+    @org.springframework.data.mongodb.core.index.Indexed(unique = true, sparse = true)
+    private String username;
+    
     private String fullName;
     private String headline;
     private String bio;
@@ -65,6 +69,7 @@ public class UserProfile {
         private boolean anonymizeData = false;
         private boolean showEmail = true;
         private boolean showOnlineStatus = true;
+        private boolean deviceNotifications = true;
     }
 
     @Data

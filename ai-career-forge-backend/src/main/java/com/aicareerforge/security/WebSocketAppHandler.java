@@ -3,6 +3,7 @@ package com.aicareerforge.security;
 import com.aicareerforge.model.User;
 import com.aicareerforge.repository.UserRepository;
 import com.aicareerforge.repository.UserProfileRepository;
+import com.aicareerforge.service.PushNotificationService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -27,6 +28,7 @@ public class WebSocketAppHandler extends TextWebSocketHandler {
     private final UserRepository userRepository;
     private final UserProfileRepository userProfileRepository;
     private final ObjectMapper objectMapper;
+    private final PushNotificationService pushNotificationService;
 
     // Maps User ID to their active WebSocket sessions
     private final Map<String, List<WebSocketSession>> userSessions = new ConcurrentHashMap<>();
@@ -34,11 +36,12 @@ public class WebSocketAppHandler extends TextWebSocketHandler {
     // Cache to maintain the latest active preparation status for recovery
     private final Map<String, Map<String, Object>> activePrepStatuses = new ConcurrentHashMap<>();
 
-    public WebSocketAppHandler(JwtService jwtService, UserRepository userRepository, UserProfileRepository userProfileRepository, ObjectMapper objectMapper) {
+    public WebSocketAppHandler(JwtService jwtService, UserRepository userRepository, UserProfileRepository userProfileRepository, ObjectMapper objectMapper, PushNotificationService pushNotificationService) {
         this.jwtService = jwtService;
         this.userRepository = userRepository;
         this.userProfileRepository = userProfileRepository;
         this.objectMapper = objectMapper;
+        this.pushNotificationService = pushNotificationService;
     }
 
     @Override
@@ -175,7 +178,12 @@ public class WebSocketAppHandler extends TextWebSocketHandler {
 
         List<WebSocketSession> sessions = userSessions.get(userId);
         if (sessions == null || sessions.isEmpty()) {
-            log.debug("No active WebSocket sessions for user ID: {}, buffering skipped", userId);
+            log.debug("No active WebSocket sessions for user ID: {}, triggering background push", userId);
+            try {
+                pushNotificationService.sendPushNotification(userId, title, message, data);
+            } catch (Exception e) {
+                log.error("Failed to send fallback device level push notification for user {}: {}", userId, e.getMessage());
+            }
             return;
         }
 

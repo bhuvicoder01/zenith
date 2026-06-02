@@ -11,6 +11,7 @@ import useAuthStore from "@/store/useAuthStore";
 import { toast } from "sonner";
 import api from "@/lib/api";
 import { useSearchParams, useRouter } from "next/navigation";
+import { subscribeUserToPush, unsubscribeUserFromPush } from "@/lib/pushNotification";
 
 function SettingsContent() {
   const { theme, setTheme, resolvedTheme } = useTheme();
@@ -223,26 +224,43 @@ function SettingsContent() {
 
                 <div className="space-y-6">
                    <div className="grid grid-cols-1 gap-6">
-                      <div className="space-y-2">
-                         <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground px-1">Full Identity Name</label>
-                         <input 
-                           type="text" 
-                           value={profile?.fullName || ""}
-                           onChange={(e) => setProfile({...profile, fullName: e.target.value})}
-                           placeholder="Enter your professional name"
-                           className="w-full bg-secondary/30 border border-border rounded-2xl px-5 py-4 focus:outline-none focus:ring-2 focus:ring-primary/20 font-bold"
-                         />
-                      </div>
-                      <div className="space-y-2">
-                         <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground px-1">Professional Headline</label>
-                         <input 
-                           type="text" 
-                           value={profile?.headline || ""}
-                           onChange={(e) => setProfile({...profile, headline: e.target.value})}
-                           placeholder="e.g. Senior Software Engineer"
-                           className="w-full bg-secondary/30 border border-border rounded-2xl px-5 py-4 focus:outline-none focus:ring-2 focus:ring-primary/20 font-bold"
-                         />
-                      </div>
+                       <div className="space-y-2">
+                          <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground px-1">Username Handle</label>
+                          <div className="relative">
+                            <span className="absolute left-5 top-1/2 -translate-y-1/2 font-mono text-muted-foreground font-bold">@</span>
+                            <input 
+                              type="text" 
+                              value={profile?.username || ""}
+                              onChange={(e) => {
+                                const cleanVal = e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, "_");
+                                setProfile({...profile, username: cleanVal});
+                              }}
+                              placeholder="username"
+                              className="w-full bg-secondary/30 border border-border rounded-2xl pl-10 pr-5 py-4 focus:outline-none focus:ring-2 focus:ring-primary/20 font-bold font-mono text-primary"
+                            />
+                          </div>
+                          <p className="text-[9px] text-muted-foreground px-1 font-semibold">Only lowercase letters, numbers, and underscores are allowed. This is used for user mentions (e.g. @username).</p>
+                       </div>
+                       <div className="space-y-2">
+                          <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground px-1">Full Identity Name</label>
+                          <input 
+                            type="text" 
+                            value={profile?.fullName || ""}
+                            onChange={(e) => setProfile({...profile, fullName: e.target.value})}
+                            placeholder="Enter your professional name"
+                            className="w-full bg-secondary/30 border border-border rounded-2xl px-5 py-4 focus:outline-none focus:ring-2 focus:ring-primary/20 font-bold"
+                          />
+                       </div>
+                       <div className="space-y-2">
+                          <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground px-1">Professional Headline</label>
+                          <input 
+                            type="text" 
+                            value={profile?.headline || ""}
+                            onChange={(e) => setProfile({...profile, headline: e.target.value})}
+                            placeholder="e.g. Senior Software Engineer"
+                            className="w-full bg-secondary/30 border border-border rounded-2xl px-5 py-4 focus:outline-none focus:ring-2 focus:ring-primary/20 font-bold"
+                          />
+                       </div>
                    </div>
 
                    <button 
@@ -328,6 +346,7 @@ function SettingsContent() {
                  {[
                    { id: 'emailNotifications', label: 'Email Alerts', sub: 'Receive weekly career progress reports.', icon: Mail },
                    { id: 'jobMatchAlerts', label: 'Job Match Alerts', sub: 'Instant notification for 90%+ job matches.', icon: Target },
+                   { id: 'deviceNotifications', label: 'Device Notifications', sub: 'Receive push notifications when app is closed.', icon: BellRing }
                  ].map((item) => (
                     <div key={item.id} className="flex items-center justify-between">
                        <div className="flex items-center gap-4">
@@ -340,7 +359,25 @@ function SettingsContent() {
                           </div>
                        </div>
                        <button 
-                         onClick={() => updateSetting(item.id, !profile?.settings?.[item.id])}
+                         onClick={async () => {
+                           const newValue = !profile?.settings?.[item.id];
+                           updateSetting(item.id, newValue);
+                           if (item.id === 'deviceNotifications') {
+                             if (newValue) {
+                               toast.promise(subscribeUserToPush(), {
+                                 loading: 'Requesting permission & initializing device subscription...',
+                                 success: 'Device notifications registered!',
+                                 error: 'Could not enable device notifications.'
+                               });
+                             } else {
+                               toast.promise(unsubscribeUserFromPush(), {
+                                 loading: 'Disabling device subscription...',
+                                 success: 'Device notifications disabled.',
+                                 error: 'Could not disable device notifications.'
+                               });
+                             }
+                           }
+                         }}
                          className={`w-12 h-6 rounded-full transition-colors relative ${profile?.settings?.[item.id] ? 'bg-violet-500' : 'bg-border'}`}
                        >
                          <div className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-all ${profile?.settings?.[item.id] ? 'left-7' : 'left-1'}`} />

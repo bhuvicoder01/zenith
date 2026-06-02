@@ -10,6 +10,8 @@ import java.util.List;
 @Repository
 public interface UserProfileRepository extends MongoRepository<UserProfile, String> {
     Optional<UserProfile> findByUserId(String userId);
+    Optional<UserProfile> findByUsername(String username);
+    boolean existsByUsername(String username);
 
     @org.springframework.data.mongodb.repository.Query("{ 'settings.hideProfile': { $ne: true } }")
     List<UserProfile> findAllPublic();
@@ -17,10 +19,13 @@ public interface UserProfileRepository extends MongoRepository<UserProfile, Stri
     @org.springframework.data.mongodb.repository.Query("{ " +
             "  'settings.hideProfile': { $ne: true }, " +
             "  $or: [ " +
+            "    { 'username': { $regex: ?0, $options: 'i' } }, " +
             "    { 'fullName': { $regex: ?0, $options: 'i' } }, " +
             "    { 'headline': { $regex: ?0, $options: 'i' } }, " +
             "    { 'skills': { $regex: ?0, $options: 'i' } } " +
             "  ] " +
             "}")
     List<UserProfile> searchPublic(String query);
+
+    List<UserProfile> findAllByUserIdIn(List<String> userIds);
 }

@@ -88,9 +88,27 @@ public class AuthService {
             throw new RuntimeException("Email already in use");
         }
 
+        String baseUsername = "";
+        if (request.getName() != null && !request.getName().isBlank()) {
+            baseUsername = request.getName().toLowerCase().replaceAll("[^a-z0-9_]", "_");
+        } else if (request.getEmail() != null && !request.getEmail().isBlank()) {
+            baseUsername = request.getEmail().split("@")[0].toLowerCase().replaceAll("[^a-z0-9_]", "_");
+        }
+        if (baseUsername.isBlank()) {
+            baseUsername = "user";
+        }
+        
+        String uniqueUsername = baseUsername;
+        int count = 1;
+        while (repository.existsByUsername(uniqueUsername) || userProfileRepository.existsByUsername(uniqueUsername)) {
+            uniqueUsername = baseUsername + count;
+            count++;
+        }
+
         var user = User.builder()
                 .name(request.getName())
                 .email(request.getEmail())
+                .username(uniqueUsername)
                 .password(passwordEncoder.encode(request.getPassword()))
                 .role(request.getRole() != null ? request.getRole() : User.Role.USER)
                 .build();
@@ -99,6 +117,7 @@ public class AuthService {
         // Initialize empty profile
         var profile = UserProfile.builder()
                 .userId(user.getId())
+                .username(uniqueUsername)
                 .build();
         userProfileRepository.save(profile);
 

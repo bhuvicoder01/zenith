@@ -225,6 +225,20 @@ export const useWebSocketStore = create<WebSocketStore>((set, get) => ({
               // Only show toast and add to notifications feed if user is not active/online (tab is blurred/out of focus)
               const isUserOffline = typeof document !== 'undefined' && !document.hasFocus();
               if (isUserOffline) {
+                // Show native browser desktop notification via service worker (works reliably in device notification drawers)
+                if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted' && 'serviceWorker' in navigator) {
+                  navigator.serviceWorker.ready.then(registration => {
+                    registration.showNotification(`New message from ${data.title || 'Connection'}`, {
+                      body: data.message,
+                      icon: '/zenith-favicon.png',
+                      badge: '/zenith-favicon.png',
+                      data: { url: `/dashboard/messages?userId=${data.data.senderId}` }
+                    });
+                  }).catch(err => {
+                    console.error('Failed to trigger native message notification via worker:', err);
+                  });
+                }
+
                 // Show a reply toast alert
                 toast.info(`New message from ${data.title || 'Connection'}`, {
                   description: data.message,
@@ -273,6 +287,21 @@ export const useWebSocketStore = create<WebSocketStore>((set, get) => ({
           const updatedNotifications = [newNotif, ...get().notifications];
           set({ notifications: updatedNotifications });
           localStorage.setItem('zenith_notifications', JSON.stringify(updatedNotifications));
+
+          // Show native browser desktop notification via service worker if tab is blurred/out of focus
+          const isUserOffline = typeof document !== 'undefined' && !document.hasFocus();
+          if (isUserOffline && typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted' && 'serviceWorker' in navigator) {
+            navigator.serviceWorker.ready.then(registration => {
+              registration.showNotification(data.title || 'System Notification', {
+                body: data.message || '',
+                icon: '/zenith-favicon.png',
+                badge: '/zenith-favicon.png',
+                data: { url: data.type === 'CONNECTION_REQUEST' || data.type === 'CONNECTION_ACCEPTED' ? '/dashboard/connections' : '/dashboard' }
+              });
+            }).catch(err => {
+              console.error('Failed to trigger native system notification via worker:', err);
+            });
+          }
 
           // Toast Alerts
           if (data.type === 'CONNECTION_REQUEST') {
