@@ -5,16 +5,18 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { 
   Search, Send, MessageSquare, ArrowLeft, User, Loader2, 
   ExternalLink, Mail, Circle, PhoneCall, Plus, X, CheckCheck, Trash2, Menu,
-  Globe, ArrowRight
+  Globe, ArrowRight, Image as ImageIcon
 } from "lucide-react";
 import api, { BACKEND_URL } from "@/lib/api";
 import { useWebSocketStore } from "@/store/useWebSocketStore";
 import useAuthStore from "@/store/useAuthStore";
 import { toast } from "sonner";
 import Link from "next/link";
+import GifStickerPicker from "@/components/GifStickerPicker";
 
 interface PublicProfile {
   userId: string;
+  username?: string;
   fullName: string;
   headline: string;
   profilePhotoUrl?: string;
@@ -59,6 +61,7 @@ function ChatContainer() {
   const [searchQuery, setSearchQuery] = useState("");
   const [showNewChatModal, setShowNewChatModal] = useState(false);
   const [newChatSearch, setNewChatSearch] = useState("");
+  const [showGifPicker, setShowGifPicker] = useState(false);
 
   const [page, setPage] = useState(0);
   const [hasMore, setHasMore] = useState(true);
@@ -503,6 +506,49 @@ function ChatContainer() {
     }
   };
 
+  const sendGifOrSticker = async (url: string, type: "gif" | "sticker") => {
+    if (!activeUser || sending) return;
+    const content = type === "gif" ? `[GIF]${url}` : `[STICKER]${url}`;
+    
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
+    if (localTypingStateRef.current) {
+      localTypingStateRef.current = false;
+      sendTypingStatus(activeUser.userId, false);
+    }
+
+    setSending(true);
+
+    try {
+      const res = await api.post("/messages/send", {
+        receiverId: activeUser.userId,
+        content
+      });
+      
+      const sentMsg = res.data;
+      setMessages(prev => {
+        if (prev.some(m => m.id === sentMsg.id)) return prev;
+        return [...prev, sentMsg];
+      });
+
+      setConversations(prev => {
+        const filtered = prev.filter(c => c.otherUser.userId !== activeUser.userId);
+        const updatedConv: Conversation = {
+          otherUser: activeUser,
+          lastMessage: sentMsg,
+          unreadCount: 0
+        };
+        return [updatedConv, ...filtered];
+      });
+    } catch (err) {
+      console.error("Failed to send GIF/Sticker message:", err);
+      toast.error("Failed to send message");
+    } finally {
+      setSending(false);
+    }
+  };
+
   const getPhotoUrl = (url?: string) => {
     if (!url) return null;
     if (url.startsWith("http")) return url;
@@ -525,7 +571,7 @@ function ChatContainer() {
       const date = new Date(isoString);
       const now = new Date();
       if (date.toDateString() === now.toDateString()) {
-        return date.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+        return date.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", hour12: false });
       }
       return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
     } catch (e) {
@@ -540,7 +586,8 @@ function ChatContainer() {
         month: "short",
         day: "numeric",
         hour: "2-digit",
-        minute: "2-digit"
+        minute: "2-digit",
+        hour12: false
       });
     } catch (e) {
       return "";
@@ -806,7 +853,7 @@ function ChatContainer() {
               {/* Actions */}
               <div className="flex items-center gap-2">
                 <Link
-                  href={`/public/profiles/${activeUser.userId}`}
+                  href={`/public/profiles/${activeUser.username || activeUser.userId}`}
                   className="px-3.5 py-2 bg-secondary border border-border text-foreground hover:bg-secondary/80 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 shadow-sm"
                   title="View Profile"
                 >
@@ -923,6 +970,14 @@ function ChatContainer() {
                                 <ArrowRight className="w-3 h-3" />
                               </Link>
                             </div>
+                          ) : msg.content?.startsWith("[GIF]") ? (
+                            <div className="rounded-2xl overflow-hidden max-w-[200px] sm:max-w-[240px] border border-border shadow-md bg-secondary/10 mt-1">
+                              <img src={msg.content.slice(5)} alt="GIF" className="w-full h-auto object-contain max-h-48" />
+                            </div>
+                          ) : msg.content?.startsWith("[STICKER]") ? (
+                            <div className="max-w-[100px] select-none p-1 mt-1">
+                              <img src={msg.content.slice(9)} alt="Sticker" className="w-full h-auto object-contain animate-pulse [animation-duration:3s]" />
+                            </div>
                           ) : (
                             <div className={`p-3.5 rounded-2xl text-sm leading-relaxed relative w-fit ${
                               isSelf 
@@ -990,6 +1045,14 @@ function ChatContainer() {
               onSubmit={handleSendMessage} 
               className="p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] md:pb-4 flex items-center gap-3 bg-card border-t border-border/40 sticky bottom-0 z-20 shrink-0"
             >
+              <button
+                type="button"
+                onClick={() => setShowGifPicker(true)}
+                title="Add GIF or Sticker"
+                className="p-3 bg-secondary/40 hover:bg-secondary/70 border border-border rounded-xl text-muted-foreground hover:text-foreground transition-all shrink-0 flex items-center justify-center h-[46px] w-[46px]"
+              >
+                <ImageIcon className="w-5 h-5" />
+              </button>
               <input
                 type="text"
                 placeholder="Write a message..."
@@ -1117,6 +1180,15 @@ function ChatContainer() {
             </div>
           </div>
         </div>
+      )}
+      {showGifPicker && (
+        <GifStickerPicker
+          onSelect={(url, type) => {
+            sendGifOrSticker(url, type);
+            setShowGifPicker(false);
+          }}
+          onClose={() => setShowGifPicker(false)}
+        />
       )}
     </div>
   );

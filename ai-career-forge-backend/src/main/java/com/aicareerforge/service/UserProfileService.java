@@ -1,7 +1,10 @@
 package com.aicareerforge.service;
 
+import com.aicareerforge.model.Post;
 import com.aicareerforge.model.UserProfile;
+import com.aicareerforge.model.UsernameReservation;
 import com.aicareerforge.repository.UserProfileRepository;
+import com.aicareerforge.repository.UsernameReservationRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -18,6 +21,8 @@ public class UserProfileService {
 
     private final UserProfileRepository userProfileRepository;
     private final com.aicareerforge.repository.UserRepository userRepository;
+    private final UsernameReservationRepository usernameReservationRepository;
+    private final com.aicareerforge.repository.PostRepository postRepository;
     private final S3Service s3Service;
     private final ProfileAiAgent profileAiAgent;
     private final JobService jobService;
@@ -72,22 +77,50 @@ public class UserProfileService {
     private String makeUsernameUnique(String base) {
         String attempt = base;
         int count = 1;
-        while (userProfileRepository.existsByUsername(attempt) || userRepository.existsByUsername(attempt)) {
+        while (userProfileRepository.existsByUsername(attempt) || userRepository.existsByUsername(attempt) || isUsernameReservedForOther(attempt, null)) {
             attempt = base + count;
             count++;
         }
         return attempt;
     }
 
-    public PublicProfileDTO getPublicProfile(String userId) {
-        UserProfile profile = userProfileRepository.findByUserId(userId)
-                .orElseThrow(() -> new IllegalArgumentException("Profile not found for user: " + userId));
+    private boolean isUsernameReservedForOther(String username, String userId) {
+        return usernameReservationRepository.findByUsername(username)
+                .map(r -> r.getReservedUntil().isAfter(java.time.Instant.now()) && !r.getReservedForUserId().equals(userId))
+                .orElse(false);
+    }
+
+    public boolean isUsernameAvailable(String username, String userId) {
+        // 1. Check if used by another user in profile repository
+        java.util.Optional<UserProfile> existingProfile = userProfileRepository.findByUsername(username);
+        if (existingProfile.isPresent() && !existingProfile.get().getUserId().equals(userId)) {
+            return false;
+        }
+
+        // 2. Check if used by another user in user repository
+        java.util.Optional<com.aicareerforge.model.User> existingUser = userRepository.findByUsername(username);
+        if (existingUser.isPresent() && !existingUser.get().getId().equals(userId)) {
+            return false;
+        }
+
+        // 3. Check if reserved for another user
+        if (isUsernameReservedForOther(username, userId)) {
+            return false;
+        }
+
+        return true;
+    }
+
+    public PublicProfileDTO getPublicProfile(String userIdOrUsername) {
+        UserProfile profile = userProfileRepository.findByUserId(userIdOrUsername)
+                .or(() -> userProfileRepository.findByUsername(userIdOrUsername))
+                .orElseThrow(() -> new IllegalArgumentException("Profile not found for user: " + userIdOrUsername));
 
         if (profile.getSettings() != null && profile.getSettings().isHideProfile()) {
             throw new IllegalArgumentException("Profile is private.");
         }
 
-        userRepository.findById(userId).ifPresent(user -> {
+        userRepository.findById(profile.getUserId()).ifPresent(user -> {
             profile.setEmail(user.getEmail());
             profile.setPasswordGenerated(user.isPasswordGenerated());
         });
@@ -117,6 +150,14 @@ public class UserProfileService {
         profile.setResumeS3Url(hydrateUrl(profile.getResumeS3Url()));
         profile.setProfilePhotoUrl(hydrateUrl(profile.getProfilePhotoUrl()));
         profile.setCoverImageUrl(hydrateUrl(profile.getCoverImageUrl()));
+        if (profile.getUserId() != null) {
+            java.util.List<UsernameReservation> activeReservations = usernameReservationRepository
+                    .findByReservedForUserIdAndReservedUntilAfter(profile.getUserId(), java.time.Instant.now());
+            if (!activeReservations.isEmpty()) {
+                profile.setPreviousUsername(activeReservations.get(0).getUsername());
+                profile.setPreviousUsernameReservedUntil(activeReservations.get(0).getReservedUntil());
+            }
+        }
     }
 
     private String hydrateUrl(String url) {
@@ -156,16 +197,51 @@ public class UserProfileService {
         
         boolean oldShowOnline = profile.getSettings() == null || profile.getSettings().isShowOnlineStatus();
 
-        if (updatedData.getUsername() != null && !updatedData.getUsername().isBlank() && !updatedData.getUsername().equals(profile.getUsername())) {
+        if (updatedData.getUsername() != null && !updatedData.getUsername().isBlank()) {
             String newUsername = updatedData.getUsername().toLowerCase().replaceAll("[^a-z0-9_]", "_");
-            if (userProfileRepository.existsByUsername(newUsername) || userRepository.existsByUsername(newUsername)) {
-                throw new IllegalArgumentException("Username already in use");
+            String oldUsername = profile.getUsername() != null ? profile.getUsername().toLowerCase().replaceAll("[^a-z0-9_]", "_") : "";
+
+            if (!newUsername.equals(oldUsername)) {
+                // COOLDOWN LOCK CHECK: If user has an active reservation, they can ONLY change back to that reserved username!
+                // Only enforce if they are changing FROM an existing username.
+                boolean isReverting = false;
+                if (!oldUsername.isEmpty()) {
+                    java.util.List<UsernameReservation> activeReservations = usernameReservationRepository
+                            .findByReservedForUserIdAndReservedUntilAfter(userId, java.time.Instant.now());
+                    if (!activeReservations.isEmpty()) {
+                        isReverting = activeReservations.stream()
+                                .anyMatch(r -> r.getUsername().equals(newUsername));
+                        if (!isReverting) {
+                            throw new IllegalArgumentException("You can only change back to your previous username within 7 days of changing it.");
+                        }
+                    }
+                }
+
+                if (!isUsernameAvailable(newUsername, userId)) {
+                    throw new IllegalArgumentException("Username already in use or reserved");
+                }
+                profile.setUsername(newUsername);
+                userRepository.findById(userId).ifPresent(user -> {
+                    user.setUsername(newUsername);
+                    userRepository.save(user);
+                });
+
+                // Save reservation for the old username only if we are NOT reverting
+                if (!oldUsername.isEmpty() && !isReverting) {
+                    UsernameReservation reservation = usernameReservationRepository.findByUsername(oldUsername)
+                            .orElse(UsernameReservation.builder().username(oldUsername).build());
+                    reservation.setReservedForUserId(userId);
+                    reservation.setReservedUntil(java.time.Instant.now().plus(7, java.time.temporal.ChronoUnit.DAYS));
+                    usernameReservationRepository.save(reservation);
+                }
+
+                // Clean up any reservation for the new username
+                usernameReservationRepository.findByUsername(newUsername).ifPresent(usernameReservationRepository::delete);
+
+                if (!oldUsername.isEmpty()) {
+                    updateMentionsInPosts(oldUsername, newUsername);
+                }
             }
-            profile.setUsername(newUsername);
-            userRepository.findById(userId).ifPresent(user -> {
-                user.setUsername(newUsername);
-                userRepository.save(user);
-            });
         }
 
         if (updatedData.getFullName() != null) profile.setFullName(updatedData.getFullName());
@@ -441,5 +517,48 @@ public class UserProfileService {
         } catch (IOException e) {
             throw new RuntimeException("Failed to extract text from PDF", e);
         }
+    }
+
+    private void updateMentionsInPosts(String oldUsername, String newUsername) {
+        try {
+            String targetMention = "@" + oldUsername.toLowerCase();
+            java.util.List<Post> posts = postRepository.findAll();
+            java.util.List<Post> updatedPosts = new java.util.ArrayList<>();
+
+            for (Post post : posts) {
+                boolean updated = false;
+
+                if (post.getContent() != null && post.getContent().toLowerCase().contains(targetMention)) {
+                    post.setContent(replaceMention(post.getContent(), oldUsername, newUsername));
+                    updated = true;
+                }
+
+                if (post.getComments() != null) {
+                    for (Post.Comment comment : post.getComments()) {
+                        if (comment.getContent() != null && comment.getContent().toLowerCase().contains(targetMention)) {
+                            comment.setContent(replaceMention(comment.getContent(), oldUsername, newUsername));
+                            updated = true;
+                        }
+                    }
+                }
+
+                if (updated) {
+                    updatedPosts.add(post);
+                }
+            }
+
+            if (!updatedPosts.isEmpty()) {
+                postRepository.saveAll(updatedPosts);
+                log.info("Successfully updated username mentions from @{} to @{} in {} posts/comments.", oldUsername, newUsername, updatedPosts.size());
+            }
+        } catch (Exception e) {
+            log.error("Failed to update username mentions from @{} to @{}: {}", oldUsername, newUsername, e.getMessage(), e);
+        }
+    }
+
+    private String replaceMention(String text, String oldUsername, String newUsername) {
+        if (text == null) return null;
+        String regex = "(?i)@" + java.util.regex.Pattern.quote(oldUsername) + "\\b";
+        return text.replaceAll(regex, "@" + newUsername);
     }
 }

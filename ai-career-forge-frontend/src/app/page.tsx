@@ -13,6 +13,8 @@ import PublicNavbar from "@/components/PublicNavbar";
 import api from "@/lib/api";
 import { toast } from "sonner";
 import MentionInput from "@/components/MentionInput";
+import GifStickerPicker from "@/components/GifStickerPicker";
+import { ClickableMedia } from "@/components/ImageLightbox";
 
 interface Post {
   id: string;
@@ -74,6 +76,9 @@ export default function HomeFeed() {
   const [replyMentions, setReplyMentions] = useState<Record<string, string[]>>({}); // rootCommentId -> userIds
   const [replyTargetUser, setReplyTargetUser] = useState<Record<string, { id: string; name: string; username?: string } | null>>({}); // rootCommentId -> target
   const [submittingReply, setSubmittingReply] = useState<Record<string, boolean>>({}); // rootCommentId -> boolean
+  const [showCommentGifPicker, setShowCommentGifPicker] = useState(false);
+  const [activeCommentPostId, setActiveCommentPostId] = useState<string | null>(null);
+  const [gifPickerParentCommentId, setGifPickerParentCommentId] = useState<string | null>(null);
 
   // Editing states
   const [editingPostId, setEditingPostId] = useState<string | null>(null);
@@ -88,6 +93,34 @@ export default function HomeFeed() {
       fetchUserProfile();
     }
   }, [isAuthenticated]);
+
+  // Real-time post count updates via WebSocket
+  useEffect(() => {
+    const handlePostUpdate = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (!detail?.postId) return;
+
+      if (detail.commentsCount !== undefined) {
+        // Fetch fresh post to update comments list and count
+        api.get(`/posts/${detail.postId}`).then(res => {
+          setPosts(prev => prev.map(p => p.id === detail.postId ? res.data : p));
+        }).catch(() => {});
+      } else {
+        // Just update likes and reactions locally
+        setPosts(prev => prev.map(p => {
+          if (p.id !== detail.postId) return p;
+          return {
+            ...p,
+            likesCount: detail.likesCount ?? p.likesCount,
+            likedUserIds: detail.likedUserIds ?? p.likedUserIds,
+            reactions: detail.reactions ?? p.reactions,
+          };
+        }));
+      }
+    };
+    window.addEventListener('zenith-post-update', handlePostUpdate);
+    return () => window.removeEventListener('zenith-post-update', handlePostUpdate);
+  }, []);
 
   const fetchUserProfile = async () => {
     try {
@@ -337,24 +370,83 @@ export default function HomeFeed() {
     }
   };
 
-  const toggleComments = (postId: string) => {
-    setExpandedComments(prev => {
-      const nextVal = !prev[postId];
-      if (nextVal) {
-        const post = posts.find(p => p.id === postId);
-        if (post && user && post.userId !== user.id && !(inlineCommentText[postId] || "").trim()) {
-          const handle = post.authorUsername || post.authorName.replace(/\s+/g, "_").toLowerCase();
-          setInlineCommentText(prevText => ({
-            ...prevText,
-            [postId]: `@${handle} `
-          }));
-        }
+  const toggleComments = async (postId: string) => {
+    const post = posts.find(p => p.id === postId);
+    const nextVal = !expandedComments[postId];
+    
+    if (nextVal) {
+      // Set handle placeholder immediately using existing post data
+      if (post && user && post.userId !== user.id && !(inlineCommentText[postId] || "").trim()) {
+        const handle = post.authorUsername || post.authorName.replace(/\s+/g, "_").toLowerCase();
+        setInlineCommentText(prevText => ({
+          ...prevText,
+          [postId]: `@${handle} `
+        }));
       }
-      return {
-        ...prev,
-        [postId]: nextVal
-      };
-    });
+
+      // Fetch fresh post to ensure comments are up-to-date
+      try {
+        const res = await api.get(`/posts/${postId}`);
+        setPosts(prev => prev.map(p => p.id === postId ? res.data : p));
+      } catch (err) {
+        console.error("Failed to re-fetch comments on toggle:", err);
+      }
+    }
+
+    setExpandedComments(prev => ({
+      ...prev,
+      [postId]: nextVal
+    }));
+  };
+
+  const sendCommentGifOrSticker = async (url: string, type: "gif" | "sticker") => {
+    if (!activeCommentPostId) return;
+    const postId = activeCommentPostId;
+    const content = type === "gif" ? `[GIF]${url}` : `[STICKER]${url}`;
+    const parentCommentId = gifPickerParentCommentId;
+
+    if (parentCommentId) {
+      setSubmittingReply(prev => ({ ...prev, [parentCommentId]: true }));
+      const target = replyTargetUser[parentCommentId];
+      try {
+        const res = await api.post(`/posts/${postId}/comments`, {
+          content,
+          parentCommentId,
+          replyToUserId: target?.id,
+          replyToUserName: target?.name,
+          mentionedUserIds: []
+        });
+        setPosts(prev => prev.map(p => p.id === postId ? res.data : p));
+        setReplyContent(prev => ({ ...prev, [parentCommentId]: "" }));
+        setReplyMentions(prev => ({ ...prev, [parentCommentId]: [] }));
+        setReplyTargetUser(prev => ({ ...prev, [parentCommentId]: null }));
+        setReplyingToCommentId(prev => ({ ...prev, [postId]: null }));
+        toast.success("Reply submitted successfully");
+      } catch (err) {
+        console.error("Failed to add GIF/Sticker reply:", err);
+        toast.error("Failed to submit reply");
+      } finally {
+        setSubmittingReply(prev => ({ ...prev, [parentCommentId]: false }));
+        setActiveCommentPostId(null);
+        setGifPickerParentCommentId(null);
+      }
+    } else {
+      setSubmittingComment(prev => ({ ...prev, [postId]: true }));
+      try {
+        const res = await api.post(`/posts/${postId}/comments`, { 
+          content,
+          mentionedUserIds: []
+        });
+        setPosts(prev => prev.map(p => p.id === postId ? res.data : p));
+        toast.success("Comment added successfully");
+      } catch (err) {
+        console.error("Failed to add GIF/Sticker comment:", err);
+        toast.error("Failed to submit comment");
+      } finally {
+        setSubmittingComment(prev => ({ ...prev, [postId]: false }));
+        setActiveCommentPostId(null);
+      }
+    }
   };
 
   const handleAddInlineComment = async (postId: string, e: React.FormEvent) => {
@@ -422,6 +514,20 @@ export default function HomeFeed() {
     }
   };
 
+  const handleLikeComment = async (postId: string, commentId: string) => {
+    if (!isAuthenticated) {
+      toast.error("Please log in to like comments");
+      return;
+    }
+    try {
+      const res = await api.post(`/posts/${postId}/comments/${commentId}/like`);
+      setPosts(prev => prev.map(p => p.id === postId ? res.data : p));
+    } catch (err) {
+      console.error("Failed to like comment:", err);
+      toast.error("Failed to like comment");
+    }
+  };
+
   const startEditing = (post: Post) => {
     setEditingPostId(post.id);
     setEditContent(post.content || "");
@@ -467,15 +573,48 @@ export default function HomeFeed() {
       const now = new Date();
       const diffMs = now.getTime() - past.getTime();
       const diffMins = Math.floor(diffMs / 60000);
-      const diffHours = Math.floor(diffMins / 6000);
+      const diffHours = Math.floor(diffMins / 60);
       
       if (diffMins < 1) return "Just now";
       if (diffMins < 60) return `${diffMins}m ago`;
-      if (diffHours < 24) return `${Math.floor(diffMins / 60)}h ago`;
-      return past.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+      if (diffHours < 24) return `${diffHours}h ago`;
+      
+      const options: Intl.DateTimeFormatOptions = {
+        month: "short",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false
+      };
+      
+      if (past.getFullYear() !== now.getFullYear()) {
+        options.year = "numeric";
+      }
+      
+      return past.toLocaleString(undefined, options);
     } catch (e) {
       return "Recently";
     }
+  };
+
+  const renderContentWithMentions = (text: string) => {
+    if (!text) return null;
+    const parts = text.split(/(@[a-zA-Z0-9_]+)/g);
+    return parts.map((part, idx) => {
+      if (part.startsWith("@")) {
+        const username = part.slice(1);
+        return (
+          <Link 
+            key={idx} 
+            href={`/public/profiles/${username}`}
+            className="text-primary hover:underline font-bold"
+          >
+            {part}
+          </Link>
+        );
+      }
+      return part;
+    });
   };
 
   return (
@@ -725,8 +864,8 @@ export default function HomeFeed() {
                     <article key={post.id} className="bg-card border border-border rounded-[2rem] p-6 shadow-sm space-y-4 hover:border-border/80 transition-all animate-in fade-in duration-300">
                       {/* Post Header */}
                       <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center font-black uppercase border border-border/80 relative overflow-hidden">
+                        <Link href={`/public/profiles/${post.authorUsername || post.userId}`} className="flex items-center gap-3 hover:opacity-85 transition-opacity group">
+                          <div className="w-10 h-10 rounded-full bg-secondary flex-shrink-0 flex items-center justify-center font-black uppercase border border-border/80 relative overflow-hidden group-hover:border-primary/50 transition-colors">
                             {post.authorAvatar ? (
                               <img src={post.authorAvatar} alt={post.authorName} className="w-full h-full object-cover" />
                             ) : (
@@ -734,10 +873,10 @@ export default function HomeFeed() {
                             )}
                           </div>
                           <div>
-                            <h4 className="text-sm font-black uppercase tracking-tight text-foreground leading-none">{post.authorName}</h4>
+                            <h4 className="text-sm font-black uppercase tracking-tight text-foreground leading-none group-hover:underline">{post.authorName}</h4>
                             <p className="text-[10px] text-muted-foreground font-semibold mt-1 leading-none">{post.authorHeadline || "Zenith Member"}</p>
                           </div>
-                        </div>
+                        </Link>
 
                         <div className="flex items-center gap-3 text-xs text-muted-foreground font-semibold">
                           <Link href={`/posts/${post.id}`} className="hover:underline">
@@ -944,7 +1083,9 @@ export default function HomeFeed() {
                             }`}
                           >
                             <MessageSquare className="w-4 h-4" />
-                            <span>{post.comments?.length || 0}</span>
+                            <span>
+                              {post.comments?.length ?? 0} {post.comments?.length === 1 ? "Comment" : "Comments"}
+                            </span>
                           </button>
 
                           {/* Analytics Views Counter */}
@@ -1020,6 +1161,17 @@ export default function HomeFeed() {
                                   className="flex-1 bg-secondary/20 border border-border rounded-xl px-4 py-2 text-xs placeholder:text-muted-foreground/60 focus:outline-none focus:ring-1 focus:ring-primary/20 text-foreground font-medium resize-none"
                                 />
                                 <button
+                                  type="button"
+                                  onClick={() => {
+                                    setActiveCommentPostId(post.id);
+                                    setShowCommentGifPicker(true);
+                                  }}
+                                  title="Add GIF or Sticker"
+                                  className="p-2 bg-secondary/40 hover:bg-secondary/70 border border-border rounded-xl text-muted-foreground hover:text-foreground transition-all shrink-0 flex items-center justify-center h-[34px] w-[34px]"
+                                >
+                                  <ImageIcon className="w-4 h-4" />
+                                </button>
+                                <button
                                   type="submit"
                                   disabled={submittingComment[post.id] || !(inlineCommentText[post.id] || "").trim()}
                                   className="p-2 bg-foreground text-background rounded-xl hover:opacity-90 disabled:opacity-50 disabled:scale-100 transition-all shrink-0 flex items-center justify-center h-[34px] w-[34px]"
@@ -1057,17 +1209,19 @@ export default function HomeFeed() {
                                     <div key={comment.id} className="space-y-3">
                                       {/* Top-Level Comment */}
                                       <div className="flex gap-2 items-start text-xs">
-                                        <div className="w-7 h-7 rounded-full bg-secondary flex-shrink-0 flex items-center justify-center text-[10px] font-black uppercase border border-border/80 relative overflow-hidden">
+                                        <Link href={`/public/profiles/${comment.authorUsername || comment.userId}`} className="w-7 h-7 rounded-full bg-secondary flex-shrink-0 flex items-center justify-center text-[10px] font-black uppercase border border-border/80 relative overflow-hidden hover:opacity-85 transition-opacity">
                                           {comment.authorAvatar ? (
                                             <img src={comment.authorAvatar} alt={comment.authorName} className="w-full h-full object-cover" />
                                           ) : (
                                             getInitials(comment.authorName)
                                           )}
-                                        </div>
+                                        </Link>
                                         <div className="flex-1 bg-secondary/10 rounded-xl p-3 border border-border/30 space-y-0.5">
                                           <div className="flex items-center justify-between">
                                             <div>
-                                              <span className="font-black uppercase tracking-tight text-foreground">{comment.authorName}</span>
+                                              <Link href={`/public/profiles/${comment.authorUsername || comment.userId}`} className="text-xs font-black uppercase tracking-tight text-foreground hover:underline">
+                                                {comment.authorName}
+                                              </Link>
                                               {comment.authorHeadline && (
                                                 <span className="text-[8px] text-muted-foreground font-semibold ml-1.5">
                                                   • {comment.authorHeadline}
@@ -1076,6 +1230,17 @@ export default function HomeFeed() {
                                             </div>
                                             <div className="flex items-center gap-2 text-[9px] text-muted-foreground font-semibold font-sans">
                                               <span>{formatTimestamp(comment.createdAt)}</span>
+
+                                              <button
+                                                onClick={() => handleLikeComment(post.id, comment.id)}
+                                                className={`flex items-center gap-0.5 transition-colors hover:text-rose-500 ${
+                                                  comment.likedUserIds?.includes(user?.id || "") ? 'text-rose-500' : 'text-muted-foreground'
+                                                }`}
+                                                title="Like Comment"
+                                              >
+                                                <Heart className={`w-2.5 h-2.5 ${comment.likedUserIds?.includes(user?.id || "") ? 'fill-current' : ''}`} />
+                                                <span>{comment.likedUserIds?.length || 0}</span>
+                                              </button>
                                               
                                               {isAuthenticated && (
                                                 <button
@@ -1101,9 +1266,15 @@ export default function HomeFeed() {
                                               )}
                                             </div>
                                           </div>
-                                          <p className="text-foreground leading-relaxed whitespace-pre-line font-medium select-text">
-                                            {comment.content}
-                                          </p>
+                                          {comment.content?.startsWith("[GIF]") ? (
+                                            <ClickableMedia src={comment.content.slice(5)} alt="GIF" type="gif" />
+                                          ) : comment.content?.startsWith("[STICKER]") ? (
+                                            <ClickableMedia src={comment.content.slice(9)} alt="Sticker" type="sticker" />
+                                          ) : (
+                                            <p className="text-foreground leading-relaxed whitespace-pre-line font-medium select-text">
+                                              {renderContentWithMentions(comment.content)}
+                                            </p>
+                                          )}
                                         </div>
                                       </div>
 
@@ -1113,17 +1284,19 @@ export default function HomeFeed() {
                                           {replies.map((reply: any) => (
                                             <div key={reply.id} className="flex gap-2 items-start text-xs">
                                               <CornerDownRight className="w-3 h-3 text-muted-foreground/45 mt-1.5 flex-shrink-0" />
-                                              <div className="w-6 h-6 rounded-full bg-secondary flex-shrink-0 flex items-center justify-center text-[8px] font-black uppercase border border-border/80 relative overflow-hidden">
+                                              <Link href={`/public/profiles/${reply.authorUsername || reply.userId}`} className="w-6 h-6 rounded-full bg-secondary flex-shrink-0 flex items-center justify-center text-[8px] font-black uppercase border border-border/80 relative overflow-hidden hover:opacity-85 transition-opacity">
                                                 {reply.authorAvatar ? (
                                                   <img src={reply.authorAvatar} alt={reply.authorName} className="w-full h-full object-cover" />
                                                 ) : (
                                                   getInitials(reply.authorName)
                                                 )}
-                                              </div>
+                                              </Link>
                                               <div className="flex-1 bg-secondary/5 rounded-xl p-2.5 border border-border/20 space-y-0.5">
                                                 <div className="flex items-center justify-between">
                                                   <div className="flex flex-wrap items-center gap-x-1">
-                                                    <span className="font-black uppercase tracking-tight text-foreground text-[10px]">{reply.authorName}</span>
+                                                    <Link href={`/public/profiles/${reply.authorUsername || reply.userId}`} className="text-[10px] font-black uppercase tracking-tight text-foreground hover:underline">
+                                                      {reply.authorName}
+                                                    </Link>
                                                     {reply.authorHeadline && (
                                                       <span className="text-[7px] text-muted-foreground font-semibold">
                                                         • {reply.authorHeadline}
@@ -1137,6 +1310,17 @@ export default function HomeFeed() {
                                                   </div>
                                                   <div className="flex items-center gap-1.5 text-[8px] text-muted-foreground font-semibold">
                                                     <span>{formatTimestamp(reply.createdAt)}</span>
+
+                                                    <button
+                                                      onClick={() => handleLikeComment(post.id, reply.id)}
+                                                      className={`flex items-center gap-0.5 transition-colors hover:text-rose-500 ${
+                                                        reply.likedUserIds?.includes(user?.id || "") ? 'text-rose-500' : 'text-muted-foreground'
+                                                      }`}
+                                                      title="Like Reply"
+                                                    >
+                                                      <Heart className={`w-2 h-2 ${reply.likedUserIds?.includes(user?.id || "") ? 'fill-current' : ''}`} />
+                                                      <span>{reply.likedUserIds?.length || 0}</span>
+                                                    </button>
                                                     
                                                     {isAuthenticated && (
                                                       <button
@@ -1162,9 +1346,15 @@ export default function HomeFeed() {
                                                     )}
                                                   </div>
                                                 </div>
-                                                <p className="text-foreground leading-relaxed whitespace-pre-line font-medium select-text">
-                                                  {reply.content}
-                                                </p>
+                                                {reply.content?.startsWith("[GIF]") ? (
+                                                  <ClickableMedia src={reply.content.slice(5)} alt="GIF" type="gif" />
+                                                ) : reply.content?.startsWith("[STICKER]") ? (
+                                                  <ClickableMedia src={reply.content.slice(9)} alt="Sticker" type="sticker" />
+                                                ) : (
+                                                  <p className="text-foreground leading-relaxed whitespace-pre-line font-medium select-text">
+                                                    {renderContentWithMentions(reply.content)}
+                                                  </p>
+                                                )}
                                               </div>
                                             </div>
                                           ))}
@@ -1203,6 +1393,19 @@ export default function HomeFeed() {
                                                 className="w-full bg-secondary/20 border border-border rounded-lg p-2 text-xs placeholder:text-muted-foreground/60 resize-none focus:outline-none focus:ring-1 focus:ring-primary/20 text-foreground font-medium"
                                               />
                                               <div className="flex justify-end gap-1.5 text-[9px]">
+                                                <button
+                                                  type="button"
+                                                  onClick={() => {
+                                                    setActiveCommentPostId(post.id);
+                                                    setGifPickerParentCommentId(comment.id);
+                                                    setShowCommentGifPicker(true);
+                                                  }}
+                                                  title="Add GIF or Sticker"
+                                                  className="px-2.5 py-1 bg-secondary/40 hover:bg-secondary/70 border border-border text-muted-foreground hover:text-foreground font-bold rounded-full transition-colors flex items-center gap-1"
+                                                >
+                                                  <ImageIcon className="w-3 h-3" />
+                                                  GIF
+                                                </button>
                                                 <button
                                                   type="button"
                                                   onClick={() => {
@@ -1395,6 +1598,18 @@ export default function HomeFeed() {
             </div>
           </div>
         </div>
+      )}
+      {showCommentGifPicker && (
+        <GifStickerPicker
+          onSelect={(url, type) => {
+            sendCommentGifOrSticker(url, type);
+            setShowCommentGifPicker(false);
+          }}
+          onClose={() => {
+            setShowCommentGifPicker(false);
+            setGifPickerParentCommentId(null);
+          }}
+        />
       )}
       </div>
     </div>

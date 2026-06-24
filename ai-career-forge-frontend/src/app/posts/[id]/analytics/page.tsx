@@ -90,10 +90,11 @@ export default function IndividualPostAnalytics() {
         day: "numeric",
         year: "numeric",
         hour: "2-digit",
-        minute: "2-digit"
+        minute: "2-digit",
+        hour12: false
       });
     } catch {
-      return dateStr;
+      return "N/A";
     }
   };
 
@@ -218,7 +219,7 @@ export default function IndividualPostAnalytics() {
                   activeTabUsers.map((person, idx) => (
                     <Link
                       key={`${person.userId}-${idx}`}
-                      href={`/public/profiles/${person.userId}`}
+                      href={`/public/profiles/${person.username || person.userId}`}
                       className="flex items-center gap-4 p-3 rounded-2xl hover:bg-secondary/40 border border-transparent hover:border-border/30 transition-all group"
                     >
                       <div className="w-12 h-12 rounded-xl overflow-hidden border border-border group-hover:border-primary/50 relative shrink-0 transition-colors">

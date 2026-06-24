@@ -513,7 +513,7 @@ function PostAnalyticsContent() {
                     activeTabUsers.map((person, idx) => (
                       <Link
                         key={`${person.userId}-${idx}`}
-                        href={`/public/profiles/${person.userId}`}
+                        href={`/public/profiles/${person.username || person.userId}`}
                         className="flex items-center gap-3.5 p-2 rounded-2xl hover:bg-secondary/40 border border-transparent hover:border-border/30 transition-all group"
                       >
                         <div className="w-11 h-11 rounded-xl overflow-hidden border border-border group-hover:border-primary/50 relative shrink-0 transition-colors">

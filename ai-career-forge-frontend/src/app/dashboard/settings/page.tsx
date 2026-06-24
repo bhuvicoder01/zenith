@@ -27,6 +27,7 @@ function SettingsContent() {
 
   const [activeTab, setActiveTab] = useState<'appearance' | 'account' | 'matching' | 'notifications' | 'privacy' | 'security'>(initialTab as any);
   const [profile, setProfile] = useState<any>(null);
+  const [originalUsername, setOriginalUsername] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [tempPass, setTempPass] = useState<string | null>(null);
@@ -51,6 +52,23 @@ function SettingsContent() {
     }
   }, [searchParams]);
 
+  const getRemainingTimeText = (until: string | null | undefined) => {
+    if (!until) return "";
+    const remainingMs = new Date(until).getTime() - Date.now();
+    if (remainingMs <= 0) return "expired";
+    const days = Math.floor(remainingMs / (1000 * 60 * 60 * 24));
+    const hours = Math.floor((remainingMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+    const minutes = Math.floor((remainingMs % (1000 * 60 * 60)) / (1000 * 60));
+    
+    if (days > 0) {
+      return `${days}d ${hours}h`;
+    } else if (hours > 0) {
+      return `${hours}h ${minutes}m`;
+    } else {
+      return `${minutes}m`;
+    }
+  };
+
   const handleTabChange = (tabId: string) => {
     setActiveTab(tabId as any);
     router.replace(`/dashboard/settings?tab=${tabId}`, { scroll: false });
@@ -60,6 +78,7 @@ function SettingsContent() {
     try {
       const res = await api.get("/profile");
       setProfile(res.data);
+      setOriginalUsername(res.data.username);
     } catch (err) {
       console.error("Failed to fetch profile:", err);
     } finally {
@@ -76,10 +95,12 @@ function SettingsContent() {
   const saveSettings = async () => {
     setSaving(true);
     try {
-      await api.put("/profile", profile);
+      const res = await api.put("/profile", profile);
+      setProfile(res.data);
+      setOriginalUsername(res.data.username);
       toast.success("ZENITH protocols updated");
-    } catch (err) {
-      toast.error("Failed to update protocols");
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || "Failed to update protocols");
     } finally {
       setSaving(false);
     }
@@ -224,23 +245,41 @@ function SettingsContent() {
 
                 <div className="space-y-6">
                    <div className="grid grid-cols-1 gap-6">
-                       <div className="space-y-2">
-                          <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground px-1">Username Handle</label>
-                          <div className="relative">
-                            <span className="absolute left-5 top-1/2 -translate-y-1/2 font-mono text-muted-foreground font-bold">@</span>
-                            <input 
-                              type="text" 
-                              value={profile?.username || ""}
-                              onChange={(e) => {
-                                const cleanVal = e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, "_");
-                                setProfile({...profile, username: cleanVal});
-                              }}
-                              placeholder="username"
-                              className="w-full bg-secondary/30 border border-border rounded-2xl pl-10 pr-5 py-4 focus:outline-none focus:ring-2 focus:ring-primary/20 font-bold font-mono text-primary"
-                            />
-                          </div>
-                          <p className="text-[9px] text-muted-foreground px-1 font-semibold">Only lowercase letters, numbers, and underscores are allowed. This is used for user mentions (e.g. @username).</p>
-                       </div>
+                        <div className="space-y-2">
+                           <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground px-1">Username Handle</label>
+                           <div className="relative">
+                             <span className="absolute left-5 top-1/2 -translate-y-1/2 font-mono text-muted-foreground font-bold">@</span>
+                             <input 
+                               type="text" 
+                               value={profile?.username || ""}
+                               onChange={(e) => {
+                                 const cleanVal = e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, "_");
+                                 setProfile({...profile, username: cleanVal});
+                               }}
+                               placeholder="username"
+                               className="w-full bg-secondary/30 border border-border rounded-2xl pl-10 pr-5 py-4 focus:outline-none focus:ring-2 focus:ring-primary/20 font-bold font-mono text-primary"
+                             />
+                           </div>
+                           <p className="text-[9px] text-muted-foreground px-1 font-semibold">Only lowercase letters, numbers, and underscores are allowed. This is used for user mentions (e.g. @username).</p>
+                           {profile?.previousUsername && (
+                             <p className="text-xs text-muted-foreground px-1 mt-1 font-semibold">
+                               Previous username:{" "}
+                               <button
+                                 type="button"
+                                 onClick={() => setProfile({ ...profile, username: profile.previousUsername })}
+                                 className="text-primary underline hover:text-primary/80 font-mono font-bold"
+                               >
+                                 @{profile.previousUsername}
+                               </button>{" "}
+                               (click to revert). {getRemainingTimeText(profile?.previousUsernameReservedUntil)} remaining before it becomes available to others.
+                             </p>
+                           )}
+                           {profile?.previousUsername && profile?.username !== originalUsername && profile?.username !== profile?.previousUsername && (
+                             <div className="mt-2 p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl text-amber-500 text-xs font-semibold leading-normal animate-in fade-in slide-in-from-top-1 duration-200">
+                               ⚠️ Warning: You have an active reservation for @{profile.previousUsername}. During the 7-day hold period, you can only revert to your previous username and cannot change to a different username.
+                             </div>
+                           )}
+                        </div>
                        <div className="space-y-2">
                           <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground px-1">Full Identity Name</label>
                           <input 

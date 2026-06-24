@@ -26,6 +26,12 @@ public class UserProfile {
     @org.springframework.data.mongodb.core.index.Indexed(unique = true, sparse = true)
     private String username;
     
+    @org.springframework.data.annotation.Transient
+    private String previousUsername;
+
+    @org.springframework.data.annotation.Transient
+    private java.time.Instant previousUsernameReservedUntil;
+
     private String fullName;
     private String headline;
     private String bio;

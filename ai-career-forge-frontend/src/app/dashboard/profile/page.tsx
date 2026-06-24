@@ -397,7 +397,7 @@ export default function ProfilePage() {
 
   const handleCopyPublicLink = () => {
     if (typeof window !== "undefined" && user?.id) {
-      const publicLink = `${window.location.origin}/public/profiles/${user.id}`;
+      const publicLink = `${window.location.origin}/public/profiles/${profile?.username || user.id}`;
       navigator.clipboard.writeText(publicLink);
       toast.success("Public profile link copied to clipboard!");
     } else {

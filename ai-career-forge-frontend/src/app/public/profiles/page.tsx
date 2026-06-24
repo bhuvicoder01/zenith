@@ -11,6 +11,7 @@ import PublicNavbar from "@/components/PublicNavbar";
 
 interface PublicProfile {
   userId: string;
+  username?: string;
   fullName: string;
   headline: string;
   bio: string;
@@ -174,7 +175,7 @@ export default function PublicProfilesPage() {
 
                     <div className="mt-auto pt-4 border-t border-border/50 flex items-center justify-between relative z-10">
                       <Link 
-                        href={`/public/profiles/${profile.userId}`}
+                        href={`/public/profiles/${profile.username || profile.userId}`}
                         className="flex-1 bg-foreground text-background text-center py-3.5 rounded-xl text-xs font-black uppercase tracking-widest hover:opacity-90 transition-all flex items-center justify-center gap-2"
                       >
                         View Profile <ArrowRight className="w-4 h-4" />

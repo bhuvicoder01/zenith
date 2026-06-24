@@ -40,8 +40,12 @@ public class UserProfileController {
     }
 
     @PutMapping
-    public ResponseEntity<UserProfile> updateProfile(@AuthenticationPrincipal User user, @RequestBody UserProfile profile) {
-        return ResponseEntity.ok(userProfileService.updateProfile(user.getId(), profile));
+    public ResponseEntity<?> updateProfile(@AuthenticationPrincipal User user, @RequestBody UserProfile profile) {
+        try {
+            return ResponseEntity.ok(userProfileService.updateProfile(user.getId(), profile));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(java.util.Map.of("message", e.getMessage()));
+        }
     }
 
     @PostMapping("/resume")

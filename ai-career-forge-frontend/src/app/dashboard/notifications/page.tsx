@@ -62,7 +62,8 @@ export default function NotificationsPage() {
         month: 'short',
         day: 'numeric',
         hour: '2-digit',
-        minute: '2-digit'
+        minute: '2-digit',
+        hour12: false
       });
     } catch (e) {
       return "";
@@ -72,9 +73,9 @@ export default function NotificationsPage() {
   const handleNotificationClick = (item: NotificationItem) => {
     markAsRead(item.id);
     if (item.type === "CONNECTION_REQUEST" && item.data?.requester?.userId) {
-      router.push(`/public/profiles/${item.data.requester.userId}`);
+      router.push(`/public/profiles/${item.data.requester.username || item.data.requester.userId}`);
     } else if (item.type === "CONNECTION_ACCEPTED" && item.data?.user?.userId) {
-      router.push(`/public/profiles/${item.data.user.userId}`);
+      router.push(`/public/profiles/${item.data.user.username || item.data.user.userId}`);
     } else if (item.type === "CONNECTION_REQUEST" || item.type === "CONNECTION_ACCEPTED") {
       router.push("/dashboard/connections");
     } else if (item.type === "NEW_MESSAGE" && item.data?.senderId) {

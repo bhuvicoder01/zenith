@@ -240,6 +240,7 @@ public class ConnectionService {
                 User user = userOpt.get();
                 return PublicProfileDTO.builder()
                         .userId(userId)
+                        .username(user.getUsername())
                         .fullName(user.getName() != null ? user.getName() : "Zenith User")
                         .headline("Zenith Member")
                         .bio("")

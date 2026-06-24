@@ -141,6 +141,15 @@ public class PostController {
         return ResponseEntity.ok(post);
     }
 
+    @PostMapping("/{id}/comments/{commentId}/like")
+    public ResponseEntity<Post> toggleCommentLike(
+            @AuthenticationPrincipal User user,
+            @PathVariable("id") String postId,
+            @PathVariable("commentId") String commentId) {
+        Post post = postService.toggleCommentLike(postId, commentId, user.getId());
+        return ResponseEntity.ok(post);
+    }
+
     public static class CommentRequest {
         private String content;
         private String parentCommentId;

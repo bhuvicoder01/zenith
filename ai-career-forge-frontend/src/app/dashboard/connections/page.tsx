@@ -11,6 +11,7 @@ import useAuthStore from "@/store/useAuthStore";
 
 interface PublicProfile {
   userId: string;
+  username?: string;
   fullName: string;
   headline: string;
   bio?: string;
@@ -323,7 +324,7 @@ export default function ConnectionsPage() {
                         {/* Actions */}
                         <div className="flex items-center gap-2 z-10 shrink-0 self-end sm:self-center ml-auto sm:ml-0">
                           <Link
-                            href={`/public/profiles/${conn.user.userId}`}
+                            href={`/public/profiles/${conn.user.username || conn.user.userId}`}
                             className="px-4 py-2 bg-foreground text-background hover:opacity-90 rounded-xl transition-all flex items-center justify-center gap-1.5 text-xs font-bold"
                             title="View Public Profile"
                           >
@@ -447,7 +448,7 @@ export default function ConnectionsPage() {
                             )}
                           </button>
                           <Link
-                            href={`/public/profiles/${req.user.userId}`}
+                            href={`/public/profiles/${req.user.username || req.user.userId}`}
                             className="p-2 bg-secondary hover:bg-secondary/80 border border-border rounded-xl transition-all flex items-center justify-center text-foreground/80"
                             title="View Profile"
                           >
@@ -529,7 +530,7 @@ export default function ConnectionsPage() {
                             )}
                           </button>
                           <Link
-                            href={`/public/profiles/${req.user.userId}`}
+                            href={`/public/profiles/${req.user.username || req.user.userId}`}
                             className="p-2 bg-secondary hover:bg-secondary/80 border border-border rounded-xl transition-all flex items-center justify-center text-foreground/80"
                             title="View Profile"
                           >

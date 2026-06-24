@@ -268,6 +268,14 @@ export const useWebSocketStore = create<WebSocketStore>((set, get) => ({
             return;
           }
 
+          // Handle POST_UPDATE events (real-time like/comment count sync)
+          if (data.type === 'POST_UPDATE') {
+            if (typeof window !== 'undefined') {
+              window.dispatchEvent(new CustomEvent('zenith-post-update', { detail: data.data }));
+            }
+            return;
+          }
+
           // Persist and handle notification items
           if (data.type === 'PRESENCE' || data.type === 'SYSTEM') {
             return;

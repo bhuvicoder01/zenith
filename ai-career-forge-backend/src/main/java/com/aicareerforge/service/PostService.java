@@ -133,7 +133,7 @@ public class PostService {
                 log.info("User {} unliked post {}", userId, postId);
             } else {
                 post.getLikedUserIds().add(userId);
-                post.getReactions().put(userId, "👍");
+                post.getReactions().put(userId, "\uD83D\uDC4D");
                 log.info("User {} liked post {}", userId, postId);
             }
         } else {
@@ -151,6 +151,10 @@ public class PostService {
         post.setLikesCount(post.getLikedUserIds().size());
         Post saved = postRepository.save(post);
         hydratePostUrls(saved);
+
+        // Broadcast real-time count update to all connected clients
+        broadcastPostUpdate(saved);
+
         return saved;
     }
 
@@ -200,9 +204,96 @@ public class PostService {
 
     private void hydratePostUrls(Post post) {
         if (post == null) return;
+        
+        // Dynamically update post author info using userId!
+        if (post.getUserId() != null) {
+            userProfileRepository.findByUserId(post.getUserId()).ifPresentOrElse(
+                profile -> {
+                    if (profile.getFullName() != null && !profile.getFullName().isBlank()) {
+                        post.setAuthorName(profile.getFullName());
+                    }
+                    if (profile.getUsername() != null && !profile.getUsername().isBlank()) {
+                        post.setAuthorUsername(profile.getUsername());
+                    }
+                    post.setAuthorAvatar(profile.getProfilePhotoUrl());
+                    if (profile.getHeadline() != null && !profile.getHeadline().isBlank()) {
+                        post.setAuthorHeadline(profile.getHeadline());
+                    }
+                },
+                () -> {
+                    userRepository.findById(post.getUserId()).ifPresent(user -> {
+                        if (user.getName() != null && !user.getName().isBlank()) {
+                            post.setAuthorName(user.getName());
+                        }
+                        if (user.getUsername() != null && !user.getUsername().isBlank()) {
+                            post.setAuthorUsername(user.getUsername());
+                        }
+                    });
+                }
+            );
+        }
+
         post.setAuthorAvatar(hydrateUrl(post.getAuthorAvatar()));
+
         if (post.getComments() != null) {
+            java.util.Set<String> rootCommentIds = post.getComments().stream()
+                    .filter(c -> c.getParentCommentId() == null)
+                    .map(Post.Comment::getId)
+                    .collect(Collectors.toSet());
+
+            java.util.List<Post.Comment> validComments = post.getComments().stream()
+                    .filter(c -> c.getParentCommentId() == null || rootCommentIds.contains(c.getParentCommentId()))
+                    .collect(Collectors.toList());
+
+            if (validComments.size() < post.getComments().size()) {
+                post.setComments(validComments);
+            }
+
             post.getComments().forEach(comment -> {
+                // Dynamically update comment author info using comment userId!
+                if (comment.getUserId() != null) {
+                    userProfileRepository.findByUserId(comment.getUserId()).ifPresentOrElse(
+                        profile -> {
+                            if (profile.getFullName() != null && !profile.getFullName().isBlank()) {
+                                comment.setAuthorName(profile.getFullName());
+                            }
+                            if (profile.getUsername() != null && !profile.getUsername().isBlank()) {
+                                comment.setAuthorUsername(profile.getUsername());
+                            }
+                            comment.setAuthorAvatar(profile.getProfilePhotoUrl());
+                            if (profile.getHeadline() != null && !profile.getHeadline().isBlank()) {
+                                comment.setAuthorHeadline(profile.getHeadline());
+                            }
+                        },
+                        () -> {
+                            userRepository.findById(comment.getUserId()).ifPresent(user -> {
+                                if (user.getName() != null && !user.getName().isBlank()) {
+                                    comment.setAuthorName(user.getName());
+                                }
+                                if (user.getUsername() != null && !user.getUsername().isBlank()) {
+                                    comment.setAuthorUsername(user.getUsername());
+                                }
+                            });
+                        }
+                    );
+                }
+                // Dynamically update replyTo user info using comment replyToUserId!
+                if (comment.getReplyToUserId() != null) {
+                    userProfileRepository.findByUserId(comment.getReplyToUserId()).ifPresentOrElse(
+                        profile -> {
+                            if (profile.getUsername() != null && !profile.getUsername().isBlank()) {
+                                comment.setReplyToUserName(profile.getUsername());
+                            }
+                        },
+                        () -> {
+                            userRepository.findById(comment.getReplyToUserId()).ifPresent(user -> {
+                                if (user.getUsername() != null && !user.getUsername().isBlank()) {
+                                    comment.setReplyToUserName(user.getUsername());
+                                }
+                            });
+                        }
+                    );
+                }
                 comment.setAuthorAvatar(hydrateUrl(comment.getAuthorAvatar()));
             });
         }
@@ -217,10 +308,8 @@ public class PostService {
     public Post getPost(String id) {
         Post post = postRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Post not found"));
-        post.setViewsCount(post.getViewsCount() + 1);
-        Post saved = postRepository.save(post);
-        hydratePostUrls(saved);
-        return saved;
+        hydratePostUrls(post);
+        return post;
     }
 
     public Post updatePost(String postId, String userId, String content, String linkUrl) {
@@ -296,6 +385,9 @@ public class PostService {
 
         Post saved = postRepository.save(post);
         hydratePostUrls(saved);
+
+        // Broadcast real-time count update to all connected clients
+        broadcastPostUpdate(saved);
 
         // Trigger notifications inside a try-catch block to ensure comment creation never fails
         try {
@@ -387,10 +479,72 @@ public class PostService {
             throw new SecurityException("Unauthorized comment delete attempt");
         }
 
-        post.getComments().remove(targetComment);
+        // Remove the target comment AND any child replies referencing it
+        post.getComments().removeIf(c ->
+            c.getId().equals(commentId) || commentId.equals(c.getParentCommentId())
+        );
         Post saved = postRepository.save(post);
         hydratePostUrls(saved);
+
+        // Broadcast real-time count update to all connected clients
+        broadcastPostUpdate(saved);
+
         return saved;
+    }
+
+    public Post toggleCommentLike(String postId, String commentId, String userId) {
+        Post post = postRepository.findById(postId)
+                .orElseThrow(() -> new IllegalArgumentException("Post not found"));
+
+        if (post.getComments() == null) {
+            throw new IllegalArgumentException("Comment not found");
+        }
+
+        Post.Comment comment = post.getComments().stream()
+                .filter(c -> c.getId().equals(commentId))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("Comment not found"));
+
+        if (comment.getLikedUserIds() == null) {
+            comment.setLikedUserIds(new java.util.HashSet<>());
+        }
+
+        if (comment.getLikedUserIds().contains(userId)) {
+            comment.getLikedUserIds().remove(userId);
+            log.info("User {} unliked comment {} on post {}", userId, commentId, postId);
+        } else {
+            comment.getLikedUserIds().add(userId);
+            log.info("User {} liked comment {} on post {}", userId, commentId, postId);
+        }
+
+        Post saved = postRepository.save(post);
+        hydratePostUrls(saved);
+        broadcastPostUpdate(saved);
+        return saved;
+    }
+
+    /**
+     * Broadcasts a lightweight POST_UPDATE event via WebSocket to all connected clients.
+     * Contains only the essential data needed to update counts in the UI.
+     */
+    private void broadcastPostUpdate(Post post) {
+        try {
+            java.util.Map<String, Object> updateData = new java.util.HashMap<>();
+            updateData.put("postId", post.getId());
+            updateData.put("likesCount", post.getLikesCount());
+            updateData.put("commentsCount", post.getComments() != null ? post.getComments().size() : 0);
+            updateData.put("likedUserIds", post.getLikedUserIds() != null ? post.getLikedUserIds() : new ArrayList<>());
+            updateData.put("reactions", post.getReactions() != null ? post.getReactions() : new java.util.HashMap<>());
+
+            webSocketAppHandler.broadcastNotification(
+                    "POST_UPDATE",
+                    "Post Updated",
+                    "Post counts updated",
+                    updateData
+            );
+        } catch (Exception e) {
+            log.error("Failed to broadcast post update for post {}: {}", post.getId(), e.getMessage());
+        }
     }
 
     public Post recordPostView(String postId, String viewerUserId) {
@@ -403,8 +557,11 @@ public class PostService {
             if (post.getViewedUserIds() == null) {
                 post.setViewedUserIds(new HashSet<>());
             }
-            post.getViewedUserIds().add(viewerUserId);
-            post.setViewsCount(post.getViewedUserIds().size());
+            if (!post.getViewedUserIds().contains(viewerUserId)) {
+                post.getViewedUserIds().add(viewerUserId);
+                int currentViews = post.getViewsCount();
+                post.setViewsCount(Math.max(currentViews + 1, post.getViewedUserIds().size()));
+            }
         }
         
         Post saved = postRepository.save(post);
@@ -443,6 +600,7 @@ public class PostService {
         }
         
         for (Post post : userPosts) {
+            hydratePostUrls(post);
             int pViews = post.getViewsCount();
             int pLikes = post.getLikesCount();
             int pComments = post.getComments() != null ? post.getComments().size() : 0;
@@ -525,4 +683,37 @@ public class PostService {
                 .headline(p.getHeadline() != null && !p.getHeadline().trim().isEmpty() ? p.getHeadline() : "Zenith Member")
                 .build();
     }
+
+    @org.springframework.context.event.EventListener(org.springframework.boot.context.event.ApplicationReadyEvent.class)
+    public void cleanupOrphanedComments() {
+        log.info("Starting cleanup of orphaned comments...");
+        try {
+            List<Post> allPosts = postRepository.findAll();
+            int totalCleaned = 0;
+            for (Post post : allPosts) {
+                if (post.getComments() != null && !post.getComments().isEmpty()) {
+                    java.util.Set<String> rootCommentIds = post.getComments().stream()
+                            .filter(c -> c.getParentCommentId() == null)
+                            .map(Post.Comment::getId)
+                            .collect(Collectors.toSet());
+
+                    java.util.List<Post.Comment> validComments = post.getComments().stream()
+                            .filter(c -> c.getParentCommentId() == null || rootCommentIds.contains(c.getParentCommentId()))
+                            .collect(Collectors.toList());
+
+                    if (validComments.size() < post.getComments().size()) {
+                        int removedCount = post.getComments().size() - validComments.size();
+                        post.setComments(validComments);
+                        postRepository.save(post);
+                        totalCleaned += removedCount;
+                        log.info("Cleaned {} orphaned comments from post {}", removedCount, post.getId());
+                    }
+                }
+            }
+            log.info("Cleanup of orphaned comments finished. Total cleaned: {}", totalCleaned);
+        } catch (Exception e) {
+            log.error("Failed to run orphaned comments cleanup: {}", e.getMessage(), e);
+        }
+    }
 }
+

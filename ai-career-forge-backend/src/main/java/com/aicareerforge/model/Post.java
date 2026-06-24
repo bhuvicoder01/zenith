@@ -75,5 +75,7 @@ public class Post {
         private String replyToUserName;
         @Builder.Default
         private List<String> mentionedUserIds = new ArrayList<>();
+        @Builder.Default
+        private java.util.Set<String> likedUserIds = new java.util.HashSet<>();
     }
 }

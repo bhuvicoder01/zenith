@@ -58,7 +58,7 @@ interface PublicProfile {
 }
 
 export default function PublicProfileDetailPage() {
-  const { userId } = useParams();
+  const { username } = useParams();
   const [profile, setProfile] = useState<PublicProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -72,10 +72,10 @@ export default function PublicProfileDetailPage() {
 
   useEffect(() => {
     const fetchConnectionStatus = async () => {
-      if (!isAuthenticated || !user?.id || !userId || user.id === userId) return;
+      if (!isAuthenticated || !user?.id || !profile?.userId || user.id === profile.userId) return;
       setConnLoading(true);
       try {
-        const response = await api.get(`/connections/status/${userId}`);
+        const response = await api.get(`/connections/status/${profile.userId}`);
         setConnStatus(response.data.status);
         setConnId(response.data.connectionId);
       } catch (err) {
@@ -86,13 +86,13 @@ export default function PublicProfileDetailPage() {
     };
 
     fetchConnectionStatus();
-  }, [userId, isAuthenticated, user?.id]);
+  }, [profile?.userId, isAuthenticated, user?.id]);
 
   const handleConnect = async () => {
-    if (!isAuthenticated) return;
+    if (!isAuthenticated || !profile?.userId) return;
     setConnLoading(true);
     try {
-      const response = await api.post(`/connections/request/${userId}`);
+      const response = await api.post(`/connections/request/${profile.userId}`);
       setConnStatus("PENDING_SENT");
       setConnId(response.data.id);
       toast.success("Connection request sent!");
@@ -156,7 +156,7 @@ export default function PublicProfileDetailPage() {
     setMounted(true);
     const fetchProfile = async () => {
       try {
-        const response = await axios.get(`${BACKEND_URL}/profile/public/${userId}`);
+        const response = await axios.get(`${BACKEND_URL}/profile/public/${username}`);
         setProfile(response.data);
       } catch (err: any) {
         console.error("Failed to fetch public profile details:", err);
@@ -169,10 +169,10 @@ export default function PublicProfileDetailPage() {
         setLoading(false);
       }
     };
-    if (userId) {
+    if (username) {
       fetchProfile();
     }
-  }, [userId]);
+  }, [username]);
 
   // Helper to proxy or return image urls
   const getImageUrl = (url: string) => {
@@ -234,13 +234,6 @@ export default function PublicProfileDetailPage() {
 
       {/* Main Profile Cover & Card */}
       <div className="max-w-5xl mx-auto px-6 pt-12 space-y-8">
-        {/* <Link 
-          href="/public/profiles" 
-          className="inline-flex items-center gap-2 text-xs font-black uppercase tracking-widest text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <ArrowLeft className="w-4 h-4" /> Back to Search
-        </Link> */}
-
         {/* Profile Card Container */}
         <div className="bg-card border border-border rounded-[2.5rem] overflow-hidden shadow-xl">
           {/* Cover Banner */}
@@ -278,9 +271,9 @@ export default function PublicProfileDetailPage() {
               </div>
               {/* Connection Buttons */}
               <div className="flex items-center gap-3">
-                {isAuthenticated && user?.id !== userId && (
+                {isAuthenticated && user?.id !== profile.userId && (
                   <Link 
-                    href={`/dashboard/messages?userId=${userId}`}
+                    href={`/dashboard/messages?userId=${profile.userId}`}
                     className="px-6 py-3.5 bg-secondary hover:bg-secondary/80 text-foreground border border-border rounded-full text-xs font-black uppercase tracking-widest transition-all text-center flex items-center gap-2"
                   >
                     <MessageSquare className="w-4 h-4" />
@@ -294,7 +287,7 @@ export default function PublicProfileDetailPage() {
                   >
                     Connect on Zenith
                   </Link>
-                ) : user?.id === userId ? (
+                ) : user?.id === profile.userId ? (
                   <Link 
                     href="/dashboard/profile"
                     className="px-6 py-3.5 bg-secondary text-secondary-foreground border border-border rounded-full text-xs font-black uppercase tracking-widest hover:bg-secondary/80 transition-all text-center"
