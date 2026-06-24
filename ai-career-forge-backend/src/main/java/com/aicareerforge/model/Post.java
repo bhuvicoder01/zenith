@@ -37,6 +37,7 @@ public class Post {
     private List<String> mediaUrls = new ArrayList<>();
 
     private String pdfUrl;
+    private String videoUrl;
     private String linkUrl;
 
     @Indexed

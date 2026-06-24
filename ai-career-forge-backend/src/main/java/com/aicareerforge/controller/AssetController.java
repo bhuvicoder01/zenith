@@ -102,6 +102,14 @@ public class AssetController {
         log.debug("Serving asset from S3: {}", key);
         
         try {
+            // If it is a video asset, issue a 302 Found redirect to S3 presigned URL to support range queries/streaming and bypass memory allocation
+            if (key.contains("/videos/") || key.endsWith(".mp4") || key.endsWith(".webm") || key.endsWith(".ogg") || key.endsWith(".mov")) {
+                String presignedUrl = s3Service.getPresignedUrl(key);
+                return ResponseEntity.status(HttpStatus.FOUND)
+                        .location(java.net.URI.create(presignedUrl))
+                        .build();
+            }
+
             byte[] content = s3Service.downloadFile(key);
             String contentType = "application/octet-stream";
             

@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { 
   Heart, Trash2, Link2, FileText, Send, Loader2, 
   ExternalLink, Sparkles, AlertCircle, File, ArrowLeft, MessageSquare,
-  Edit2, Eye, CornerDownRight, BarChart3, Image as ImageIcon
+  Edit2, Eye, CornerDownRight, BarChart3, Image as ImageIcon, Video
 } from "lucide-react";
 import useAuthStore from "@/store/useAuthStore";
 import PublicNavbar from "@/components/PublicNavbar";
@@ -42,6 +42,7 @@ interface Post {
   content?: string;
   mediaUrls?: string[];
   pdfUrl?: string;
+  videoUrl?: string;
   linkUrl?: string;
   createdAt: string;
   likesCount: number;
@@ -599,6 +600,16 @@ export default function PostDetailsPage() {
                     </div>
                   )}
 
+                  {/* Video attachment */}
+                  {post.videoUrl && (
+                    <div className="w-full overflow-hidden rounded-2xl border border-border/60 bg-black relative">
+                      <AutopauseVideo 
+                        src={post.videoUrl} 
+                        className="w-full h-auto max-h-[500px] object-contain"
+                      />
+                    </div>
+                  )}
+
                   {/* PDF attachment */}
                   {post.pdfUrl && (
                     <div className="flex items-center justify-between p-4 bg-secondary/20 border border-border rounded-2xl">
@@ -1090,5 +1101,50 @@ export default function PostDetailsPage() {
       )}
       </div>
     </div>
+  );
+}
+
+// Autopause & Autoplay Video component — plays muted when scrolled into view, pauses when out
+function AutopauseVideo({ src, className }: { src: string; className?: string }) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting && entry.intersectionRatio >= 0.6) {
+            // Autoplay muted when scrolled into view
+            video.muted = true;
+            video.play().catch(() => {});
+          } else if (!entry.isIntersecting || entry.intersectionRatio < 0.4) {
+            video.pause();
+          }
+        });
+      },
+      {
+        threshold: [0, 0.2, 0.4, 0.6, 0.8, 1.0],
+      }
+    );
+
+    observer.observe(video);
+
+    return () => {
+      observer.unobserve(video);
+    };
+  }, []);
+
+  return (
+    <video
+      ref={videoRef}
+      src={src}
+      controls
+      muted
+      playsInline
+      className={className}
+      preload="metadata"
+    />
   );
 }

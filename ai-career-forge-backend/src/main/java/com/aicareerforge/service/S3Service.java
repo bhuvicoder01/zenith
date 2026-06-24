@@ -45,6 +45,21 @@ public class S3Service {
         }
     }
 
+    public String uploadFile(java.io.InputStream inputStream, String originalFilename, String userId, String type) {
+        // Clean filename: remove special characters and spaces
+        String cleanName = originalFilename != null ? originalFilename.replaceAll("[^a-zA-Z0-9.-]", "_") : "unnamed";
+        String key = String.format("users/%s/%s/%d-%s", userId, type, System.currentTimeMillis(), cleanName);
+        
+        try {
+            // Stream directly using S3Template
+            s3Template.upload(bucketName, key, inputStream);
+            return key;
+        } catch (Exception e) {
+            log.error("S3 Upload Failed for key: {} - Error: {}", key, e.getMessage(), e);
+            throw new RuntimeException("S3 Storage Error: " + e.getMessage());
+        }
+    }
+
     public byte[] downloadFile(String key) {
         log.info("Downloading file from S3: {}", key);
         try {

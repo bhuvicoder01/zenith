@@ -12,6 +12,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -40,8 +41,8 @@ public class PostService {
         return posts;
     }
 
-    public Post createPost(String userId, String content, String linkUrl, byte[] mediaBytes, String mediaFilename, byte[] pdfBytes, String pdfFilename) {
-        if ((content == null || content.trim().isEmpty()) && mediaBytes == null && pdfBytes == null && (linkUrl == null || linkUrl.trim().isEmpty())) {
+    public Post createPost(String userId, String content, String linkUrl, byte[] mediaBytes, String mediaFilename, byte[] pdfBytes, String pdfFilename, MultipartFile videoFile) {
+        if ((content == null || content.trim().isEmpty()) && mediaBytes == null && pdfBytes == null && (linkUrl == null || linkUrl.trim().isEmpty()) && (videoFile == null || videoFile.isEmpty())) {
             throw new IllegalArgumentException("Post cannot be completely empty");
         }
 
@@ -104,6 +105,18 @@ public class PostService {
                 log.info("Uploaded post PDF for user {}: {}", userId, pdfUrl);
             } catch (Exception e) {
                 log.error("Failed to upload post PDF for user {}: {}", userId, e.getMessage());
+            }
+        }
+
+        // Upload Video if present (Stream upload to prevent OOM)
+        if (videoFile != null && !videoFile.isEmpty()) {
+            try {
+                String videoKey = s3Service.uploadFile(videoFile.getInputStream(), videoFile.getOriginalFilename(), userId, "posts/videos");
+                String videoUrl = s3Service.getPermanentUrl(videoKey);
+                postBuilder.videoUrl(videoUrl);
+                log.info("Uploaded post video for user {}: {}", userId, videoUrl);
+            } catch (Exception e) {
+                log.error("Failed to upload post video for user {}: {}", userId, e.getMessage());
             }
         }
 
@@ -188,6 +201,14 @@ public class PostService {
         // Delete PDF from S3
         if (post.getPdfUrl() != null) {
             String key = extractS3Key(post.getPdfUrl());
+            if (key != null) {
+                s3Service.deleteFile(key);
+            }
+        }
+
+        // Delete Video from S3
+        if (post.getVideoUrl() != null) {
+            String key = extractS3Key(post.getVideoUrl());
             if (key != null) {
                 s3Service.deleteFile(key);
             }

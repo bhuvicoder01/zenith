@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { 
   Heart, Trash2, Link2, FileText, Image as ImageIcon, Send, Loader2, Plus, 
   ExternalLink, Sparkles, MessageSquare, AlertCircle, File, LogOut, LayoutDashboard, Globe, Share2,
-  Edit2, Eye, CornerDownRight
+  Edit2, Eye, CornerDownRight, Video, Play
 } from "lucide-react";
 import useAuthStore from "@/store/useAuthStore";
 import PublicNavbar from "@/components/PublicNavbar";
@@ -26,6 +26,7 @@ interface Post {
   content?: string;
   mediaUrls?: string[];
   pdfUrl?: string;
+  videoUrl?: string;
   linkUrl?: string;
   createdAt: string;
   likesCount: number;
@@ -51,11 +52,14 @@ export default function HomeFeed() {
   const [linkUrl, setLinkUrl] = useState("");
   const [mediaFile, setMediaFile] = useState<File | null>(null);
   const [pdfFile, setPdfFile] = useState<File | null>(null);
+  const [videoFile, setVideoFile] = useState<File | null>(null);
   const [showLinkInput, setShowLinkInput] = useState(false);
   const [publishing, setPublishing] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
 
   // Previews
   const [mediaPreview, setMediaPreview] = useState<string | null>(null);
+  const [videoPreview, setVideoPreview] = useState<string | null>(null);
 
   // Sharing states
   const [connections, setConnections] = useState<any[]>([]);
@@ -163,6 +167,29 @@ export default function HomeFeed() {
     }
   };
 
+  const handleVideoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      const MAX_VIDEO_SIZE = 1024 * 1024 * 1024; // 1 GB
+      if (!file.type.startsWith("video/")) {
+        toast.error("Only video files are supported (MP4, WebM, MOV, etc.)");
+        return;
+      }
+      if (file.size > MAX_VIDEO_SIZE) {
+        toast.error("Video must be under 1 GB");
+        return;
+      }
+      // Clear image attachment if a video is selected (mutually exclusive)
+      if (mediaFile) {
+        setMediaFile(null);
+        setMediaPreview(null);
+      }
+      setVideoFile(file);
+      setVideoPreview(URL.createObjectURL(file));
+      toast.success(`Video selected: ${(file.size / (1024 * 1024)).toFixed(1)} MB`);
+    }
+  };
+
   const handlePdfChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
@@ -176,7 +203,7 @@ export default function HomeFeed() {
 
   const handleCreatePost = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!content.trim() && !mediaFile && !pdfFile && !linkUrl.trim()) {
+    if (!content.trim() && !mediaFile && !videoFile && !pdfFile && !linkUrl.trim()) {
       toast.error("Post cannot be completely empty");
       return;
     }
@@ -190,6 +217,9 @@ export default function HomeFeed() {
     if (mediaFile) {
       formData.append("media", mediaFile);
     }
+    if (videoFile) {
+      formData.append("video", videoFile);
+    }
     if (pdfFile) {
       formData.append("pdf", pdfFile);
     }
@@ -198,7 +228,14 @@ export default function HomeFeed() {
       const res = await api.post("/posts", formData, {
         headers: {
           "Content-Type": "multipart/form-data"
-        }
+        },
+        onUploadProgress: (progressEvent: any) => {
+          if (videoFile && progressEvent.total) {
+            const pct = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+            setUploadProgress(pct);
+          }
+        },
+        timeout: 600000 // 10 min timeout for large videos
       });
       toast.success("Post broadcasted successfully");
       
@@ -207,8 +244,11 @@ export default function HomeFeed() {
       setLinkUrl("");
       setMediaFile(null);
       setPdfFile(null);
+      setVideoFile(null);
       setMediaPreview(null);
+      setVideoPreview(null);
       setShowLinkInput(false);
+      setUploadProgress(0);
 
       // Prepend new post to the top of feed
       setPosts(prev => [res.data, ...prev]);
@@ -741,7 +781,7 @@ export default function HomeFeed() {
                 </div>
 
                 {/* Previews drawer */}
-                {(mediaPreview || pdfFile || showLinkInput) && (
+                {(mediaPreview || videoPreview || pdfFile || showLinkInput) && (
                   <div className="pt-4 border-t border-border space-y-3">
                     {mediaPreview && (
                       <div className="relative w-full max-h-60 rounded-2xl overflow-hidden border border-border">
@@ -753,6 +793,30 @@ export default function HomeFeed() {
                         >
                           <X className="w-4 h-4" />
                         </button>
+                      </div>
+                    )}
+
+                    {videoPreview && (
+                      <div className="relative w-full rounded-2xl overflow-hidden border border-border bg-black">
+                        <video 
+                          src={videoPreview}
+                          controls
+                          className="w-full max-h-64 object-contain"
+                        />
+                        <button 
+                          type="button" 
+                          onClick={() => { setVideoFile(null); setVideoPreview(null); }}
+                          className="absolute top-2 right-2 p-1.5 bg-black/60 hover:bg-black/80 text-white rounded-full transition-colors z-10"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                        <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent px-4 py-2 pointer-events-none">
+                          <div className="flex items-center gap-2 text-[10px] text-white/90 font-bold">
+                            <Video className="w-3.5 h-3.5" />
+                            <span>{videoFile?.name}</span>
+                            <span className="ml-auto">{videoFile ? `${(videoFile.size / (1024 * 1024)).toFixed(1)} MB` : ''}</span>
+                          </div>
+                        </div>
                       </div>
                     )}
 
@@ -803,7 +867,7 @@ export default function HomeFeed() {
                 <div className="flex items-center justify-between pt-3 border-t border-border/60">
                   <div className="flex gap-1.5">
                     {/* Add Image */}
-                    <label className="p-2.5 hover:bg-secondary text-muted-foreground hover:text-foreground rounded-full cursor-pointer transition-colors relative flex items-center justify-center">
+                    <label className={`p-2.5 rounded-full cursor-pointer transition-colors relative flex items-center justify-center ${mediaFile ? 'bg-primary/10 text-primary' : 'hover:bg-secondary text-muted-foreground hover:text-foreground'}`}>
                       <input 
                         type="file" 
                         accept="image/*" 
@@ -811,6 +875,17 @@ export default function HomeFeed() {
                         className="hidden" 
                       />
                       <ImageIcon className="w-4.5 h-4.5" />
+                    </label>
+
+                    {/* Add Video */}
+                    <label className={`p-2.5 rounded-full cursor-pointer transition-colors relative flex items-center justify-center ${videoFile ? 'bg-primary/10 text-primary' : 'hover:bg-secondary text-muted-foreground hover:text-foreground'}`}>
+                      <input 
+                        type="file" 
+                        accept="video/*" 
+                        onChange={handleVideoChange} 
+                        className="hidden" 
+                      />
+                      <Video className="w-4.5 h-4.5" />
                     </label>
 
                     {/* Add PDF */}
@@ -834,23 +909,38 @@ export default function HomeFeed() {
                     </button>
                   </div>
 
-                  <button
-                    type="submit"
-                    disabled={publishing || (!content.trim() && !mediaFile && !pdfFile && !linkUrl.trim())}
-                    className="px-5 py-2.5 bg-foreground text-background text-xs font-black uppercase tracking-wider rounded-full flex items-center gap-2 hover:opacity-90 disabled:opacity-50 disabled:scale-100 transition-all shadow-sm"
-                  >
-                    {publishing ? (
-                      <>
-                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        Broadcasting...
-                      </>
-                    ) : (
-                      <>
-                        <Send className="w-3.5 h-3.5" />
-                        Broadcast
-                      </>
+                  <div className="flex items-center gap-3">
+                    {/* Upload progress */}
+                    {publishing && videoFile && uploadProgress > 0 && (
+                      <div className="flex items-center gap-2 text-[10px] font-bold text-muted-foreground">
+                        <div className="w-24 h-1.5 bg-secondary rounded-full overflow-hidden">
+                          <div 
+                            className="h-full bg-primary rounded-full transition-all duration-300"
+                            style={{ width: `${uploadProgress}%` }}
+                          />
+                        </div>
+                        <span>{uploadProgress}%</span>
+                      </div>
                     )}
-                  </button>
+
+                    <button
+                      type="submit"
+                      disabled={publishing || (!content.trim() && !mediaFile && !videoFile && !pdfFile && !linkUrl.trim())}
+                      className="px-5 py-2.5 bg-foreground text-background text-xs font-black uppercase tracking-wider rounded-full flex items-center gap-2 hover:opacity-90 disabled:opacity-50 disabled:scale-100 transition-all shadow-sm"
+                    >
+                      {publishing ? (
+                        <>
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          {videoFile ? `Uploading...` : 'Broadcasting...'}
+                        </>
+                      ) : (
+                        <>
+                          <Send className="w-3.5 h-3.5" />
+                          Broadcast
+                        </>
+                      )}
+                    </button>
+                  </div>
                 </div>
               </form>
             )}
@@ -966,6 +1056,16 @@ export default function HomeFeed() {
                                 src={post.mediaUrls[0]} 
                                 alt="Post Attachment" 
                                 className="w-full h-auto max-h-96 object-cover"
+                              />
+                            </div>
+                          )}
+
+                          {/* Embedded Video Attachment */}
+                          {post.videoUrl && (
+                            <div className="w-full overflow-hidden rounded-2xl border border-border/60 bg-black relative">
+                              <AutopauseVideo 
+                                src={post.videoUrl} 
+                                className="w-full h-auto max-h-96 object-contain"
                               />
                             </div>
                           )}
@@ -1622,5 +1722,50 @@ function X({ className }: { className?: string }) {
     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className={className}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
     </svg>
+  );
+}
+
+// Autopause & Autoplay Video component — plays muted when scrolled into view, pauses when out
+function AutopauseVideo({ src, className }: { src: string; className?: string }) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting && entry.intersectionRatio >= 0.6) {
+            // Autoplay muted when scrolled into view
+            video.muted = true;
+            video.play().catch(() => {});
+          } else if (!entry.isIntersecting || entry.intersectionRatio < 0.4) {
+            video.pause();
+          }
+        });
+      },
+      {
+        threshold: [0, 0.2, 0.4, 0.6, 0.8, 1.0],
+      }
+    );
+
+    observer.observe(video);
+
+    return () => {
+      observer.unobserve(video);
+    };
+  }, []);
+
+  return (
+    <video
+      ref={videoRef}
+      src={src}
+      controls
+      muted
+      playsInline
+      className={className}
+      preload="metadata"
+    />
   );
 }

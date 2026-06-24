@@ -40,7 +40,8 @@ public class PostController {
             @RequestParam(value = "content", required = false) String content,
             @RequestParam(value = "linkUrl", required = false) String linkUrl,
             @RequestParam(value = "media", required = false) MultipartFile mediaFile,
-            @RequestParam(value = "pdf", required = false) MultipartFile pdfFile) throws IOException {
+            @RequestParam(value = "pdf", required = false) MultipartFile pdfFile,
+            @RequestParam(value = "video", required = false) MultipartFile videoFile) throws IOException {
 
         byte[] mediaBytes = (mediaFile != null && !mediaFile.isEmpty()) ? mediaFile.getBytes() : null;
         String mediaFilename = (mediaFile != null && !mediaFile.isEmpty()) ? mediaFile.getOriginalFilename() : null;
@@ -48,7 +49,7 @@ public class PostController {
         byte[] pdfBytes = (pdfFile != null && !pdfFile.isEmpty()) ? pdfFile.getBytes() : null;
         String pdfFilename = (pdfFile != null && !pdfFile.isEmpty()) ? pdfFile.getOriginalFilename() : null;
 
-        Post post = postService.createPost(user.getId(), content, linkUrl, mediaBytes, mediaFilename, pdfBytes, pdfFilename);
+        Post post = postService.createPost(user.getId(), content, linkUrl, mediaBytes, mediaFilename, pdfBytes, pdfFilename, videoFile);
         return ResponseEntity.ok(post);
     }
 
