@@ -7,7 +7,7 @@ import { useTheme } from "next-themes";
 import { Menu, X, Briefcase, Users, LayoutDashboard, LogOut, Search, Loader2 } from "lucide-react";
 import useAuthStore from "@/store/useAuthStore";
 import Image from "next/image";
-import api from "@/lib/api";
+import api, { BACKEND_URL } from "@/lib/api";
 
 export default function PublicNavbar() {
   const pathname = usePathname();
@@ -16,6 +16,15 @@ export default function PublicNavbar() {
   const { isAuthenticated, logout } = useAuthStore();
   const [mounted, setMounted] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
+
+  const getPhotoUrl = (url?: string) => {
+    if (!url) return "";
+    if (url.startsWith("http") || url.startsWith("data:")) {
+      return url;
+    }
+    const cleanUrl = url.startsWith("/") ? url.slice(1) : url;
+    return `${BACKEND_URL}/public/assets/${cleanUrl}`;
+  };
 
   // Mixed Search States
   const [searchQuery, setSearchQuery] = useState("");
@@ -208,7 +217,7 @@ export default function PublicNavbar() {
                         >
                           <div className="w-7 h-7 rounded-full bg-secondary flex-shrink-0 flex items-center justify-center text-[10px] font-black uppercase border border-border/80 overflow-hidden">
                             {profile.profilePhotoUrl ? (
-                              <img src={profile.profilePhotoUrl} alt={profile.fullName} className="w-full h-full object-cover" />
+                              <img src={getPhotoUrl(profile.profilePhotoUrl)} alt={profile.fullName} className="w-full h-full object-cover" />
                             ) : (
                               profile.fullName.split(" ").map((n: string) => n[0]).join("").toUpperCase().slice(0, 2)
                             )}
@@ -368,7 +377,7 @@ export default function PublicNavbar() {
                             >
                               <div className="w-7 h-7 rounded-full bg-secondary flex-shrink-0 flex items-center justify-center text-[10px] font-black uppercase border border-border/80 overflow-hidden">
                                 {profile.profilePhotoUrl ? (
-                                  <img src={profile.profilePhotoUrl} alt={profile.fullName} className="w-full h-full object-cover" />
+                                  <img src={getPhotoUrl(profile.profilePhotoUrl)} alt={profile.fullName} className="w-full h-full object-cover" />
                                 ) : (
                                   profile.fullName.split(" ").map((n: string) => n[0]).join("").toUpperCase().slice(0, 2)
                                 )}

@@ -5,10 +5,10 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { 
   Heart, Trash2, Link2, FileText, Image as ImageIcon, Loader2, 
-  ExternalLink, MessageSquare, Edit2, Eye, Share2, CornerDownRight, Send, Pause, Play, Volume2, VolumeX, Minimize, Maximize
+  ExternalLink, MessageSquare, Edit2, Eye, Share2, CornerDownRight, Send, Pause, Play, Volume2, VolumeX, Minimize, Maximize, X
 } from "lucide-react";
 import useAuthStore from "@/store/useAuthStore";
-import api from "@/lib/api";
+import api, { BACKEND_URL } from "@/lib/api";
 import { toast } from "sonner";
 import MentionInput from "./MentionInput";
 import GifStickerPicker from "./GifStickerPicker";
@@ -97,6 +97,11 @@ export default function PostCard({
   const [submittingReply, setSubmittingReply] = useState(false);
   const [showReplyGifPicker, setShowReplyGifPicker] = useState(false);
 
+  // Reacting Users Modal States
+  const [showReactingUsersModal, setShowReactingUsersModal] = useState(false);
+  const [reactingUsers, setReactingUsers] = useState<any[]>([]);
+  const [loadingReactingUsers, setLoadingReactingUsers] = useState(false);
+
   // Sync state when props change (in case of real-time WebSocket updates)
   useEffect(() => {
     setLikesCount(post.likesCount);
@@ -180,6 +185,39 @@ export default function PostCard({
       handleLikePost();
     }
     touchStartPosRef.current = null;
+  };
+
+  const handleOpenReactingUsers = async () => {
+    if (!isAuthenticated) {
+      toast.error("Please login to see who reacted", {
+        action: {
+          label: "Login",
+          onClick: () => router.push("/auth/login")
+        }
+      });
+      return;
+    }
+    
+    setShowReactingUsersModal(true);
+    setLoadingReactingUsers(true);
+    try {
+      const res = await api.get(`/posts/${post.id}/reacting-users`);
+      setReactingUsers(res.data);
+    } catch (err) {
+      console.error("Failed to fetch reacting users:", err);
+      toast.error("Could not load reactions details");
+    } finally {
+      setLoadingReactingUsers(false);
+    }
+  };
+
+  const getImageUrl = (url?: string) => {
+    if (!url) return "";
+    if (url.startsWith("http") || url.startsWith("data:")) {
+      return url;
+    }
+    const cleanUrl = url.startsWith("/") ? url.slice(1) : url;
+    return `${BACKEND_URL}/public/assets/${cleanUrl}`;
   };
 
   const isPostLiked = likedUserIds.includes(user?.id || "");
@@ -538,7 +576,7 @@ export default function PostCard({
         <Link href={`/public/profiles/${post.authorUsername || post.userId}`} className="flex items-center gap-3 hover:opacity-85 transition-opacity group">
           <div className="w-10 h-10 rounded-full bg-secondary flex-shrink-0 flex items-center justify-center font-black uppercase border border-border/80 relative overflow-hidden group-hover:border-primary/50 transition-colors">
             {post.authorAvatar ? (
-              <img src={post.authorAvatar} alt={post.authorName} className="w-full h-full object-cover" />
+              <img src={getImageUrl(post.authorAvatar)} alt={post.authorName} className="w-full h-full object-cover" />
             ) : (
               getInitials(post.authorName)
             )}
@@ -640,6 +678,7 @@ export default function PostCard({
                 src={post.mediaUrls[0]} 
                 alt="Post attachment" 
                 type="image"
+                containerClassName="w-full max-w-none rounded-none border-none bg-transparent shadow-none mt-0"
                 className="w-full h-auto max-h-[500px] object-cover transition-opacity duration-300 hover:opacity-95 cursor-zoom-in" 
               />
             </div>
@@ -741,13 +780,20 @@ export default function PostCard({
                     const uniqueReactions = Array.from(new Set(Object.values(reactions || {}))).slice(0, 3);
                     if (uniqueReactions.length > 0) {
                       return (
-                        <div className="flex -space-x-1 items-center mr-0.5">
+                        <span 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleOpenReactingUsers();
+                          }}
+                          className="flex -space-x-1 items-center mr-0.5 hover:scale-110 transition-transform cursor-pointer"
+                          title="View who reacted"
+                        >
                           {uniqueReactions.map((emoji, idx) => (
                             <span key={idx} className="text-xs select-none" style={{ zIndex: 10 - idx }}>
                               {emoji}
                             </span>
                           ))}
-                        </div>
+                        </span>
                       );
                     }
                     return null;
@@ -761,7 +807,18 @@ export default function PostCard({
                     return <Heart className={`w-4 h-4 transition-transform active:scale-125 ${isPostLiked ? "fill-rose-500 stroke-rose-500" : ""}`} />;
                   })()}
 
-                  <span>{likesCount}</span>
+                  <span 
+                    onClick={(e) => {
+                      if (likesCount > 0) {
+                        e.stopPropagation();
+                        handleOpenReactingUsers();
+                      }
+                    }}
+                    className={likesCount > 0 ? "hover:underline cursor-pointer px-0.5" : ""}
+                    title={likesCount > 0 ? "View who reacted" : ""}
+                  >
+                    {likesCount}
+                  </span>
                 </button>
               </div>
 
@@ -804,7 +861,18 @@ export default function PostCard({
             {/* Share */}
             {onShare && (
               <button
-                onClick={() => onShare(post)}
+                onClick={() => {
+                  if (!isAuthenticated) {
+                    toast.error("Please login to share broadcasts", {
+                      action: {
+                        label: "Login",
+                        onClick: () => router.push("/auth/login")
+                      }
+                    });
+                    return;
+                  }
+                  onShare(post);
+                }}
                 className="flex items-center gap-2 text-muted-foreground hover:bg-secondary hover:text-foreground font-bold px-3 py-1.5 rounded-full transition-all"
               >
                 <Share2 className="w-4 h-4" />
@@ -821,7 +889,7 @@ export default function PostCard({
                 <form onSubmit={handleAddComment} className="flex gap-3 items-center">
                   <div className="w-8 h-8 rounded-full bg-secondary flex-shrink-0 flex items-center justify-center font-bold uppercase text-foreground relative overflow-hidden border border-border">
                     {userAvatar ? (
-                      <img src={userAvatar} alt={user?.name || ""} className="w-full h-full object-cover" />
+                      <img src={getImageUrl(userAvatar)} alt={user?.name || ""} className="w-full h-full object-cover" />
                     ) : (
                       getInitials(user?.name || "")
                     )}
@@ -897,7 +965,7 @@ export default function PostCard({
                           <Link href={`/public/profiles/${comment.authorUsername || comment.userId}`} className="flex items-center gap-2 hover:opacity-85 transition-opacity">
                             <div className="w-7 h-7 rounded-full bg-secondary flex-shrink-0 flex items-center justify-center font-bold uppercase text-[9px] text-foreground border border-border overflow-hidden">
                               {comment.authorAvatar ? (
-                                <img src={comment.authorAvatar} alt={comment.authorName} className="w-full h-full object-cover" />
+                                <img src={getImageUrl(comment.authorAvatar)} alt={comment.authorName} className="w-full h-full object-cover" />
                               ) : (
                                 getInitials(comment.authorName)
                               )}
@@ -1025,7 +1093,7 @@ export default function PostCard({
                                     <Link href={`/public/profiles/${reply.authorUsername || reply.userId}`} className="flex items-center gap-2 hover:opacity-85 transition-opacity">
                                       <div className="w-6 h-6 rounded-full bg-secondary flex-shrink-0 flex items-center justify-center font-bold uppercase text-[8px] text-foreground border border-border overflow-hidden">
                                         {reply.authorAvatar ? (
-                                          <img src={reply.authorAvatar} alt={reply.authorName} className="w-full h-full object-cover" />
+                                          <img src={getImageUrl(reply.authorAvatar)} alt={reply.authorName} className="w-full h-full object-cover" />
                                         ) : (
                                           getInitials(reply.authorName)
                                         )}
@@ -1086,6 +1154,64 @@ export default function PostCard({
             </div>
           )}
         </>
+      )}
+
+      {/* REACTING USERS MODAL */}
+      {showReactingUsersModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-card border border-border rounded-[2rem] w-full max-w-sm p-6 space-y-4 shadow-2xl relative animate-in zoom-in-95 duration-200">
+            <div className="flex justify-between items-center pb-2 border-b border-border/40">
+              <h3 className="text-sm font-black uppercase tracking-widest text-foreground">Reactions</h3>
+              <button 
+                onClick={() => {
+                  setShowReactingUsersModal(false);
+                  setReactingUsers([]);
+                }}
+                className="p-1.5 bg-secondary hover:bg-secondary/80 text-foreground rounded-full transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="max-h-60 overflow-y-auto space-y-3 pr-1">
+              {loadingReactingUsers ? (
+                <div className="flex justify-center items-center py-6 gap-2 text-muted-foreground text-xs font-bold">
+                  <Loader2 className="w-4 h-4 animate-spin text-primary" />
+                  Loading details...
+                </div>
+              ) : reactingUsers.length > 0 ? (
+                reactingUsers.map((r) => (
+                  <div key={r.userId} className="flex justify-between items-center p-2 hover:bg-secondary/20 rounded-xl transition-all border border-transparent">
+                    <Link 
+                      href={`/public/profiles/${r.username || r.userId}`}
+                      onClick={() => setShowReactingUsersModal(false)}
+                      className="flex items-center gap-3 flex-1 min-w-0 animate-in fade-in duration-200"
+                    >
+                      <div className="w-9 h-9 rounded-full bg-secondary flex-shrink-0 flex items-center justify-center text-xs font-black uppercase border border-border relative">
+                        {r.profilePhotoUrl ? (
+                          <img src={getImageUrl(r.profilePhotoUrl)} alt={r.fullName} className="w-full h-full object-cover" />
+                        ) : (
+                          getInitials(r.fullName)
+                        )}
+                        <span className="absolute -bottom-1 -right-1 bg-background rounded-full w-5 h-5 flex items-center justify-center text-xs border border-border shadow-sm">
+                          {r.emoji}
+                        </span>
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-xs font-black uppercase tracking-tight text-foreground leading-none hover:underline">{r.fullName}</p>
+                        <p className="text-[9px] text-muted-foreground font-medium mt-1 leading-none truncate max-w-[160px]">{r.headline || "Zenith Candidate"}</p>
+                      </div>
+                    </Link>
+                  </div>
+                ))
+              ) : (
+                <div className="text-center py-6 text-xs text-muted-foreground font-semibold">
+                  No active reactions found.
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
       )}
     </article>
   );

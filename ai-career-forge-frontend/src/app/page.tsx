@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { 
@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 import useAuthStore from "@/store/useAuthStore";
 import PublicNavbar from "@/components/PublicNavbar";
-import api from "@/lib/api";
+import api, { BACKEND_URL } from "@/lib/api";
 import { toast } from "sonner";
 import MentionInput from "@/components/MentionInput";
 import GifStickerPicker from "@/components/GifStickerPicker";
@@ -21,6 +21,15 @@ export default function HomeFeed() {
   const { user, isAuthenticated } = useAuthStore();
   const router = useRouter();
   const [profile, setProfile] = useState<any>(null);
+
+  const getPhotoUrl = (url?: string) => {
+    if (!url) return "";
+    if (url.startsWith("http") || url.startsWith("data:")) {
+      return url;
+    }
+    const cleanUrl = url.startsWith("/") ? url.slice(1) : url;
+    return `${BACKEND_URL}/public/assets/${cleanUrl}`;
+  };
   
   // Feed states
   const [posts, setPosts] = useState<Post[]>([]);
@@ -48,14 +57,55 @@ export default function HomeFeed() {
   const [sharingPost, setSharingPost] = useState<Post | null>(null);
   const [searchConnQuery, setSearchConnQuery] = useState("");
   const [sentConnections, setSentConnections] = useState<Set<string>>(new Set());
+  const [sendingShareUserIds, setSendingShareUserIds] = useState<Set<string>>(new Set());
 
+  const fetchUserProfile = async () => {
+    try {
+      const res = await api.get("/profile");
+      setProfile(res.data);
+    } catch (err) {
+      console.error("Failed to load user profile:", err);
+    }
+  };
+
+  const fetchFeed = useCallback(async (pageNum: number, reset: boolean = false) => {
+    try {
+      setLoadingFeed(true);
+      const res = await api.get(`/posts?page=${pageNum}&size=15`);
+      const newPosts = res.data.content || [];
+      if (reset) {
+        setPosts(newPosts);
+      } else {
+        setPosts(prev => [...prev, ...newPosts]);
+      }
+      setPage(pageNum);
+      setHasMore(!res.data.last);
+    } catch (err) {
+      console.error("Failed to fetch posting feed:", err);
+      toast.error("Failed to load feed updates");
+    } finally {
+      setLoadingFeed(false);
+    }
+  }, []);
+
+  const observer = useRef<IntersectionObserver | null>(null);
+  const lastPostElementRef = useCallback((node: HTMLDivElement | null) => {
+    if (loadingFeed) return;
+    if (observer.current) observer.current.disconnect();
+    observer.current = new IntersectionObserver(entries => {
+      if (entries[0].isIntersecting && hasMore) {
+        fetchFeed(page + 1);
+      }
+    });
+    if (node) observer.current.observe(node);
+  }, [loadingFeed, hasMore, page, fetchFeed]);
 
   useEffect(() => {
     fetchFeed(0, true);
     if (isAuthenticated) {
       fetchUserProfile();
     }
-  }, [isAuthenticated]);
+  }, [isAuthenticated, fetchFeed]);
 
   // Real-time post count updates via WebSocket
   useEffect(() => {
@@ -85,34 +135,7 @@ export default function HomeFeed() {
     return () => window.removeEventListener('zenith-post-update', handlePostUpdate);
   }, []);
 
-  const fetchUserProfile = async () => {
-    try {
-      const res = await api.get("/profile");
-      setProfile(res.data);
-    } catch (err) {
-      console.error("Failed to load user profile:", err);
-    }
-  };
 
-  const fetchFeed = async (pageNum: number, reset: boolean = false) => {
-    try {
-      setLoadingFeed(true);
-      const res = await api.get(`/posts?page=${pageNum}&size=15`);
-      const newPosts = res.data.content || [];
-      if (reset) {
-        setPosts(newPosts);
-      } else {
-        setPosts(prev => [...prev, ...newPosts]);
-      }
-      setPage(pageNum);
-      setHasMore(!res.data.last);
-    } catch (err) {
-      console.error("Failed to fetch posting feed:", err);
-      toast.error("Failed to load feed updates");
-    } finally {
-      setLoadingFeed(false);
-    }
-  };
 
   const handleMediaChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -238,13 +261,19 @@ export default function HomeFeed() {
 
   const handleSendShare = async (connectionUserId: string) => {
     if (!sharingPost) return;
+    setSendingShareUserIds(prev => {
+      const next = new Set(prev);
+      next.add(connectionUserId);
+      return next;
+    });
     try {
       const payload = JSON.stringify({
         type: "POST_SHARE",
         postId: sharingPost.id,
         postAuthor: sharingPost.authorName,
         postText: sharingPost.content || "",
-        postImage: (sharingPost.mediaUrls && sharingPost.mediaUrls.length > 0) ? sharingPost.mediaUrls[0] : null
+        postImage: (sharingPost.mediaUrls && sharingPost.mediaUrls.length > 0) ? sharingPost.mediaUrls[0] : null,
+        postVideoUrl: sharingPost.videoUrl || null
       });
 
       await api.post("/messages/send", {
@@ -261,6 +290,12 @@ export default function HomeFeed() {
     } catch (err) {
       console.error("Failed to share post:", err);
       toast.error("Failed to share post");
+    } finally {
+      setSendingShareUserIds(prev => {
+        const next = new Set(prev);
+        next.delete(connectionUserId);
+        return next;
+      });
     }
   };
 
@@ -285,7 +320,7 @@ export default function HomeFeed() {
                 <div className="w-20 h-20 rounded-full border-2 border-primary/20 bg-secondary flex items-center justify-center text-2xl font-black uppercase text-foreground relative overflow-hidden">
                   {profile?.profilePhotoUrl ? (
                     <img 
-                      src={profile.profilePhotoUrl} 
+                      src={getPhotoUrl(profile.profilePhotoUrl)} 
                       alt={profile?.fullName || user?.name || ""} 
                       className="w-full h-full object-cover" 
                     />
@@ -376,7 +411,7 @@ export default function HomeFeed() {
                 <div className="flex gap-4">
                   <div className="w-12 h-12 rounded-full bg-secondary flex-shrink-0 flex items-center justify-center font-bold uppercase text-foreground relative overflow-hidden border border-border">
                     {profile?.profilePhotoUrl ? (
-                      <img src={profile.profilePhotoUrl} alt={profile?.fullName || ""} className="w-full h-full object-cover" />
+                      <img src={getPhotoUrl(profile.profilePhotoUrl)} alt={profile?.fullName || ""} className="w-full h-full object-cover" />
                     ) : (
                       getInitials(profile?.fullName || user?.name || "")
                     )}
@@ -583,23 +618,23 @@ export default function HomeFeed() {
                 )
               )}
 
-              {/* Feed Loader */}
-              {loadingFeed && (
-                <div className="flex justify-center items-center py-6 gap-2 text-muted-foreground text-xs font-bold">
-                  <Loader2 className="w-5 h-5 animate-spin text-primary" />
-                  Synching timeline...
-                </div>
-              )}
-
-              {/* Load More Button */}
-              {hasMore && !loadingFeed && (
-                <button
-                  onClick={() => fetchFeed(page + 1)}
-                  className="w-full py-4 border border-dashed border-border hover:border-foreground/20 text-xs font-black uppercase tracking-widest rounded-2xl transition-all text-muted-foreground hover:text-foreground"
-                >
-                  Retrieve Older Intel
-                </button>
-              )}
+              {/* Infinite Scroll Sentinel & Loader */}
+              <div ref={lastPostElementRef} className="py-6 flex justify-center items-center">
+                {loadingFeed ? (
+                  <div className="flex items-center gap-2 text-muted-foreground text-xs font-bold">
+                    <Loader2 className="w-5 h-5 animate-spin text-primary" />
+                    Synching timeline...
+                  </div>
+                ) : hasMore ? (
+                  <div className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40 animate-pulse">
+                    Scanning for older updates...
+                  </div>
+                ) : posts.length > 0 ? (
+                  <div className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/30">
+                    Transmission complete. You have read all updates.
+                  </div>
+                ) : null}
+              </div>
             </div>
           </main>
 
@@ -686,7 +721,7 @@ export default function HomeFeed() {
                         <div className="flex items-center gap-3">
                           <div className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center text-xs font-black uppercase border border-border relative overflow-hidden">
                             {conn.user.profilePhotoUrl ? (
-                              <img src={conn.user.profilePhotoUrl} alt={conn.user.fullName} className="w-full h-full object-cover" />
+                              <img src={getPhotoUrl(conn.user.profilePhotoUrl)} alt={conn.user.fullName} className="w-full h-full object-cover" />
                             ) : (
                               getInitials(conn.user.fullName)
                             )}
@@ -698,14 +733,17 @@ export default function HomeFeed() {
                         </div>
                         <button
                           onClick={() => handleSendShare(conn.user.userId)}
-                          disabled={hasSent}
-                          className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all ${
+                          disabled={hasSent || sendingShareUserIds.has(conn.user.userId)}
+                          className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all flex items-center gap-1 ${
                             hasSent 
                               ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20' 
-                              : 'bg-foreground text-background hover:opacity-90'
+                              : 'bg-foreground text-background hover:opacity-90 disabled:opacity-50'
                           }`}
                         >
-                          {hasSent ? "Shared" : "Send"}
+                          {sendingShareUserIds.has(conn.user.userId) && (
+                            <Loader2 className="w-3 h-3 animate-spin text-primary" />
+                          )}
+                          {hasSent ? "Shared" : sendingShareUserIds.has(conn.user.userId) ? "Sharing..." : "Send"}
                         </button>
                       </div>
                     );

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import api from "@/lib/api";
+import api, { BACKEND_URL } from "@/lib/api";
 import { Loader2 } from "lucide-react";
 
 interface PublicProfile {
@@ -343,6 +343,15 @@ export default function MentionInput({
     }
   };
 
+  const getPhotoUrl = (url?: string) => {
+    if (!url) return "";
+    if (url.startsWith("http") || url.startsWith("data:")) {
+      return url;
+    }
+    const cleanUrl = url.startsWith("/") ? url.slice(1) : url;
+    return `${BACKEND_URL}/public/assets/${cleanUrl}`;
+  };
+
   const getInitials = (name: string) => {
     if (!name) return "U";
     return name.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2);
@@ -387,7 +396,7 @@ export default function MentionInput({
                   >
                     <div className="w-7 h-7 rounded-full bg-secondary flex-shrink-0 flex items-center justify-center text-[10px] font-black uppercase border border-border relative overflow-hidden">
                       {profile.profilePhotoUrl ? (
-                        <img src={profile.profilePhotoUrl} alt={profile.fullName} className="w-full h-full object-cover" />
+                        <img src={getPhotoUrl(profile.profilePhotoUrl)} alt={profile.fullName} className="w-full h-full object-cover" />
                       ) : (
                         getInitials(profile.fullName)
                       )}

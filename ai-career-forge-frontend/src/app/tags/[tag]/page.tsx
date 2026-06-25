@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Loader2, AlertCircle, ArrowLeft } from "lucide-react";
 import PublicNavbar from "@/components/PublicNavbar";
@@ -50,24 +50,51 @@ export default function HashtagFeedPage() {
   const decodedTag = tag ? decodeURIComponent(tag as string) : "";
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
 
-  const fetchPosts = async () => {
+  const fetchPosts = useCallback(async (pageNum: number, reset: boolean = false) => {
     if (!decodedTag) return;
-    setLoading(true);
+    if (reset) {
+      setLoading(true);
+    } else {
+      setLoadingMore(true);
+    }
     try {
-      const res = await api.get(`/posts?tag=${encodeURIComponent(decodedTag)}`);
-      setPosts(res.data.content || res.data || []);
+      const res = await api.get(`/posts?tag=${encodeURIComponent(decodedTag)}&page=${pageNum}&size=15`);
+      const newPosts = res.data.content || [];
+      if (reset) {
+        setPosts(newPosts);
+      } else {
+        setPosts(prev => [...prev, ...newPosts]);
+      }
+      setPage(pageNum);
+      setHasMore(!res.data.last);
     } catch (err) {
       console.error("Failed to fetch posts for tag:", err);
       toast.error("Could not load broadcasts for this hashtag");
     } finally {
       setLoading(false);
+      setLoadingMore(false);
     }
-  };
+  }, [decodedTag]);
+
+  const observer = useRef<IntersectionObserver | null>(null);
+  const lastPostElementRef = useCallback((node: HTMLDivElement | null) => {
+    if (loading || loadingMore) return;
+    if (observer.current) observer.current.disconnect();
+    observer.current = new IntersectionObserver(entries => {
+      if (entries[0].isIntersecting && hasMore) {
+        fetchPosts(page + 1);
+      }
+    });
+    if (node) observer.current.observe(node);
+  }, [loading, loadingMore, hasMore, page, fetchPosts]);
 
   useEffect(() => {
-    fetchPosts();
-  }, [decodedTag]);
+    fetchPosts(0, true);
+  }, [decodedTag, fetchPosts]);
 
   return (
     <div className="min-h-screen bg-background text-foreground font-sans">
@@ -111,6 +138,24 @@ export default function HashtagFeedPage() {
                 onDelete={(postId) => setPosts(prev => prev.filter(p => p.id !== postId))}
               />
             ))}
+
+            {/* Infinite Scroll Sentinel & Loader */}
+            <div ref={lastPostElementRef} className="py-6 flex justify-center items-center">
+              {loadingMore ? (
+                <div className="flex items-center gap-2 text-muted-foreground text-xs font-bold">
+                  <Loader2 className="w-5 h-5 animate-spin text-primary" />
+                  Synching timeline...
+                </div>
+              ) : hasMore ? (
+                <div className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40 animate-pulse">
+                  Scanning for older updates...
+                </div>
+              ) : (
+                <div className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/30">
+                  Transmission complete. You have read all updates.
+                </div>
+              )}
+            </div>
           </div>
         ) : (
           <div className="bg-card border border-border rounded-[2rem] p-12 text-center shadow-sm space-y-4">

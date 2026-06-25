@@ -3,6 +3,7 @@ package com.aicareerforge.controller;
 import com.aicareerforge.model.Post;
 import com.aicareerforge.model.User;
 import com.aicareerforge.dto.PostAnalyticsResponse;
+import com.aicareerforge.dto.ReactingUserDto;
 import com.aicareerforge.service.PostService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -150,6 +151,12 @@ public class PostController {
             @PathVariable("commentId") String commentId) {
         Post post = postService.toggleCommentLike(postId, commentId, user.getId());
         return ResponseEntity.ok(post);
+    }
+
+    @GetMapping("/{id}/reacting-users")
+    public ResponseEntity<List<ReactingUserDto>> getReactingUsers(
+            @PathVariable("id") String postId) {
+        return ResponseEntity.ok(postService.getReactingUsers(postId));
     }
 
     public static class CommentRequest {

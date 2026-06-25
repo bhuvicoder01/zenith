@@ -16,7 +16,7 @@ import useSyncStore from "@/store/useSyncStore";
 import { useWebSocketStore } from "@/store/useWebSocketStore";
 import { useEffect, useState } from "react";
 import { useTheme } from "next-themes";
-import api from "@/lib/api";
+import api, { BACKEND_URL } from "@/lib/api";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -28,6 +28,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [apps, setApps] = useState<any[]>([]);
   const [profile, setProfile] = useState<any>(null);
+
+  const getPhotoUrl = (url?: string) => {
+    if (!url) return "";
+    if (url.startsWith("http") || url.startsWith("data:")) {
+      return url;
+    }
+    const cleanUrl = url.startsWith("/") ? url.slice(1) : url;
+    return `${BACKEND_URL}/public/assets/${cleanUrl}`;
+  };
 
   // Global SSE connection for sync status
   const { syncStatus, connect, disconnect } = useSyncStore();
@@ -329,7 +338,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                   <div className="w-12 h-12 rounded-xl overflow-hidden border-2 border-border group-hover:border-primary/50 transition-colors relative shrink-0">
                     {profile?.profilePhotoUrl ? (
                       <Image 
-                        src={profile.profilePhotoUrl} 
+                        src={getPhotoUrl(profile.profilePhotoUrl)} 
                         alt="Profile" 
                         fill 
                         className="object-cover" 
@@ -477,7 +486,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                   <div className="w-10 h-10 rounded-xl overflow-hidden border border-border relative">
                     {profile?.profilePhotoUrl ? (
                       <Image 
-                        src={profile.profilePhotoUrl} 
+                        src={getPhotoUrl(profile.profilePhotoUrl)} 
                         alt="Profile" 
                         fill 
                         className="object-cover" 

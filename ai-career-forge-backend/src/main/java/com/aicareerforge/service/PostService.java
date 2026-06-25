@@ -22,6 +22,7 @@ import java.util.Set;
 import java.util.HashSet;
 import java.util.stream.Collectors;
 import com.aicareerforge.dto.PostAnalyticsResponse;
+import com.aicareerforge.dto.ReactingUserDto;
 
 @Slf4j
 @Service
@@ -746,6 +747,43 @@ public class PostService {
         } catch (Exception e) {
             log.error("Failed to run orphaned comments cleanup: {}", e.getMessage(), e);
         }
+    }
+
+    public List<ReactingUserDto> getReactingUsers(String postId) {
+        Post post = getPost(postId);
+        if (post == null) return List.of();
+
+        java.util.Map<String, String> reactions = post.getReactions();
+        if (reactions == null || reactions.isEmpty()) return List.of();
+
+        List<ReactingUserDto> list = new ArrayList<>();
+        for (java.util.Map.Entry<String, String> entry : reactions.entrySet()) {
+            String reactingUserId = entry.getKey();
+            String emoji = entry.getValue();
+
+            Optional<UserProfile> profileOpt = userProfileRepository.findByUserId(reactingUserId);
+            if (profileOpt.isPresent()) {
+                UserProfile profile = profileOpt.get();
+                list.add(ReactingUserDto.builder()
+                        .userId(reactingUserId)
+                        .fullName(profile.getFullName())
+                        .username(profile.getUsername())
+                        .profilePhotoUrl(profile.getProfilePhotoUrl())
+                        .headline(profile.getHeadline())
+                        .emoji(emoji)
+                        .build());
+            } else {
+                list.add(ReactingUserDto.builder()
+                        .userId(reactingUserId)
+                        .fullName("Zenith User")
+                        .username(reactingUserId)
+                        .profilePhotoUrl(null)
+                        .headline("Zenith Candidate")
+                        .emoji(emoji)
+                        .build());
+            }
+        }
+        return list;
     }
 }
 

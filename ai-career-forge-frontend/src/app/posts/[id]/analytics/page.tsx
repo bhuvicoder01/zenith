@@ -8,7 +8,7 @@ import {
 } from "lucide-react";
 import useAuthStore from "@/store/useAuthStore";
 import PublicNavbar from "@/components/PublicNavbar";
-import api from "@/lib/api";
+import api, { BACKEND_URL } from "@/lib/api";
 import { toast } from "sonner";
 
 interface UserProfileInfo {
@@ -38,6 +38,15 @@ export default function IndividualPostAnalytics() {
   
   const { user, isAuthenticated } = useAuthStore();
   const [postMetrics, setPostMetrics] = useState<PostMetrics | null>(null);
+
+  const getPhotoUrl = (url?: string) => {
+    if (!url) return "";
+    if (url.startsWith("http") || url.startsWith("data:")) {
+      return url;
+    }
+    const cleanUrl = url.startsWith("/") ? url.slice(1) : url;
+    return `${BACKEND_URL}/public/assets/${cleanUrl}`;
+  };
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<"viewers" | "likers" | "commenters">("viewers");
 
@@ -225,7 +234,7 @@ export default function IndividualPostAnalytics() {
                       <div className="w-12 h-12 rounded-xl overflow-hidden border border-border group-hover:border-primary/50 relative shrink-0 transition-colors">
                         {person.profilePhotoUrl ? (
                           <img
-                            src={person.profilePhotoUrl}
+                            src={getPhotoUrl(person.profilePhotoUrl)}
                             alt={person.fullName}
                             className="object-cover w-full h-full"
                           />

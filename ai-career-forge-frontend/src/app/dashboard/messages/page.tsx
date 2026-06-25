@@ -5,7 +5,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { 
   Search, Send, MessageSquare, ArrowLeft, User, Loader2, 
   ExternalLink, Mail, Circle, PhoneCall, Plus, X, CheckCheck, Trash2, Menu,
-  Globe, ArrowRight, Image as ImageIcon, CornerUpLeft
+  Globe, ArrowRight, Image as ImageIcon, CornerUpLeft, MoreVertical
 } from "lucide-react";
 import api, { BACKEND_URL } from "@/lib/api";
 import { useWebSocketStore } from "@/store/useWebSocketStore";
@@ -71,6 +71,8 @@ function ChatContainer() {
   const intersectingMessageIdsRef = useRef<Set<string>>(new Set());
   const [visibleTimeMessageId, setVisibleTimeMessageId] = useState<string | null>(null);
   const [isOtherUserTyping, setIsOtherUserTyping] = useState(false);
+  const [showChatMenu, setShowChatMenu] = useState(false);
+  const chatMenuRef = useRef<HTMLDivElement>(null);
 
   const { socket, isConnected, fetchUnreadMessageCount, onlineUserIds, setActiveChatUserId, sendTypingStatus } = useWebSocketStore();
   const { user } = useAuthStore();
@@ -80,6 +82,8 @@ function ChatContainer() {
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const localTypingStateRef = useRef(false);
+  const touchStartRef = useRef<{ x: number; y: number } | null>(null);
+  const activeSwipeElRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     fetchConversations();
@@ -89,6 +93,16 @@ function ChatContainer() {
         clearTimeout(typingTimeoutRef.current);
       }
     };
+  }, []);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (chatMenuRef.current && !chatMenuRef.current.contains(event.target as Node)) {
+        setShowChatMenu(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
   // Handle active user change or targetUserId query parameter change
@@ -651,6 +665,95 @@ function ChatContainer() {
     }
   };
 
+  const formatLastMessageSnippet = (content?: string) => {
+    if (!content) return "Click to start conversation";
+    const trimmed = content.trim();
+    if (trimmed.startsWith('{"type":"POST_SHARE"')) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        return `Sent a post by ${parsed.postAuthor || "unknown"}`;
+      } catch (e) {
+        return "Sent a post";
+      }
+    }
+    if (trimmed.startsWith('{"type":"REPLY"')) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        return parsed.text || "";
+      } catch (e) {
+        return content;
+      }
+    }
+    if (trimmed.startsWith("[GIF]")) {
+      return "[GIF]";
+    }
+    if (trimmed.startsWith("[STICKER]")) {
+      return "[Sticker]";
+    }
+    return content;
+  };
+
+  const handleTouchStart = (e: React.TouchEvent, isSelf: boolean) => {
+    if (e.touches.length !== 1) return;
+    const touch = e.touches[0];
+    touchStartRef.current = { x: touch.clientX, y: touch.clientY };
+    
+    const container = e.currentTarget as HTMLDivElement;
+    const innerRow = container.firstElementChild;
+    if (!innerRow) return;
+    const bubble = innerRow.firstElementChild as HTMLDivElement;
+    if (bubble) {
+      activeSwipeElRef.current = bubble;
+      bubble.style.transition = "none";
+    }
+  };
+
+  const handleTouchMove = (e: React.TouchEvent, isSelf: boolean) => {
+    if (!touchStartRef.current || !activeSwipeElRef.current) return;
+    const touch = e.touches[0];
+    const diffX = touch.clientX - touchStartRef.current.x;
+    const diffY = touch.clientY - touchStartRef.current.y;
+
+    if (Math.abs(diffY) > Math.abs(diffX)) return;
+    
+    // Inward check:
+    // If self (on right), swipe direction should be left (diffX < 0)
+    // If other (on left), swipe direction should be right (diffX > 0)
+    if (isSelf && diffX > 0) return;
+    if (!isSelf && diffX < 0) return;
+
+    if (Math.abs(diffX) > 10) {
+      if (e.cancelable) e.preventDefault();
+    }
+
+    const offset = isSelf ? Math.max(-80, diffX) : Math.min(80, diffX);
+    activeSwipeElRef.current.style.transform = `translateX(${offset}px)`;
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent, msg: DirectMessage, isSelf: boolean) => {
+    if (!touchStartRef.current || !activeSwipeElRef.current) return;
+    const touch = e.changedTouches[0];
+    const diffX = touch.clientX - touchStartRef.current.x;
+
+    const bubble = activeSwipeElRef.current;
+    bubble.style.transition = "transform 0.2s cubic-bezier(0.16, 1, 0.3, 1)";
+    bubble.style.transform = "translateX(0)";
+
+    // Trigger reply if swiped past inward threshold (50px)
+    const triggered = isSelf ? (diffX < -50) : (diffX > 50);
+    if (triggered) {
+      setReplyingToMessage(msg);
+      if (typeof window !== "undefined" && window.navigator && window.navigator.vibrate) {
+        try {
+          window.navigator.vibrate(15);
+        } catch (err) {}
+      }
+    }
+
+    touchStartRef.current = null;
+    activeSwipeElRef.current = null;
+  };
+
   const formatLastSeen = (isoString?: string) => {
     if (!isoString) return "Offline";
     try {
@@ -807,11 +910,19 @@ function ChatContainer() {
                       </span>
                     </div>
                     
-                    <p className={`text-[11px] truncate leading-tight font-medium ${
-                      isActive ? 'text-background/80' : 'text-muted-foreground/80'
-                    }`}>
-                      {other.headline || "Zenith Operative"}
-                    </p>
+                    {onlineUserIds.includes(other.userId) ? (
+                      <p className={`text-[10px] truncate leading-tight font-black uppercase tracking-wider ${
+                        isActive ? 'text-emerald-300' : 'text-emerald-500'
+                      }`}>
+                        Online
+                      </p>
+                    ) : (
+                      <p className={`text-[10px] truncate leading-tight font-semibold ${
+                        isActive ? 'text-background/70' : 'text-muted-foreground/70'
+                      }`}>
+                        {formatLastSeen(other.lastOnline)}
+                      </p>
+                    )}
 
                     <div className="flex items-center justify-between gap-2 pt-0.5">
                       <p className={`text-xs truncate max-w-[180px] lg:max-w-[220px] ${
@@ -819,7 +930,7 @@ function ChatContainer() {
                           ? "font-black text-foreground"
                           : isActive ? "text-background/90" : "text-muted-foreground/60"
                       }`}>
-                        {conv.lastMessage?.content || "Click to start conversation"}
+                        {formatLastMessageSnippet(conv.lastMessage?.content)}
                       </p>
                       
                       {conv.unreadCount > 0 && !isActive && (
@@ -859,7 +970,7 @@ function ChatContainer() {
         {activeUser ? (
           <>
             {/* Chat header info */}
-            <div className="p-4 sm:p-5 border-b border-border/60 flex items-center justify-between gap-3 bg-secondary/5 z-10">
+            <div className="px-4 py-3 sm:px-6 sm:py-3.5 border-b border-border/60 flex items-center justify-between gap-3 bg-secondary/5 z-20 relative select-none">
               <div className="flex items-center gap-3.5 min-w-0">
                 {/* Back button for mobile */}
                 <button
@@ -874,7 +985,7 @@ function ChatContainer() {
 
                 {/* Avatar */}
                 <div className="relative shrink-0">
-                  <div className="h-11 w-11 rounded-xl border border-border bg-muted flex items-center justify-center overflow-hidden shadow-sm">
+                  <div className="h-10 w-10 sm:h-11 sm:w-11 rounded-xl border border-border bg-muted flex items-center justify-center overflow-hidden shadow-sm">
                     {getPhotoUrl(activeUser.profilePhotoUrl) ? (
                       <img src={getPhotoUrl(activeUser.profilePhotoUrl)!} alt={activeUser.fullName} className="w-full h-full object-cover" />
                     ) : (
@@ -886,45 +997,55 @@ function ChatContainer() {
                   )}
                 </div>
 
-                {/* Name details */}
-                <div className="min-w-0">
-                  <h3 className="font-bold text-sm sm:text-base leading-tight truncate flex items-center gap-2">
-                    {activeUser.fullName}
-                    {onlineUserIds.includes(activeUser.userId) ? (
-                      <span className="flex items-center gap-1 text-[9px] text-emerald-500 font-extrabold uppercase bg-emerald-500/10 px-2 py-0.5 rounded-full select-none">
-                        {/* <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-ping shrink-0" /> */}
-                        Online
-                      </span>
-                    ) : (
-                      <span className="flex items-center gap-1 text-[9px] text-muted-foreground font-extrabold uppercase bg-secondary px-2 py-0.5 rounded-full select-none">
-                        {formatLastSeen(activeUser.lastOnline)}
-                      </span>
-                    )}
-                  </h3>
-                  <p className="text-muted-foreground text-[10px] sm:text-xs truncate font-medium">
-                    {activeUser.headline || "Zenith Operative"}
-                  </p>
-                </div>
+                 {/* Name details */}
+                 <div className="min-w-0">
+                   <h3 className="font-bold text-sm sm:text-base leading-tight truncate">
+                     {activeUser.fullName}
+                   </h3>
+                   {onlineUserIds.includes(activeUser.userId) ? (
+                     <p className="text-[10px] sm:text-xs text-emerald-500 font-extrabold uppercase tracking-wider select-none mt-0.5">
+                       Online
+                     </p>
+                   ) : (
+                     <p className="text-[10px] sm:text-xs text-muted-foreground font-semibold select-none mt-0.5">
+                       {formatLastSeen(activeUser.lastOnline)}
+                     </p>
+                   )}
+                 </div>
               </div>
 
-              {/* Actions */}
-              <div className="flex items-center gap-2">
-                <Link
-                  href={`/public/profiles/${activeUser.username || activeUser.userId}`}
-                  className="px-3.5 py-2 bg-secondary border border-border text-foreground hover:bg-secondary/80 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 shadow-sm"
-                  title="View Profile"
-                >
-                  <span className="hidden sm:inline">Profile</span>
-                  <ExternalLink className="w-3.5 h-3.5" />
-                </Link>
+              {/* Actions Menu */}
+              <div className="relative shrink-0" ref={chatMenuRef}>
                 <button
-                  onClick={handleClearConversation}
-                  className="px-3.5 py-2 bg-destructive/10 hover:bg-destructive/20 text-destructive border border-destructive/20 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 shadow-sm"
-                  title="Clear Conversation"
+                  onClick={() => setShowChatMenu(!showChatMenu)}
+                  className="p-2 hover:bg-secondary rounded-xl text-muted-foreground hover:text-foreground transition-all flex items-center justify-center border border-border/40 hover:border-border/80 shadow-sm bg-card/50"
+                  title="Conversation Actions"
                 >
-                  <span className="hidden sm:inline">Clear Chat</span>
-                  <Trash2 className="w-3.5 h-3.5" />
+                  <MoreVertical className="w-4 h-4 sm:w-5 sm:h-5" />
                 </button>
+
+                {showChatMenu && (
+                  <div className="absolute right-0 mt-2 w-48 rounded-xl bg-card border border-border shadow-xl py-1.5 z-50 animate-in fade-in slide-in-from-top-2 duration-150">
+                    <Link
+                      href={`/public/profiles/${activeUser.username || activeUser.userId}`}
+                      onClick={() => setShowChatMenu(false)}
+                      className="flex items-center gap-2 px-4 py-2.5 text-xs font-bold text-foreground hover:bg-secondary transition-colors w-full text-left"
+                    >
+                      <ExternalLink className="w-4 h-4 text-muted-foreground" />
+                      View Profile
+                    </Link>
+                    <button
+                      onClick={() => {
+                        setShowChatMenu(false);
+                        handleClearConversation();
+                      }}
+                      className="flex items-center gap-2 px-4 py-2.5 text-xs font-bold text-destructive hover:bg-destructive/10 transition-colors w-full text-left border-t border-border/40"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      Clear Conversation
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -990,6 +1111,9 @@ function ChatContainer() {
                           data-message-id={msg.id}
                           data-unread={!msg.read && !isSelf}
                           onClick={() => setVisibleTimeMessageId(prev => prev === msg.id ? null : msg.id)}
+                          onTouchStart={(e) => handleTouchStart(e, isSelf)}
+                          onTouchMove={(e) => handleTouchMove(e, isSelf)}
+                          onTouchEnd={(e) => handleTouchEnd(e, msg, isSelf)}
                           className={`flex flex-col max-w-[75%] sm:max-w-[65%] w-fit group relative cursor-pointer select-none ${
                             isSelf ? "ml-auto items-end" : "mr-auto items-start"
                           }`}
@@ -1031,7 +1155,14 @@ function ChatContainer() {
 
                                 {/* Reply Body Content */}
                                 {sharedPost ? (
-                                  <div className={`rounded-xl text-xs overflow-hidden border border-border/80 shadow-md transition-all hover:border-primary/40 relative w-56 sm:w-64 bg-card text-foreground`}>
+                                  <Link 
+                                    href={`/posts/${sharedPost.postId}`}
+                                    className={`block rounded-2xl text-xs overflow-hidden border border-border/80 shadow-md transition-all hover:border-primary/40 relative w-56 sm:w-64 hover:scale-[1.01] active:scale-[0.99] ${
+                                      isSelf 
+                                        ? "bg-card text-foreground rounded-tr-none" 
+                                        : "bg-card text-foreground rounded-tl-none"
+                                    }`}
+                                  >
                                     {/* Card Header */}
                                     <div className="p-2 border-b border-border/50 bg-secondary/25 flex items-center justify-between">
                                       <div className="flex items-center gap-1.5 min-w-0">
@@ -1060,17 +1191,20 @@ function ChatContainer() {
                                           />
                                         </div>
                                       )}
-                                    </div>
 
-                                    {/* Card Footer action */}
-                                    <Link 
-                                      href={`/posts/${sharedPost.postId}`}
-                                      className="w-full p-2 bg-secondary/40 hover:bg-secondary/70 border-t border-border/50 text-[8px] font-black uppercase tracking-widest text-center flex items-center justify-center gap-1 text-primary hover:text-primary-hover transition-colors"
-                                    >
-                                      Inspect Intel
-                                      <ArrowRight className="w-3 h-3" />
-                                    </Link>
-                                  </div>
+                                      {/* Video Thumbnail */}
+                                      {sharedPost.postVideoUrl && !sharedPost.postImage && (
+                                        <div className="w-full h-20 overflow-hidden rounded border border-border/50 bg-black/90 relative group/vid">
+                                          <video 
+                                            src={sharedPost.postVideoUrl} 
+                                            className="w-full h-full object-cover" 
+                                            muted 
+                                            preload="metadata"
+                                          />
+                                        </div>
+                                      )}
+                                    </div>
+                                  </Link>
                                 ) : messageBody?.startsWith("[GIF]") ? (
                                   <div className="rounded-xl overflow-hidden max-w-[180px] sm:max-w-[220px] border border-border/40 shadow-sm bg-secondary/15 mt-1">
                                     <img src={messageBody.slice(5)} alt="GIF" className="w-full h-auto object-contain max-h-40" />
@@ -1086,50 +1220,59 @@ function ChatContainer() {
                             ) : (
                               /* Standard Direct Message (No Reply Quote) */
                               sharedPost ? (
-                                <div className={`rounded-2xl text-xs overflow-hidden border border-border/80 shadow-md transition-all hover:border-primary/40 relative w-64 sm:w-72 ${
-                                  isSelf 
-                                    ? "bg-card text-foreground rounded-tr-none" 
-                                    : "bg-card text-foreground rounded-tl-none"
-                                }`}>
-                                  {/* Card Header */}
-                                  <div className="p-3 border-b border-border/50 bg-secondary/25 flex items-center justify-between">
-                                    <div className="flex items-center gap-2 min-w-0">
-                                      <Globe className="w-3.5 h-3.5 text-primary shrink-0" />
-                                      <span className="font-black uppercase tracking-tight truncate text-[10px]">
-                                        {sharedPost.postAuthor}
-                                      </span>
-                                    </div>
-                                    <span className="text-[9px] text-muted-foreground font-semibold shrink-0">Broadcast</span>
-                                  </div>
-
-                                  {/* Card Body */}
-                                  <div className="p-3 space-y-2">
-                                    {sharedPost.postText && (
-                                      <p className="text-muted-foreground font-medium line-clamp-3 leading-relaxed text-[11px] select-text">
-                                        {sharedPost.postText}
-                                      </p>
-                                    )}
-                                    
-                                    {sharedPost.postImage && (
-                                      <div className="w-full h-24 overflow-hidden rounded-lg border border-border/50 bg-secondary/10">
-                                        <img 
-                                          src={sharedPost.postImage} 
-                                          alt="Shared attachment" 
-                                          className="w-full h-full object-cover" 
-                                        />
-                                      </div>
-                                    )}
-                                  </div>
-
-                                  {/* Card Footer action */}
                                   <Link 
                                     href={`/posts/${sharedPost.postId}`}
-                                    className="w-full p-2.5 bg-secondary/40 hover:bg-secondary/70 border-t border-border/50 text-[9px] font-black uppercase tracking-widest text-center flex items-center justify-center gap-1 text-primary hover:text-primary-hover transition-colors"
+                                    className={`block rounded-2xl text-xs overflow-hidden border border-border/80 shadow-md transition-all hover:border-primary/40 relative w-64 sm:w-72 hover:scale-[1.01] active:scale-[0.99] ${
+                                      isSelf 
+                                        ? "bg-card text-foreground rounded-tr-none" 
+                                        : "bg-card text-foreground rounded-tl-none"
+                                    }`}
                                   >
-                                    Inspect Intel
-                                    <ArrowRight className="w-3 h-3" />
+                                    {/* Card Header */}
+                                    <div className="p-3 border-b border-border/50 bg-secondary/25 flex items-center justify-between">
+                                      <div className="flex items-center gap-2 min-w-0">
+                                        <Globe className="w-3.5 h-3.5 text-primary shrink-0" />
+                                        <span className="font-black uppercase tracking-tight truncate text-[10px]">
+                                          {sharedPost.postAuthor}
+                                        </span>
+                                      </div>
+                                      <span className="text-[9px] text-muted-foreground font-semibold shrink-0">Broadcast</span>
+                                    </div>
+
+                                    {/* Card Body */}
+                                    <div className="p-3 space-y-2">
+                                      {sharedPost.postText && (
+                                        <p className="text-muted-foreground font-medium line-clamp-3 leading-relaxed text-[11px] select-text">
+                                          {sharedPost.postText}
+                                        </p>
+                                      )}
+                                      
+                                      {sharedPost.postImage && (
+                                        <div className="w-full h-24 overflow-hidden rounded-lg border border-border/50 bg-secondary/10">
+                                          <img 
+                                            src={sharedPost.postImage} 
+                                            alt="Shared attachment" 
+                                            className="w-full h-full object-cover" 
+                                          />
+                                        </div>
+                                      )}
+
+                                      {/* Video Thumbnail */}
+                                      {sharedPost.postVideoUrl && !sharedPost.postImage && (
+                                        <div className="w-full h-28 overflow-hidden rounded-lg border border-border/50 bg-black/90 relative group/vid">
+                                          <video 
+                                            src={sharedPost.postVideoUrl} 
+                                            className="w-full h-full object-cover" 
+                                            muted 
+                                            preload="metadata"
+                                          />
+                                          <div className="absolute bottom-1.5 left-1.5 px-1.5 py-0.5 rounded bg-black/70 backdrop-blur-sm">
+                                            <span className="text-[8px] font-bold text-white/90 uppercase tracking-wider">Video</span>
+                                          </div>
+                                        </div>
+                                      )}
+                                    </div>
                                   </Link>
-                                </div>
                               ) : messageBody?.startsWith("[GIF]") ? (
                                 <div className="rounded-2xl overflow-hidden max-w-[200px] sm:max-w-[240px] border border-border shadow-md bg-secondary/10 mt-1">
                                   <img src={messageBody.slice(5)} alt="GIF" className="w-full h-auto object-contain max-h-48" />
@@ -1156,7 +1299,7 @@ function ChatContainer() {
                                 e.stopPropagation();
                                 setReplyingToMessage(msg);
                               }}
-                              className="p-1.5 rounded-lg bg-secondary/60 hover:bg-secondary text-muted-foreground hover:text-foreground opacity-0 group-hover:opacity-100 transition-opacity focus:opacity-100 shrink-0"
+                              className="hidden md:flex p-1.5 rounded-lg bg-secondary/60 hover:bg-secondary text-muted-foreground hover:text-foreground opacity-0 group-hover:opacity-100 transition-opacity focus:opacity-100 shrink-0"
                               title="Reply to this message"
                             >
                               <CornerUpLeft className="w-3.5 h-3.5" />
