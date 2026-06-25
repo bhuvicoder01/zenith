@@ -28,10 +28,11 @@ public class PostController {
 
     @GetMapping
     public ResponseEntity<Page<Post>> getFeed(
+            @RequestParam(value = "tag", required = false) String tag,
             @RequestParam(value = "page", defaultValue = "0") int page,
             @RequestParam(value = "size", defaultValue = "20") int size) {
         Pageable pageable = PageRequest.of(page, size);
-        return ResponseEntity.ok(postService.getFeed(pageable));
+        return ResponseEntity.ok(postService.getFeed(tag, pageable));
     }
 
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)

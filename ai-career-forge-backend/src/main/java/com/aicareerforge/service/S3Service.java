@@ -11,6 +11,9 @@ import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignReques
 import software.amazon.awssdk.services.s3.presigner.model.PresignedGetObjectRequest;
 
 import java.time.Duration;
+import java.time.Instant;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Slf4j
 @Service
@@ -19,6 +22,7 @@ public class S3Service {
 
     private final S3Template s3Template;
     private final S3Presigner s3Presigner;
+    private final Map<String, CachedPresignedUrl> presignedUrlCache = new ConcurrentHashMap<>();
 
     @Value("${spring.cloud.aws.s3.bucket-name:ai-career-forge-users-data-bucket}")
     private String bucketName;
@@ -90,6 +94,14 @@ public class S3Service {
     }
 
     public String getPresignedUrl(String key) {
+        if (key == null || key.isBlank()) return null;
+
+        CachedPresignedUrl cached = presignedUrlCache.get(key);
+        if (cached != null && !cached.isExpired()) {
+            log.debug("Returning cached presigned URL for key: {}", key);
+            return cached.url;
+        }
+
         log.info("Generating fresh presigned URL for key: {}", key);
         
         GetObjectRequest getObjectRequest = GetObjectRequest.builder()
@@ -97,22 +109,44 @@ public class S3Service {
                 .key(key)
                 .build();
 
+        Duration duration = Duration.ofHours(24);
         GetObjectPresignRequest presignRequest = GetObjectPresignRequest.builder()
-                .signatureDuration(Duration.ofHours(24)) // Increased to 24h
+                .signatureDuration(duration)
                 .getObjectRequest(getObjectRequest)
                 .build();
 
         PresignedGetObjectRequest presignedRequest = s3Presigner.presignGetObject(presignRequest);
-        return presignedRequest.url().toString();
+        String url = presignedRequest.url().toString();
+
+        // Cache the URL, expiring 1 hour before S3 signature expires for buffer safety
+        Instant expiresAt = Instant.now().plus(duration).minus(Duration.ofHours(1));
+        presignedUrlCache.put(key, new CachedPresignedUrl(url, expiresAt));
+
+        return url;
     }
 
     public void deleteFile(String key) {
         if (key == null || key.isBlank()) return;
+        presignedUrlCache.remove(key);
         try {
             s3Template.deleteObject(bucketName, key);
             log.info("Deleted S3 object: {}", key);
         } catch (Exception e) {
             log.warn("Failed to delete S3 object: {} - Error: {}", key, e.getMessage());
+        }
+    }
+
+    private static class CachedPresignedUrl {
+        private final String url;
+        private final Instant expiresAt;
+
+        public CachedPresignedUrl(String url, Instant expiresAt) {
+            this.url = url;
+            this.expiresAt = expiresAt;
+        }
+
+        public boolean isExpired() {
+            return Instant.now().isAfter(expiresAt);
         }
     }
 }

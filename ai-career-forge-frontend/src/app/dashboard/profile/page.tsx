@@ -95,6 +95,51 @@ export default function ProfilePage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const coverInputRef = useRef<HTMLInputElement>(null);
   const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1';
+
+  const renderContentWithMentions = (text: string) => {
+    if (!text) return null;
+    const parts = text.split(/(https?:\/\/[^\s]+|@[a-zA-Z0-9_]+|#[a-zA-Z0-9_]+)/g);
+    return parts.map((part, idx) => {
+      if (part.startsWith("http://") || part.startsWith("https://")) {
+        return (
+          <a
+            key={idx}
+            href={part}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-primary hover:underline font-semibold break-all"
+          >
+            {part}
+          </a>
+        );
+      }
+      if (part.startsWith("@")) {
+        const username = part.slice(1);
+        return (
+          <Link
+            key={idx}
+            href={`/public/profiles/${username}`}
+            className="text-primary hover:underline font-bold"
+          >
+            {part}
+          </Link>
+        );
+      }
+      if (part.startsWith("#")) {
+        const tag = part.slice(1);
+        return (
+          <Link
+            key={idx}
+            href={`/tags/${tag}`}
+            className="text-indigo-500 dark:text-indigo-400 hover:underline font-bold"
+          >
+            {part}
+          </Link>
+        );
+      }
+      return part;
+    });
+  };
   
 
   useEffect(() => {
@@ -604,7 +649,7 @@ export default function ProfilePage() {
                 <div className="mt-8 space-y-3">
                   <h3 className="text-xs font-black uppercase tracking-widest text-muted-foreground/60">About Me</h3>
                   <p className="text-muted-foreground leading-relaxed text-base whitespace-pre-line max-w-3xl">
-                    {profile.bio}
+                    {renderContentWithMentions(profile.bio)}
                   </p>
                 </div>
               )}
@@ -1041,7 +1086,7 @@ export default function ProfilePage() {
               />
             ) : (
               <p className="text-sm leading-relaxed text-foreground whitespace-pre-wrap">
-                {profile.bio || "No description provided yet."}
+                {renderContentWithMentions(profile.bio) || "No description provided yet."}
               </p>
             )}
           </section>

@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { 
   Heart, Trash2, Link2, FileText, Image as ImageIcon, Send, Loader2, Plus, 
   ExternalLink, Sparkles, MessageSquare, AlertCircle, File, LogOut, LayoutDashboard, Globe, Share2,
-  Edit2, Eye, CornerDownRight, Video, Play
+  Edit2, Eye, CornerDownRight, Video, Play, Pause, Volume2, VolumeX, Maximize, Minimize
 } from "lucide-react";
 import useAuthStore from "@/store/useAuthStore";
 import PublicNavbar from "@/components/PublicNavbar";
@@ -15,26 +15,7 @@ import { toast } from "sonner";
 import MentionInput from "@/components/MentionInput";
 import GifStickerPicker from "@/components/GifStickerPicker";
 import { ClickableMedia } from "@/components/ImageLightbox";
-
-interface Post {
-  id: string;
-  userId: string;
-  authorName: string;
-  authorUsername?: string;
-  authorAvatar?: string;
-  authorHeadline?: string;
-  content?: string;
-  mediaUrls?: string[];
-  pdfUrl?: string;
-  videoUrl?: string;
-  linkUrl?: string;
-  createdAt: string;
-  likesCount: number;
-  viewsCount: number;
-  likedUserIds: string[];
-  comments?: any[];
-  reactions?: Record<string, string>;
-}
+import PostCard, { Post } from "@/components/PostCard";
 
 export default function HomeFeed() {
   const { user, isAuthenticated } = useAuthStore();
@@ -68,28 +49,6 @@ export default function HomeFeed() {
   const [searchConnQuery, setSearchConnQuery] = useState("");
   const [sentConnections, setSentConnections] = useState<Set<string>>(new Set());
 
-  // Inline Comment states
-  const [expandedComments, setExpandedComments] = useState<Record<string, boolean>>({});
-  const [inlineCommentText, setInlineCommentText] = useState<Record<string, string>>({});
-  const [submittingComment, setSubmittingComment] = useState<Record<string, boolean>>({});
-  
-  // Mentions / Threading states for inline comments
-  const [inlineCommentMentions, setInlineCommentMentions] = useState<Record<string, string[]>>({});
-  const [replyingToCommentId, setReplyingToCommentId] = useState<Record<string, string | null>>({}); // postId -> rootCommentId
-  const [replyContent, setReplyContent] = useState<Record<string, string>>({}); // rootCommentId -> text
-  const [replyMentions, setReplyMentions] = useState<Record<string, string[]>>({}); // rootCommentId -> userIds
-  const [replyTargetUser, setReplyTargetUser] = useState<Record<string, { id: string; name: string; username?: string } | null>>({}); // rootCommentId -> target
-  const [submittingReply, setSubmittingReply] = useState<Record<string, boolean>>({}); // rootCommentId -> boolean
-  const [showCommentGifPicker, setShowCommentGifPicker] = useState(false);
-  const [activeCommentPostId, setActiveCommentPostId] = useState<string | null>(null);
-  const [gifPickerParentCommentId, setGifPickerParentCommentId] = useState<string | null>(null);
-
-  // Editing states
-  const [editingPostId, setEditingPostId] = useState<string | null>(null);
-  const [editContent, setEditContent] = useState("");
-  const [activeReactionPostId, setActiveReactionPostId] = useState<string | null>(null);
-  const [editLinkUrl, setEditLinkUrl] = useState("");
-  const [savingEdit, setSavingEdit] = useState(false);
 
   useEffect(() => {
     fetchFeed(0, true);
@@ -260,111 +219,6 @@ export default function HomeFeed() {
     }
   };
 
-  const REACTION_EMOJIS = ["👍", "❤️", "👏", "💡", "😆", "🤝"];
-
-  const handleReact = async (postId: string, emoji: string) => {
-    if (!isAuthenticated) {
-      toast.error("Please login to react to posts", {
-        action: {
-          label: "Login",
-          onClick: () => router.push("/auth/login")
-        }
-      });
-      return;
-    }
-
-    // Optimistic Update
-    setPosts(prev => prev.map(p => {
-      if (p.id !== postId) return p;
-      const isAlreadySelected = p.reactions?.[user?.id || ""] === emoji;
-      const newReactions = { ...(p.reactions || {}) };
-      let newLikes = [...(p.likedUserIds || [])];
-
-      if (isAlreadySelected) {
-        delete newReactions[user?.id || ""];
-        newLikes = newLikes.filter(id => id !== user?.id);
-      } else {
-        newReactions[user?.id || ""] = emoji;
-        if (!newLikes.includes(user?.id || "")) {
-          newLikes.push(user?.id || "");
-        }
-      }
-
-      return {
-        ...p,
-        reactions: newReactions,
-        likedUserIds: newLikes,
-        likesCount: newLikes.length
-      };
-    }));
-    setActiveReactionPostId(null);
-
-    try {
-      const res = await api.post(`/posts/${postId}/react?emoji=${encodeURIComponent(emoji)}`);
-      setPosts(prev => prev.map(p => p.id === postId ? res.data : p));
-    } catch (err) {
-      console.error("Failed to react to post:", err);
-      // Revert if failed (refetch from page)
-      fetchFeed(0, true);
-    }
-  };
-
-  const handleLikePost = async (postId: string) => {
-    if (!isAuthenticated) {
-      toast.error("Please login to react to posts", {
-        action: {
-          label: "Login",
-          onClick: () => router.push("/auth/login")
-        }
-      });
-      return;
-    }
-
-    // Optimistic Update
-    setPosts(prev => prev.map(p => {
-      if (p.id !== postId) return p;
-      const hasLiked = p.likedUserIds?.includes(user?.id || "") || false;
-      let newLikes = [...(p.likedUserIds || [])];
-      const newReactions = { ...(p.reactions || {}) };
-
-      if (hasLiked) {
-        newLikes = newLikes.filter(id => id !== user?.id);
-        delete newReactions[user?.id || ""];
-      } else {
-        newLikes.push(user?.id || "");
-        newReactions[user?.id || ""] = "👍";
-      }
-
-      return {
-        ...p,
-        likedUserIds: newLikes,
-        likesCount: newLikes.length,
-        reactions: newReactions
-      };
-    }));
-
-    try {
-      await api.post(`/posts/${postId}/like`);
-    } catch (err) {
-      console.error("Failed to like post:", err);
-      // Revert if failed (refetch from page)
-      fetchFeed(0, true);
-    }
-  };
-
-  const handleDeletePost = async (postId: string) => {
-    if (!window.confirm("Are you sure you want to delete this post?")) return;
-
-    try {
-      await api.delete(`/posts/${postId}`);
-      toast.success("Post deleted successfully");
-      setPosts(prev => prev.filter(p => p.id !== postId));
-    } catch (err) {
-      console.error("Failed to delete post:", err);
-      toast.error("Post deletion protocol failed");
-    }
-  };
-
   const handleOpenShare = async (post: Post) => {
     setSharingPost(post);
     setSentConnections(new Set());
@@ -410,251 +264,9 @@ export default function HomeFeed() {
     }
   };
 
-  const toggleComments = async (postId: string) => {
-    const post = posts.find(p => p.id === postId);
-    const nextVal = !expandedComments[postId];
-    
-    if (nextVal) {
-      // Set handle placeholder immediately using existing post data
-      if (post && user && post.userId !== user.id && !(inlineCommentText[postId] || "").trim()) {
-        const handle = post.authorUsername || post.authorName.replace(/\s+/g, "_").toLowerCase();
-        setInlineCommentText(prevText => ({
-          ...prevText,
-          [postId]: `@${handle} `
-        }));
-      }
-
-      // Fetch fresh post to ensure comments are up-to-date
-      try {
-        const res = await api.get(`/posts/${postId}`);
-        setPosts(prev => prev.map(p => p.id === postId ? res.data : p));
-      } catch (err) {
-        console.error("Failed to re-fetch comments on toggle:", err);
-      }
-    }
-
-    setExpandedComments(prev => ({
-      ...prev,
-      [postId]: nextVal
-    }));
-  };
-
-  const sendCommentGifOrSticker = async (url: string, type: "gif" | "sticker") => {
-    if (!activeCommentPostId) return;
-    const postId = activeCommentPostId;
-    const content = type === "gif" ? `[GIF]${url}` : `[STICKER]${url}`;
-    const parentCommentId = gifPickerParentCommentId;
-
-    if (parentCommentId) {
-      setSubmittingReply(prev => ({ ...prev, [parentCommentId]: true }));
-      const target = replyTargetUser[parentCommentId];
-      try {
-        const res = await api.post(`/posts/${postId}/comments`, {
-          content,
-          parentCommentId,
-          replyToUserId: target?.id,
-          replyToUserName: target?.name,
-          mentionedUserIds: []
-        });
-        setPosts(prev => prev.map(p => p.id === postId ? res.data : p));
-        setReplyContent(prev => ({ ...prev, [parentCommentId]: "" }));
-        setReplyMentions(prev => ({ ...prev, [parentCommentId]: [] }));
-        setReplyTargetUser(prev => ({ ...prev, [parentCommentId]: null }));
-        setReplyingToCommentId(prev => ({ ...prev, [postId]: null }));
-        toast.success("Reply submitted successfully");
-      } catch (err) {
-        console.error("Failed to add GIF/Sticker reply:", err);
-        toast.error("Failed to submit reply");
-      } finally {
-        setSubmittingReply(prev => ({ ...prev, [parentCommentId]: false }));
-        setActiveCommentPostId(null);
-        setGifPickerParentCommentId(null);
-      }
-    } else {
-      setSubmittingComment(prev => ({ ...prev, [postId]: true }));
-      try {
-        const res = await api.post(`/posts/${postId}/comments`, { 
-          content,
-          mentionedUserIds: []
-        });
-        setPosts(prev => prev.map(p => p.id === postId ? res.data : p));
-        toast.success("Comment added successfully");
-      } catch (err) {
-        console.error("Failed to add GIF/Sticker comment:", err);
-        toast.error("Failed to submit comment");
-      } finally {
-        setSubmittingComment(prev => ({ ...prev, [postId]: false }));
-        setActiveCommentPostId(null);
-      }
-    }
-  };
-
-  const handleAddInlineComment = async (postId: string, e: React.FormEvent) => {
-    e.preventDefault();
-    const content = inlineCommentText[postId] || "";
-    if (!content.trim()) return;
-
-    setSubmittingComment(prev => ({ ...prev, [postId]: true }));
-    try {
-      const res = await api.post(`/posts/${postId}/comments`, { 
-        content,
-        mentionedUserIds: inlineCommentMentions[postId] || []
-      });
-      setPosts(prev => prev.map(p => p.id === postId ? res.data : p));
-      setInlineCommentText(prev => ({ ...prev, [postId]: "" }));
-      setInlineCommentMentions(prev => ({ ...prev, [postId]: [] }));
-      toast.success("Comment added successfully");
-    } catch (err) {
-      console.error("Failed to add inline comment:", err);
-      toast.error("Failed to submit comment");
-    } finally {
-      setSubmittingComment(prev => ({ ...prev, [postId]: false }));
-    }
-  };
-
-  const handleAddInlineReply = async (postId: string, parentCommentId: string, e: React.FormEvent) => {
-    e.preventDefault();
-    const content = replyContent[parentCommentId] || "";
-    const target = replyTargetUser[parentCommentId];
-    if (!content.trim() || !target) return;
-
-    setSubmittingReply(prev => ({ ...prev, [parentCommentId]: true }));
-    try {
-      const res = await api.post(`/posts/${postId}/comments`, {
-        content,
-        parentCommentId,
-        replyToUserId: target.id,
-        replyToUserName: target.name,
-        mentionedUserIds: replyMentions[parentCommentId] || []
-      });
-      setPosts(prev => prev.map(p => p.id === postId ? res.data : p));
-      setReplyContent(prev => ({ ...prev, [parentCommentId]: "" }));
-      setReplyMentions(prev => ({ ...prev, [parentCommentId]: [] }));
-      setReplyTargetUser(prev => ({ ...prev, [parentCommentId]: null }));
-      setReplyingToCommentId(prev => ({ ...prev, [postId]: null }));
-      toast.success("Reply submitted successfully");
-    } catch (err) {
-      console.error("Failed to submit reply:", err);
-      toast.error("Failed to submit reply");
-    } finally {
-      setSubmittingReply(prev => ({ ...prev, [parentCommentId]: false }));
-    }
-  };
-
-  const handleDeleteInlineComment = async (postId: string, commentId: string) => {
-    if (!window.confirm("Are you sure you want to delete this comment?")) return;
-
-    try {
-      const res = await api.delete(`/posts/${postId}/comments/${commentId}`);
-      setPosts(prev => prev.map(p => p.id === postId ? res.data : p));
-      toast.success("Comment deleted successfully");
-    } catch (err) {
-      console.error("Failed to delete comment:", err);
-      toast.error("Failed to delete comment");
-    }
-  };
-
-  const handleLikeComment = async (postId: string, commentId: string) => {
-    if (!isAuthenticated) {
-      toast.error("Please log in to like comments");
-      return;
-    }
-    try {
-      const res = await api.post(`/posts/${postId}/comments/${commentId}/like`);
-      setPosts(prev => prev.map(p => p.id === postId ? res.data : p));
-    } catch (err) {
-      console.error("Failed to like comment:", err);
-      toast.error("Failed to like comment");
-    }
-  };
-
-  const startEditing = (post: Post) => {
-    setEditingPostId(post.id);
-    setEditContent(post.content || "");
-    setEditLinkUrl(post.linkUrl || "");
-  };
-
-  const cancelEditing = () => {
-    setEditingPostId(null);
-    setEditContent("");
-    setEditLinkUrl("");
-  };
-
-  const handleSaveEdit = async (postId: string) => {
-    if (!editContent.trim()) {
-      toast.error("Content cannot be empty");
-      return;
-    }
-    setSavingEdit(true);
-    try {
-      const res = await api.put(`/posts/${postId}`, {
-        content: editContent,
-        linkUrl: editLinkUrl
-      });
-      setPosts(prev => prev.map(p => p.id === postId ? res.data : p));
-      cancelEditing();
-      toast.success("Post updated successfully");
-    } catch (err) {
-      console.error("Failed to update post:", err);
-      toast.error("Failed to update post");
-    } finally {
-      setSavingEdit(false);
-    }
-  };
-
   const getInitials = (name: string) => {
     if (!name) return "U";
     return name.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2);
-  };
-
-  const formatTimestamp = (dateStr: string) => {
-    try {
-      const past = new Date(dateStr);
-      const now = new Date();
-      const diffMs = now.getTime() - past.getTime();
-      const diffMins = Math.floor(diffMs / 60000);
-      const diffHours = Math.floor(diffMins / 60);
-      
-      if (diffMins < 1) return "Just now";
-      if (diffMins < 60) return `${diffMins}m ago`;
-      if (diffHours < 24) return `${diffHours}h ago`;
-      
-      const options: Intl.DateTimeFormatOptions = {
-        month: "short",
-        day: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-        hour12: false
-      };
-      
-      if (past.getFullYear() !== now.getFullYear()) {
-        options.year = "numeric";
-      }
-      
-      return past.toLocaleString(undefined, options);
-    } catch (e) {
-      return "Recently";
-    }
-  };
-
-  const renderContentWithMentions = (text: string) => {
-    if (!text) return null;
-    const parts = text.split(/(@[a-zA-Z0-9_]+)/g);
-    return parts.map((part, idx) => {
-      if (part.startsWith("@")) {
-        const username = part.slice(1);
-        return (
-          <Link 
-            key={idx} 
-            href={`/public/profiles/${username}`}
-            className="text-primary hover:underline font-bold"
-          >
-            {part}
-          </Link>
-        );
-      }
-      return part;
-    });
   };
 
   return (
@@ -770,10 +382,10 @@ export default function HomeFeed() {
                     )}
                   </div>
                   <div className="flex-1">
-                    <textarea
+                    <MentionInput
                       placeholder="Share a career update, link, or project PDF..."
                       value={content}
-                      onChange={(e) => setContent(e.target.value)}
+                      onChange={(val) => setContent(val)}
                       rows={3}
                       className="w-full bg-transparent border-0 focus:ring-0 text-sm placeholder:text-muted-foreground/60 resize-none py-1 focus:outline-none text-foreground font-medium"
                     />
@@ -948,607 +560,15 @@ export default function HomeFeed() {
             {/* TIMELINE LIST */}
             <div className="space-y-6">
               {posts.length > 0 ? (
-                posts.map(post => {
-                  const isPostLiked = post.likedUserIds.includes(user?.id || "");
-                  return (
-                    <article key={post.id} className="bg-card border border-border rounded-[2rem] p-6 shadow-sm space-y-4 hover:border-border/80 transition-all animate-in fade-in duration-300">
-                      {/* Post Header */}
-                      <div className="flex items-center justify-between">
-                        <Link href={`/public/profiles/${post.authorUsername || post.userId}`} className="flex items-center gap-3 hover:opacity-85 transition-opacity group">
-                          <div className="w-10 h-10 rounded-full bg-secondary flex-shrink-0 flex items-center justify-center font-black uppercase border border-border/80 relative overflow-hidden group-hover:border-primary/50 transition-colors">
-                            {post.authorAvatar ? (
-                              <img src={post.authorAvatar} alt={post.authorName} className="w-full h-full object-cover" />
-                            ) : (
-                              getInitials(post.authorName)
-                            )}
-                          </div>
-                          <div>
-                            <h4 className="text-sm font-black uppercase tracking-tight text-foreground leading-none group-hover:underline">{post.authorName}</h4>
-                            <p className="text-[10px] text-muted-foreground font-semibold mt-1 leading-none">{post.authorHeadline || "Zenith Member"}</p>
-                          </div>
-                        </Link>
-
-                        <div className="flex items-center gap-3 text-xs text-muted-foreground font-semibold">
-                          <Link href={`/posts/${post.id}`} className="hover:underline">
-                            {formatTimestamp(post.createdAt)}
-                          </Link>
-                          
-                          {/* Edit / Delete capability if owner/admin */}
-                          {(user?.id === post.userId || user?.role === 'ADMIN') && (
-                            <div className="flex items-center gap-1.5">
-                              {user?.id === post.userId && (
-                                <button 
-                                  onClick={() => startEditing(post)}
-                                  className="p-1 text-muted-foreground hover:text-primary transition-colors"
-                                  title="Edit Post"
-                                >
-                                  <Edit2 className="w-4 h-4" />
-                                </button>
-                              )}
-                              <button 
-                                onClick={() => handleDeletePost(post.id)}
-                                className="p-1 text-muted-foreground hover:text-destructive transition-colors"
-                                title="Delete Post"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Edit state or standard view */}
-                      {editingPostId === post.id ? (
-                        <div className="space-y-3 p-4 bg-secondary/15 rounded-2xl border border-border/60">
-                          <textarea
-                            value={editContent}
-                            onChange={(e) => setEditContent(e.target.value)}
-                            rows={3}
-                            className="w-full bg-transparent border-0 focus:ring-0 text-sm focus:outline-none text-foreground font-medium resize-none placeholder:text-muted-foreground/60"
-                            placeholder="Edit your broadcast update..."
-                          />
-                          <div className="relative">
-                            <Link2 className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                            <input
-                              type="url"
-                              value={editLinkUrl}
-                              onChange={(e) => setEditLinkUrl(e.target.value)}
-                              placeholder="https://example.com/edit-link"
-                              className="w-full bg-secondary/30 border border-border rounded-xl pl-9 pr-4 py-2.5 text-xs focus:outline-none focus:ring-1 focus:ring-primary/20 text-foreground font-bold"
-                            />
-                          </div>
-                          <div className="flex justify-end gap-2 text-xs">
-                            <button
-                              type="button"
-                              onClick={cancelEditing}
-                              className="px-3.5 py-2 bg-secondary border border-border text-foreground rounded-xl font-bold hover:bg-secondary/80"
-                            >
-                              Cancel
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleSaveEdit(post.id)}
-                              disabled={savingEdit || !editContent.trim()}
-                              className="px-4 py-2 bg-foreground text-background rounded-xl font-black uppercase tracking-wider hover:opacity-90 disabled:opacity-50 flex items-center gap-1.5"
-                            >
-                              {savingEdit ? (
-                                <>
-                                  <Loader2 className="w-3 h-3 animate-spin" />
-                                  Saving...
-                                </>
-                              ) : "Save"}
-                            </button>
-                          </div>
-                        </div>
-                      ) : (
-                        <>
-                          {/* Post Text Content */}
-                          {post.content && (
-                            <p className="text-sm leading-relaxed text-foreground whitespace-pre-line font-medium">
-                              {post.content}
-                            </p>
-                          )}
-
-                          {/* Embedded Image Attachment */}
-                          {post.mediaUrls && post.mediaUrls.length > 0 && (
-                            <div className="w-full overflow-hidden rounded-2xl border border-border/60 bg-secondary/20">
-                              <img 
-                                src={post.mediaUrls[0]} 
-                                alt="Post Attachment" 
-                                className="w-full h-auto max-h-96 object-cover"
-                              />
-                            </div>
-                          )}
-
-                          {/* Embedded Video Attachment */}
-                          {post.videoUrl && (
-                            <div className="w-full overflow-hidden rounded-2xl border border-border/60 bg-black relative">
-                              <AutopauseVideo 
-                                src={post.videoUrl} 
-                                className="w-full h-auto max-h-96 object-contain"
-                              />
-                            </div>
-                          )}
-
-                          {/* Embedded PDF Attachment */}
-                          {post.pdfUrl && (
-                            <div className="flex items-center justify-between p-4 bg-secondary/20 border border-border rounded-2xl">
-                              <div className="flex items-center gap-3 text-xs">
-                                <File className="w-8 h-8 text-red-500 flex-shrink-0" />
-                                <div>
-                                  <p className="font-bold text-foreground truncate max-w-[250px]">Project Document</p>
-                                  <p className="text-[10px] text-muted-foreground font-semibold">Embedded PDF Attachment</p>
-                                </div>
-                              </div>
-                              <a 
-                                href={post.pdfUrl} 
-                                target="_blank" 
-                                rel="noopener noreferrer"
-                                className="px-4 py-2 bg-secondary border border-border hover:bg-secondary/80 text-foreground text-[10px] font-black uppercase tracking-widest rounded-xl transition-all flex items-center gap-1.5"
-                              >
-                                View PDF
-                                <ExternalLink className="w-3 h-3" />
-                              </a>
-                            </div>
-                          )}
-
-                          {/* Embedded Link */}
-                          {post.linkUrl && (
-                            <a 
-                              href={post.linkUrl} 
-                              target="_blank" 
-                              rel="noopener noreferrer" 
-                              className="block p-4 border border-border bg-secondary/15 rounded-2xl hover:bg-secondary/30 transition-all group"
-                            >
-                              <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-2">
-                                  <Link2 className="w-4.5 h-4.5 text-primary group-hover:scale-110 transition-transform" />
-                                  <span className="text-xs font-bold text-foreground truncate max-w-[280px] group-hover:underline">{post.linkUrl}</span>
-                                </div>
-                                <ExternalLink className="w-3.5 h-3.5 text-muted-foreground group-hover:text-foreground transition-colors" />
-                              </div>
-                            </a>
-                          )}
-                        </>
-                      )}
-
-                      {/* Social Interactions */}
-                      <div className="flex items-center justify-between pt-2 border-t border-border/40 text-xs">
-                        <div className="flex items-center gap-3">
-                          <div 
-                            className="relative"
-                            onMouseEnter={() => setActiveReactionPostId(post.id)}
-                            onMouseLeave={() => setActiveReactionPostId(null)}
-                          >
-                            {activeReactionPostId === post.id && (
-                              <div className="absolute bottom-full left-0 pb-2 z-30 animate-in fade-in slide-in-from-bottom-2 duration-200">
-                                <div className="flex items-center gap-2 bg-card border border-border p-2 rounded-2xl shadow-xl">
-                                  {REACTION_EMOJIS.map(emoji => (
-                                    <button 
-                                      key={emoji} 
-                                      type="button"
-                                      onClick={() => handleReact(post.id, emoji)} 
-                                      className="hover:scale-125 transition-transform text-lg p-1"
-                                    >
-                                      {emoji}
-                                    </button>
-                                  ))}
-                                </div>
-                              </div>
-                            )}
-
-                            <button
-                              onClick={() => handleLikePost(post.id)}
-                              type="button"
-                              className={`flex items-center gap-2 font-bold px-3 py-1.5 rounded-full transition-all ${
-                                isPostLiked
-                                  ? 'bg-primary/10 text-primary' 
-                                  : 'text-muted-foreground hover:bg-secondary hover:text-foreground'
-                              }`}
-                            >
-                              {(() => {
-                                const uniqueReactions = Array.from(new Set(Object.values(post.reactions || {}))).slice(0, 3);
-                                if (uniqueReactions.length > 0) {
-                                  return (
-                                    <div className="flex -space-x-1 items-center mr-0.5">
-                                      {uniqueReactions.map((emoji, idx) => (
-                                        <span key={idx} className="text-xs select-none" style={{ zIndex: 10 - idx }}>
-                                          {emoji}
-                                        </span>
-                                      ))}
-                                    </div>
-                                  );
-                                }
-                                return null;
-                              })()}
-
-                              {(() => {
-                                const userReaction = post.reactions?.[user?.id || ""];
-                                if (userReaction) {
-                                  return <span className="text-sm select-none">{userReaction}</span>;
-                                }
-                                return <Heart className={`w-4 h-4 transition-transform ${isPostLiked ? 'fill-current text-rose-500 scale-110' : ''}`} />;
-                              })()}
-
-                              <span>{post.likesCount}</span>
-                            </button>
-                          </div>
-
-                          <button
-                            onClick={() => toggleComments(post.id)}
-                            className={`flex items-center gap-2 font-bold px-3 py-1.5 rounded-full transition-all ${
-                              expandedComments[post.id] 
-                                ? 'bg-primary/10 text-primary' 
-                                : 'text-muted-foreground hover:bg-secondary hover:text-foreground'
-                            }`}
-                          >
-                            <MessageSquare className="w-4 h-4" />
-                            <span>
-                              {post.comments?.length ?? 0} {post.comments?.length === 1 ? "Comment" : "Comments"}
-                            </span>
-                          </button>
-
-                          {/* Analytics Views Counter */}
-                          {user?.id === post.userId ? (
-                            <Link
-                              href={`/posts/${post.id}/analytics`}
-                              className="flex items-center gap-1.5 text-muted-foreground hover:text-indigo-500 font-bold px-3 py-1.5 transition-colors cursor-pointer"
-                              title="View post analytics"
-                            >
-                              <Eye className="w-4 h-4" />
-                              <span>{post.viewsCount || 0}</span>
-                            </Link>
-                          ) : (
-                            <div 
-                              className="flex items-center gap-1.5 text-muted-foreground font-bold px-3 py-1.5 select-none"
-                              title={`${post.viewsCount || 0} total node reads`}
-                            >
-                              <Eye className="w-4 h-4" />
-                              <span>{post.viewsCount || 0}</span>
-                            </div>
-                          )}
-                        </div>
-
-                        <button
-                          onClick={() => {
-                            if (!isAuthenticated) {
-                              toast.error("Please login to share posts", {
-                                action: {
-                                  label: "Login",
-                                  onClick: () => router.push("/auth/login")
-                                }
-                              });
-                              return;
-                            }
-                            handleOpenShare(post);
-                          }}
-                          className="flex items-center gap-2 text-muted-foreground hover:bg-secondary hover:text-foreground font-bold px-3 py-1.5 rounded-full transition-all"
-                        >
-                          <Share2 className="w-4 h-4" />
-                          <span>Share</span>
-                        </button>
-                      </div>
-
-                      {/* Inline Comments Section */}
-                      {expandedComments[post.id] && (
-                        <div className="pt-4 border-t border-border/40 space-y-4 animate-in fade-in duration-200">
-                          {/* Add comment inline form */}
-                          {isAuthenticated ? (
-                            <form onSubmit={(e) => handleAddInlineComment(post.id, e)} className="flex gap-3 items-center">
-                              <div className="w-8 h-8 rounded-full bg-secondary flex-shrink-0 flex items-center justify-center font-bold uppercase text-foreground relative overflow-hidden border border-border">
-                                {profile?.profilePhotoUrl ? (
-                                  <img src={profile.profilePhotoUrl} alt={user?.name || ""} className="w-full h-full object-cover" />
-                                ) : (
-                                  getInitials(user?.name || "")
-                                )}
-                              </div>
-                              <div className="flex-1 flex gap-2">
-                                <MentionInput
-                                  placeholder="Write a comment..."
-                                  value={inlineCommentText[post.id] || ""}
-                                  onChange={(val, mentions) => {
-                                    setInlineCommentText(prev => ({ ...prev, [post.id]: val }));
-                                    setInlineCommentMentions(prev => ({ ...prev, [post.id]: mentions }));
-                                  }}
-                                  initialMentions={post ? [{
-                                    userId: post.userId,
-                                    fullName: post.authorName,
-                                    username: post.authorUsername,
-                                    headline: post.authorHeadline,
-                                    profilePhotoUrl: post.authorAvatar
-                                  }] : []}
-                                  rows={1}
-                                  className="flex-1 bg-secondary/20 border border-border rounded-xl px-4 py-2 text-xs placeholder:text-muted-foreground/60 focus:outline-none focus:ring-1 focus:ring-primary/20 text-foreground font-medium resize-none"
-                                />
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setActiveCommentPostId(post.id);
-                                    setShowCommentGifPicker(true);
-                                  }}
-                                  title="Add GIF or Sticker"
-                                  className="p-2 bg-secondary/40 hover:bg-secondary/70 border border-border rounded-xl text-muted-foreground hover:text-foreground transition-all shrink-0 flex items-center justify-center h-[34px] w-[34px]"
-                                >
-                                  <ImageIcon className="w-4 h-4" />
-                                </button>
-                                <button
-                                  type="submit"
-                                  disabled={submittingComment[post.id] || !(inlineCommentText[post.id] || "").trim()}
-                                  className="p-2 bg-foreground text-background rounded-xl hover:opacity-90 disabled:opacity-50 disabled:scale-100 transition-all shrink-0 flex items-center justify-center h-[34px] w-[34px]"
-                                >
-                                  {submittingComment[post.id] ? (
-                                    <Loader2 className="w-3.5 h-3.5 animate-spin text-primary" />
-                                  ) : (
-                                    <Send className="w-3.5 h-3.5" />
-                                  )}
-                                </button>
-                              </div>
-                            </form>
-                          ) : (
-                            <div className="bg-secondary/10 border border-border/50 rounded-xl p-3 text-center text-xs text-muted-foreground font-semibold">
-                              Please <Link href="/auth/login" className="text-primary hover:underline">login</Link> to join the discussion.
-                            </div>
-                          )}
-
-                          {/* Comments List */}
-                          <div className="space-y-4 max-h-[350px] overflow-y-auto pr-1 font-medium text-xs">
-                            {post.comments && post.comments.length > 0 ? (
-                              (() => {
-                                const rootComments = post.comments.filter(c => !c.parentCommentId) || [];
-                                if (rootComments.length === 0) {
-                                  return (
-                                    <div className="text-center py-2 text-[10px] text-muted-foreground font-semibold">
-                                      No top-level comments yet. Add yours!
-                                    </div>
-                                  );
-                                }
-                                return rootComments.map((comment: any) => {
-                                  const replies = post.comments?.filter(c => c.parentCommentId === comment.id) || [];
-                                  const isReplying = replyingToCommentId[post.id] === comment.id;
-                                  return (
-                                    <div key={comment.id} className="space-y-3">
-                                      {/* Top-Level Comment */}
-                                      <div className="flex gap-2 items-start text-xs">
-                                        <Link href={`/public/profiles/${comment.authorUsername || comment.userId}`} className="w-7 h-7 rounded-full bg-secondary flex-shrink-0 flex items-center justify-center text-[10px] font-black uppercase border border-border/80 relative overflow-hidden hover:opacity-85 transition-opacity">
-                                          {comment.authorAvatar ? (
-                                            <img src={comment.authorAvatar} alt={comment.authorName} className="w-full h-full object-cover" />
-                                          ) : (
-                                            getInitials(comment.authorName)
-                                          )}
-                                        </Link>
-                                        <div className="flex-1 bg-secondary/10 rounded-xl p-3 border border-border/30 space-y-0.5">
-                                          <div className="flex items-center justify-between">
-                                            <div>
-                                              <Link href={`/public/profiles/${comment.authorUsername || comment.userId}`} className="text-xs font-black uppercase tracking-tight text-foreground hover:underline">
-                                                {comment.authorName}
-                                              </Link>
-                                              {comment.authorHeadline && (
-                                                <span className="text-[8px] text-muted-foreground font-semibold ml-1.5">
-                                                  • {comment.authorHeadline}
-                                                </span>
-                                              )}
-                                            </div>
-                                            <div className="flex items-center gap-2 text-[9px] text-muted-foreground font-semibold font-sans">
-                                              <span>{formatTimestamp(comment.createdAt)}</span>
-
-                                              <button
-                                                onClick={() => handleLikeComment(post.id, comment.id)}
-                                                className={`flex items-center gap-0.5 transition-colors hover:text-rose-500 ${
-                                                  comment.likedUserIds?.includes(user?.id || "") ? 'text-rose-500' : 'text-muted-foreground'
-                                                }`}
-                                                title="Like Comment"
-                                              >
-                                                <Heart className={`w-2.5 h-2.5 ${comment.likedUserIds?.includes(user?.id || "") ? 'fill-current' : ''}`} />
-                                                <span>{comment.likedUserIds?.length || 0}</span>
-                                              </button>
-                                              
-                                              {isAuthenticated && (
-                                                <button
-                                                  onClick={() => {
-                                                    setReplyingToCommentId(prev => ({ ...prev, [post.id]: comment.id }));
-                                                    const handle = comment.authorUsername || comment.authorName.replace(/\s+/g, "_").toLowerCase();
-                                                    setReplyContent(prev => ({ ...prev, [comment.id]: `@${handle} ` }));
-                                                    setReplyTargetUser(prev => ({ ...prev, [comment.id]: { id: comment.userId, name: comment.authorName, username: comment.authorUsername || comment.authorName.replace(/\s+/g, "_").toLowerCase() } }));
-                                                  }}
-                                                  className="hover:underline font-bold text-muted-foreground hover:text-foreground"
-                                                >
-                                                  Reply
-                                                </button>
-                                              )}
-
-                                              {(user?.id === comment.userId || user?.id === post.userId || user?.role === 'ADMIN') && (
-                                                <button 
-                                                  onClick={() => handleDeleteInlineComment(post.id, comment.id)}
-                                                  className="text-muted-foreground hover:text-destructive p-0.5 transition-colors"
-                                                >
-                                                  <Trash2 className="w-3 h-3" />
-                                                </button>
-                                              )}
-                                            </div>
-                                          </div>
-                                          {comment.content?.startsWith("[GIF]") ? (
-                                            <ClickableMedia src={comment.content.slice(5)} alt="GIF" type="gif" />
-                                          ) : comment.content?.startsWith("[STICKER]") ? (
-                                            <ClickableMedia src={comment.content.slice(9)} alt="Sticker" type="sticker" />
-                                          ) : (
-                                            <p className="text-foreground leading-relaxed whitespace-pre-line font-medium select-text">
-                                              {renderContentWithMentions(comment.content)}
-                                            </p>
-                                          )}
-                                        </div>
-                                      </div>
-
-                                      {/* Replies List */}
-                                      {replies.length > 0 && (
-                                        <div className="pl-5 space-y-2.5">
-                                          {replies.map((reply: any) => (
-                                            <div key={reply.id} className="flex gap-2 items-start text-xs">
-                                              <CornerDownRight className="w-3 h-3 text-muted-foreground/45 mt-1.5 flex-shrink-0" />
-                                              <Link href={`/public/profiles/${reply.authorUsername || reply.userId}`} className="w-6 h-6 rounded-full bg-secondary flex-shrink-0 flex items-center justify-center text-[8px] font-black uppercase border border-border/80 relative overflow-hidden hover:opacity-85 transition-opacity">
-                                                {reply.authorAvatar ? (
-                                                  <img src={reply.authorAvatar} alt={reply.authorName} className="w-full h-full object-cover" />
-                                                ) : (
-                                                  getInitials(reply.authorName)
-                                                )}
-                                              </Link>
-                                              <div className="flex-1 bg-secondary/5 rounded-xl p-2.5 border border-border/20 space-y-0.5">
-                                                <div className="flex items-center justify-between">
-                                                  <div className="flex flex-wrap items-center gap-x-1">
-                                                    <Link href={`/public/profiles/${reply.authorUsername || reply.userId}`} className="text-[10px] font-black uppercase tracking-tight text-foreground hover:underline">
-                                                      {reply.authorName}
-                                                    </Link>
-                                                    {reply.authorHeadline && (
-                                                      <span className="text-[7px] text-muted-foreground font-semibold">
-                                                        • {reply.authorHeadline}
-                                                      </span>
-                                                    )}
-                                                    {reply.replyToUserName && (
-                                                      <span className="text-[7px] bg-secondary/85 px-1.5 py-0.5 rounded text-muted-foreground/80 font-bold uppercase tracking-wider">
-                                                        Replying to @{reply.replyToUserName}
-                                                      </span>
-                                                    )}
-                                                  </div>
-                                                  <div className="flex items-center gap-1.5 text-[8px] text-muted-foreground font-semibold">
-                                                    <span>{formatTimestamp(reply.createdAt)}</span>
-
-                                                    <button
-                                                      onClick={() => handleLikeComment(post.id, reply.id)}
-                                                      className={`flex items-center gap-0.5 transition-colors hover:text-rose-500 ${
-                                                        reply.likedUserIds?.includes(user?.id || "") ? 'text-rose-500' : 'text-muted-foreground'
-                                                      }`}
-                                                      title="Like Reply"
-                                                    >
-                                                      <Heart className={`w-2 h-2 ${reply.likedUserIds?.includes(user?.id || "") ? 'fill-current' : ''}`} />
-                                                      <span>{reply.likedUserIds?.length || 0}</span>
-                                                    </button>
-                                                    
-                                                    {isAuthenticated && (
-                                                      <button
-                                                        onClick={() => {
-                                                          setReplyingToCommentId(prev => ({ ...prev, [post.id]: comment.id }));
-                                                          const handle = reply.authorUsername || reply.authorName.replace(/\s+/g, "_").toLowerCase();
-                                                          setReplyContent(prev => ({ ...prev, [comment.id]: `@${handle} ` }));
-                                                          setReplyTargetUser(prev => ({ ...prev, [comment.id]: { id: reply.userId, name: reply.authorName, username: reply.authorUsername || reply.authorName.replace(/\s+/g, "_").toLowerCase() } }));
-                                                        }}
-                                                        className="hover:underline font-bold text-muted-foreground hover:text-foreground"
-                                                      >
-                                                        Reply
-                                                      </button>
-                                                    )}
-
-                                                    {(user?.id === reply.userId || user?.id === post.userId || user?.role === 'ADMIN') && (
-                                                      <button 
-                                                        onClick={() => handleDeleteInlineComment(post.id, reply.id)}
-                                                        className="text-muted-foreground hover:text-destructive p-0.5 transition-colors"
-                                                      >
-                                                        <Trash2 className="w-3.5 h-3.5" />
-                                                      </button>
-                                                    )}
-                                                  </div>
-                                                </div>
-                                                {reply.content?.startsWith("[GIF]") ? (
-                                                  <ClickableMedia src={reply.content.slice(5)} alt="GIF" type="gif" />
-                                                ) : reply.content?.startsWith("[STICKER]") ? (
-                                                  <ClickableMedia src={reply.content.slice(9)} alt="Sticker" type="sticker" />
-                                                ) : (
-                                                  <p className="text-foreground leading-relaxed whitespace-pre-line font-medium select-text">
-                                                    {renderContentWithMentions(reply.content)}
-                                                  </p>
-                                                )}
-                                              </div>
-                                            </div>
-                                          ))}
-                                        </div>
-                                      )}
-
-                                      {/* Inline Reply Form for Root Comment */}
-                                      {isReplying && (
-                                        <div className="pl-5">
-                                          <form onSubmit={(e) => handleAddInlineReply(post.id, comment.id, e)} className="flex gap-2 items-start bg-secondary/5 p-3 border border-border/30 rounded-xl">
-                                            <div className="w-6 h-6 rounded-full bg-secondary flex-shrink-0 flex items-center justify-center text-[9px] font-black uppercase border border-border relative overflow-hidden">
-                                              {profile?.profilePhotoUrl ? (
-                                                <img src={profile.profilePhotoUrl} alt={user?.name || ""} className="w-full h-full object-cover" />
-                                              ) : (
-                                                getInitials(user?.name || "")
-                                              )}
-                                            </div>
-                                            <div className="flex-1 space-y-2">
-                                              <div className="text-[8px] text-muted-foreground font-bold uppercase tracking-wider">
-                                                Replying to <span className="text-foreground">@{replyTargetUser[comment.id]?.username || replyTargetUser[comment.id]?.name}</span>
-                                              </div>
-                                              <MentionInput
-                                                placeholder="Write a reply..."
-                                                value={replyContent[comment.id] || ""}
-                                                onChange={(val, mentions) => {
-                                                  setReplyContent(prev => ({ ...prev, [comment.id]: val }));
-                                                  setReplyMentions(prev => ({ ...prev, [comment.id]: mentions }));
-                                                }}
-                                                initialMentions={replyTargetUser[comment.id] ? [{
-                                                  userId: replyTargetUser[comment.id]!.id,
-                                                  fullName: replyTargetUser[comment.id]!.name,
-                                                  username: (replyTargetUser[comment.id] as any).username
-                                                }] : []}
-                                                rows={1}
-                                                autoFocus={true}
-                                                className="w-full bg-secondary/20 border border-border rounded-lg p-2 text-xs placeholder:text-muted-foreground/60 resize-none focus:outline-none focus:ring-1 focus:ring-primary/20 text-foreground font-medium"
-                                              />
-                                              <div className="flex justify-end gap-1.5 text-[9px]">
-                                                <button
-                                                  type="button"
-                                                  onClick={() => {
-                                                    setActiveCommentPostId(post.id);
-                                                    setGifPickerParentCommentId(comment.id);
-                                                    setShowCommentGifPicker(true);
-                                                  }}
-                                                  title="Add GIF or Sticker"
-                                                  className="px-2.5 py-1 bg-secondary/40 hover:bg-secondary/70 border border-border text-muted-foreground hover:text-foreground font-bold rounded-full transition-colors flex items-center gap-1"
-                                                >
-                                                  <ImageIcon className="w-3 h-3" />
-                                                  GIF
-                                                </button>
-                                                <button
-                                                  type="button"
-                                                  onClick={() => {
-                                                    setReplyingToCommentId(prev => ({ ...prev, [post.id]: null }));
-                                                    setReplyContent(prev => ({ ...prev, [comment.id]: "" }));
-                                                    setReplyTargetUser(prev => ({ ...prev, [comment.id]: null }));
-                                                  }}
-                                                  className="px-2.5 py-1 bg-secondary border border-border text-foreground font-bold rounded-full hover:bg-secondary/80 transition-colors uppercase tracking-wider"
-                                                >
-                                                  Cancel
-                                                </button>
-                                                <button
-                                                  type="submit"
-                                                  disabled={submittingReply[comment.id] || !(replyContent[comment.id] || "").trim()}
-                                                  className="px-3.5 py-1 bg-foreground text-background font-black rounded-full hover:opacity-90 disabled:opacity-50 transition-all uppercase tracking-widest flex items-center gap-1.5"
-                                                >
-                                                  {submittingReply[comment.id] ? (
-                                                    <>
-                                                      <Loader2 className="w-2.5 h-2.5 animate-spin" />
-                                                      Replying...
-                                                    </>
-                                                  ) : "Reply"}
-                                                </button>
-                                              </div>
-                                            </div>
-                                          </form>
-                                        </div>
-                                      )}
-                                    </div>
-                                  );
-                                });
-                              })()
-                            ) : (
-                              <div className="text-center py-2 text-[10px] text-muted-foreground font-semibold">
-                                No comments yet. Add yours!
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      )}
-                    </article>
-                  );
-                })
+                posts.map(post => (
+                  <PostCard 
+                    key={post.id} 
+                    post={post} 
+                    userAvatar={profile?.profilePhotoUrl}
+                    onDelete={(postId) => setPosts(prev => prev.filter(p => p.id !== postId))}
+                    onShare={handleOpenShare}
+                  />
+                ))
               ) : (
                 !loadingFeed && (
                   <div className="bg-card border border-border rounded-[2.5rem] p-12 text-center space-y-4">
@@ -1699,18 +719,6 @@ export default function HomeFeed() {
           </div>
         </div>
       )}
-      {showCommentGifPicker && (
-        <GifStickerPicker
-          onSelect={(url, type) => {
-            sendCommentGifOrSticker(url, type);
-            setShowCommentGifPicker(false);
-          }}
-          onClose={() => {
-            setShowCommentGifPicker(false);
-            setGifPickerParentCommentId(null);
-          }}
-        />
-      )}
       </div>
     </div>
   );
@@ -1725,10 +733,143 @@ function X({ className }: { className?: string }) {
   );
 }
 
-// Autopause & Autoplay Video component — plays muted when scrolled into view, pauses when out
+// Autopause & Autoplay Video component — plays when centered in viewport, pauses when out,
+// with custom modern glassmorphic controls and persistent mute settings.
 function AutopauseVideo({ src, className }: { src: string; className?: string }) {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
+  // Custom Controls State
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [isMuted, setIsMuted] = useState(true);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [showControls, setShowControls] = useState(true);
+  const [isScrubbing, setIsScrubbing] = useState(false);
+
+  // Sync mute state with localStorage
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const storedMute = localStorage.getItem("video_player_muted");
+      const initialMute = storedMute === "false" ? false : true;
+      setIsMuted(initialMute);
+      if (videoRef.current) {
+        videoRef.current.muted = initialMute;
+      }
+    }
+  }, []);
+
+  const handleMuteToggle = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const newMuted = !isMuted;
+    setIsMuted(newMuted);
+    if (videoRef.current) {
+      videoRef.current.muted = newMuted;
+    }
+    if (typeof window !== "undefined") {
+      localStorage.setItem("video_player_muted", newMuted ? "true" : "false");
+    }
+  };
+
+  const handlePlayToggle = (e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    const video = videoRef.current;
+    if (!video) return;
+
+    if (isPlaying) {
+      video.pause();
+    } else {
+      // Before playing, ensure we set the correct muted state from localStorage
+      const storedMute = typeof window !== "undefined" && localStorage.getItem("video_player_muted") === "false" ? false : true;
+      video.muted = storedMute;
+      video.play().catch(() => {});
+    }
+  };
+
+  // Sync state with native events
+  const onPlay = () => setIsPlaying(true);
+  const onPause = () => setIsPlaying(false);
+  const onVolumeChange = () => {
+    if (videoRef.current) {
+      const videoMuted = videoRef.current.muted;
+      setIsMuted(videoMuted);
+      if (typeof window !== "undefined") {
+        localStorage.setItem("video_player_muted", videoMuted ? "true" : "false");
+      }
+    }
+  };
+  const onTimeUpdate = () => {
+    if (videoRef.current && !isScrubbing) {
+      setCurrentTime(videoRef.current.currentTime);
+    }
+  };
+  const onDurationChange = () => {
+    if (videoRef.current) {
+      setDuration(videoRef.current.duration || 0);
+    }
+  };
+
+  // Hide controls after 2.5 seconds of play inactivity
+  useEffect(() => {
+    if (!isPlaying) {
+      setShowControls(true);
+      return;
+    }
+
+    const handleTimeout = () => {
+      setShowControls(false);
+    };
+
+    const timeoutId = setTimeout(handleTimeout, 2500);
+
+    return () => clearTimeout(timeoutId);
+  }, [isPlaying, showControls]);
+
+  const handleMouseMove = () => {
+    setShowControls(true);
+  };
+
+  // Fullscreen implementation
+  const handleFullscreenToggle = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const container = containerRef.current;
+    if (!container) return;
+
+    if (!document.fullscreenElement) {
+      container.requestFullscreen().then(() => {
+        setIsFullscreen(true);
+      }).catch(() => {});
+    } else {
+      document.exitFullscreen().then(() => {
+        setIsFullscreen(false);
+      }).catch(() => {});
+    }
+  };
+
+  // Listen to fullscreen change event
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    document.addEventListener("fullscreenchange", handleFullscreenChange);
+    return () => document.removeEventListener("fullscreenchange", handleFullscreenChange);
+  }, []);
+
+  // Time scrubber click/drag
+  const handleProgressClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    e.stopPropagation();
+    const video = videoRef.current;
+    if (!video || duration === 0) return;
+
+    const rect = e.currentTarget.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const percentage = Math.max(0, Math.min(1, clickX / rect.width));
+    video.currentTime = percentage * duration;
+    setCurrentTime(percentage * duration);
+  };
+
+  // Viewport center autoplay
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
@@ -1736,17 +877,25 @@ function AutopauseVideo({ src, className }: { src: string; className?: string })
     const observer = new IntersectionObserver(
       (entries) => {
         entries.forEach((entry) => {
-          if (entry.isIntersecting && entry.intersectionRatio >= 0.6) {
-            // Autoplay muted when scrolled into view
-            video.muted = true;
-            video.play().catch(() => {});
-          } else if (!entry.isIntersecting || entry.intersectionRatio < 0.4) {
+          if (entry.isIntersecting) {
+            // Respect the persistent user mute state
+            const storedMute = typeof window !== "undefined" && localStorage.getItem("video_player_muted") === "false" ? false : true;
+            video.muted = storedMute;
+            video.play().catch(() => {
+              // Fallback to muted if browser blocks unmuted playback on scroll
+              if (!storedMute) {
+                video.muted = true;
+                video.play().catch(() => {});
+              }
+            });
+          } else {
             video.pause();
           }
         });
       },
       {
-        threshold: [0, 0.2, 0.4, 0.6, 0.8, 1.0],
+        rootMargin: "-35% 0px -35% 0px", // middle 30% of viewport
+        threshold: 0.1,
       }
     );
 
@@ -1757,15 +906,129 @@ function AutopauseVideo({ src, className }: { src: string; className?: string })
     };
   }, []);
 
+  const formatTime = (time: number) => {
+    if (isNaN(time) || !isFinite(time)) return "00:00";
+    const mins = Math.floor(time / 60);
+    const secs = Math.floor(time % 60);
+    return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
+  };
+
+  const progressPercent = duration > 0 ? (currentTime / duration) * 100 : 0;
+
   return (
-    <video
-      ref={videoRef}
-      src={src}
-      controls
-      muted
-      playsInline
-      className={className}
-      preload="metadata"
-    />
+    <div 
+      ref={containerRef}
+      onMouseMove={handleMouseMove}
+      onMouseLeave={() => isPlaying && setShowControls(false)}
+      className="group/player w-full h-full relative flex items-center justify-center bg-black overflow-hidden select-none"
+    >
+      <video
+        ref={videoRef}
+        src={src}
+        playsInline
+        className={className}
+        preload="metadata"
+        onPlay={onPlay}
+        onPause={onPause}
+        onVolumeChange={onVolumeChange}
+        onTimeUpdate={onTimeUpdate}
+        onDurationChange={onDurationChange}
+        onClick={() => handlePlayToggle()}
+      />
+
+      {/* Large Center Play/Pause Indicator (Sleek Blur) */}
+      {(!isPlaying || showControls) && (
+        <div 
+          onClick={() => handlePlayToggle()}
+          className="absolute inset-0 flex items-center justify-center bg-black/10 cursor-pointer transition-opacity duration-300"
+        >
+          <button 
+            className="w-16 h-16 flex items-center justify-center rounded-full bg-black/40 backdrop-blur-md border border-white/10 text-white cursor-pointer hover:scale-110 active:scale-95 transition-all shadow-lg hover:bg-black/60"
+            onClick={(e) => {
+              e.stopPropagation();
+              handlePlayToggle();
+            }}
+          >
+            {isPlaying ? (
+              <Pause className="w-7 h-7 text-white fill-white" />
+            ) : (
+              <Play className="w-7 h-7 text-white fill-white translate-x-0.5" />
+            )}
+          </button>
+        </div>
+      )}
+
+      {/* Sleek bottom control bar */}
+      <div 
+        className={`absolute bottom-0 left-0 right-0 p-4 pb-3 bg-gradient-to-t from-black/80 via-black/40 to-transparent flex flex-col justify-end transition-all duration-300 transform ${
+          showControls ? "opacity-100 translate-y-0" : "opacity-0 translate-y-2 pointer-events-none"
+        }`}
+      >
+        {/* Clickable Progress Slider */}
+        <div 
+          onClick={handleProgressClick}
+          className="group/progress w-full h-1 hover:h-2 transition-all cursor-pointer relative mb-3 rounded-full bg-white/20"
+        >
+          <div 
+            className="h-full bg-primary rounded-full relative"
+            style={{ width: `${progressPercent}%` }}
+          >
+            {/* Scrubber Handle Dot */}
+            <div className="absolute right-0 top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-primary border border-white scale-0 group-hover/progress:scale-100 transition-transform shadow-md" />
+          </div>
+        </div>
+
+        {/* Action Controls Panel */}
+        <div className="flex items-center justify-between text-white font-medium text-xs">
+          <div className="flex items-center gap-3">
+            {/* Play/Pause icon button */}
+            <button 
+              onClick={(e) => {
+                e.stopPropagation();
+                handlePlayToggle();
+              }}
+              className="text-white hover:text-primary transition-colors focus:outline-none"
+            >
+              {isPlaying ? (
+                <Pause className="w-4.5 h-4.5 fill-white" />
+              ) : (
+                <Play className="w-4.5 h-4.5 fill-white translate-x-0.5" />
+              )}
+            </button>
+
+            {/* Volume control with mute status */}
+            <button 
+              onClick={handleMuteToggle}
+              className="text-white hover:text-primary transition-colors focus:outline-none"
+            >
+              {isMuted ? (
+                <VolumeX className="w-4.5 h-4.5" />
+              ) : (
+                <Volume2 className="w-4.5 h-4.5" />
+              )}
+            </button>
+
+            {/* Time display */}
+            <span className="text-[10px] text-white/80 font-mono tracking-tight">
+              {formatTime(currentTime)} / {formatTime(duration)}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {/* Fullscreen button */}
+            <button 
+              onClick={handleFullscreenToggle}
+              className="text-white hover:text-primary transition-colors focus:outline-none"
+            >
+              {isFullscreen ? (
+                <Minimize className="w-4.5 h-4.5" />
+              ) : (
+                <Maximize className="w-4.5 h-4.5" />
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }

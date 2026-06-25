@@ -72,6 +72,54 @@ export default function PublicProfilesPage() {
       .toUpperCase();
   };
 
+  const renderContentWithMentions = (text: string) => {
+    if (!text) return null;
+    const parts = text.split(/(https?:\/\/[^\s]+|@[a-zA-Z0-9_]+|#[a-zA-Z0-9_]+)/g);
+    return parts.map((part, idx) => {
+      if (part.startsWith("http://") || part.startsWith("https://")) {
+        return (
+          <a
+            key={idx}
+            href={part}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-primary hover:underline font-semibold break-all"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {part}
+          </a>
+        );
+      }
+      if (part.startsWith("@")) {
+        const username = part.slice(1);
+        return (
+          <Link
+            key={idx}
+            href={`/public/profiles/${username}`}
+            className="text-primary hover:underline font-bold"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {part}
+          </Link>
+        );
+      }
+      if (part.startsWith("#")) {
+        const tag = part.slice(1);
+        return (
+          <Link
+            key={idx}
+            href={`/tags/${tag}`}
+            className="text-indigo-500 dark:text-indigo-400 hover:underline font-bold"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {part}
+          </Link>
+        );
+      }
+      return part;
+    });
+  };
+
   if (!mounted) return null;
 
   return (
@@ -150,7 +198,7 @@ export default function PublicProfilesPage() {
 
                     {profile.bio && (
                       <p className="text-muted-foreground text-sm line-clamp-3 leading-relaxed relative z-10">
-                        {profile.bio}
+                        {renderContentWithMentions(profile.bio)}
                       </p>
                     )}
 

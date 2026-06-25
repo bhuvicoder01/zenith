@@ -36,7 +36,18 @@ public class PostService {
     private final WebSocketAppHandler webSocketAppHandler;
 
     public Page<Post> getFeed(Pageable pageable) {
-        Page<Post> posts = postRepository.findAllByOrderByCreatedAtDesc(pageable);
+        return getFeed(null, pageable);
+    }
+
+    public Page<Post> getFeed(String tag, Pageable pageable) {
+        Page<Post> posts;
+        if (tag != null && !tag.trim().isEmpty()) {
+            String cleanTag = tag.trim().replaceAll("[#\\s]", "");
+            String regex = "(?:^|\\s)#" + java.util.regex.Pattern.quote(cleanTag) + "(?:\\b|\\s|$)";
+            posts = postRepository.findByContentRegexOrderByCreatedAtDesc(regex, pageable);
+        } else {
+            posts = postRepository.findAllByOrderByCreatedAtDesc(pageable);
+        }
         posts.forEach(this::hydratePostUrls);
         return posts;
     }
