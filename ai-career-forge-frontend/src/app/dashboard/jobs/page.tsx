@@ -3,8 +3,10 @@
 import { useEffect, useState, useRef } from "react";
 import api from "@/lib/api";
 import Link from "next/link";
-import { Briefcase, MapPin, DollarSign, ExternalLink, Star, RotateCcw, ChevronRight, ChevronLeft, Zap, Target, History, Globe } from "lucide-react";
+import { Briefcase, MapPin, DollarSign, ExternalLink, Star, RotateCcw, ChevronRight, ChevronLeft, Zap, Target, History, Globe, Sliders } from "lucide-react";
 import useSyncStore from "@/store/useSyncStore";
+import { toast } from "sonner";
+import PipelineBoard from "@/components/PipelineBoard";
 
 interface Job {
   id: string;
@@ -38,7 +40,60 @@ export default function JobsPage() {
   const [searching, setSearching] = useState(false);
   const [query, setQuery] = useState("");
   const [location, setLocation] = useState("");
-  const [activeTab, setActiveTab] = useState<"dashboard" | "discovery" | "catalog">("dashboard");
+  const [activeTab, setActiveTab] = useState<"dashboard" | "discovery" | "catalog" | "pipeline">("dashboard");
+  const [showPreferences, setShowPreferences] = useState(false);
+  const [weights, setWeights] = useState({
+    semantic: 30,
+    skills: 30,
+    lifestyle: 20,
+    experience: 20
+  });
+
+  // Fetch current user profile to load saved preferences
+  useEffect(() => {
+    const loadProfile = async () => {
+      try {
+        const res = await api.get("/profile");
+        if (res.data.matchWeights) {
+          const w = res.data.matchWeights;
+          setWeights({
+            semantic: Math.round((w.semantic ?? 0.3) * 100),
+            skills: Math.round((w.skills ?? 0.3) * 100),
+            lifestyle: Math.round((w.lifestyle ?? 0.2) * 100),
+            experience: Math.round((w.experience ?? 0.2) * 100)
+          });
+        }
+      } catch (err) {
+        console.error("Failed to load profile match preferences:", err);
+      }
+    };
+    loadProfile();
+  }, []);
+
+  const savePreferences = async () => {
+    try {
+      const payload = {
+        semantic: weights.semantic / 100,
+        skills: weights.skills / 100,
+        lifestyle: weights.lifestyle / 100,
+        experience: weights.experience / 100
+      };
+      await api.post("/profile/match-preferences", payload);
+      toast.success("Matching preferences updated!");
+      setShowPreferences(false);
+      // Reload dashboard/jobs list
+      setLoading(true);
+      if (activeTab === "dashboard") {
+        await fetchDashboard();
+      } else if (activeTab !== "pipeline") {
+        await fetchJobs(activeTab);
+      }
+      setLoading(false);
+    } catch (err) {
+      console.error("Failed to save preferences:", err);
+      toast.error("Failed to update preferences");
+    }
+  };
   
   const syncStatus = useSyncStore((state) => state.syncStatus);
   const isSyncing = syncStatus.status === 'SYNCING' || syncStatus.status === 'MATCHING';
@@ -74,6 +129,10 @@ export default function JobsPage() {
 
   useEffect(() => {
     const initPage = async () => {
+      if (activeTab === "pipeline") {
+        setLoading(false);
+        return;
+      }
       setLoading(true);
       if (activeTab === "dashboard") {
         await fetchDashboard();
@@ -240,7 +299,8 @@ export default function JobsPage() {
             {[
               { id: "dashboard", label: "Dashboard" },
               { id: "discovery", label: "Discovery Feed" },
-              { id: "catalog", label: "All Jobs" }
+              { id: "catalog", label: "All Jobs" },
+              { id: "pipeline", label: "Pipeline Board" }
             ].map((tab) => (
               <button
                 key={tab.id}
@@ -270,6 +330,14 @@ export default function JobsPage() {
           <div className="flex gap-2">
             <button
               type="button"
+              onClick={() => setShowPreferences(true)}
+              className="p-2.5 rounded-xl bg-secondary/50 text-secondary-foreground hover:bg-secondary transition-all border border-border"
+              title="Recalculate Weighted Match Criteria"
+            >
+              <Sliders className="w-5 h-5" />
+            </button>
+            <button
+              type="button"
               onClick={handleReset}
               disabled={searching || isSyncing}
               className="p-2.5 rounded-xl bg-secondary/50 text-secondary-foreground hover:bg-secondary transition-all border border-border disabled:opacity-50"
@@ -286,6 +354,8 @@ export default function JobsPage() {
           <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
           <p className="text-muted-foreground animate-pulse font-bold tracking-widest uppercase text-xs">Assembling your career dashboard...</p>
         </div>
+      ) : activeTab === "pipeline" ? (
+        <PipelineBoard />
       ) : activeTab === "dashboard" && dashboard ? (
         <div className="space-y-16">
           <HorizontalSection 
@@ -333,6 +403,61 @@ export default function JobsPage() {
               <h2 className="text-xl font-semibold">No matches found in this category</h2>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Matching Preferences Modal */}
+      {showPreferences && (
+        <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-background/80 backdrop-blur-md animate-in fade-in duration-300">
+          <div className="bg-card border border-border rounded-3xl p-8 max-w-md w-full mx-4 shadow-2xl flex flex-col gap-6 animate-in zoom-in-95 duration-300">
+            <div className="space-y-1">
+              <h2 className="text-2xl font-black tracking-tight">Recalculate Match Criteria</h2>
+              <p className="text-muted-foreground text-xs font-medium">Fine-tune the weight parameters utilized by our AI to compute your compatibility score.</p>
+            </div>
+
+            <div className="space-y-4">
+              {[
+                { id: "semantic", label: "Semantic Core Match", desc: "LLM contextual description & headline fit" },
+                { id: "skills", label: "Skills Keyword Match", desc: "Explicit technical keyword matching" },
+                { id: "lifestyle", label: "Lifestyle Match", desc: "Remote, hybrid, and location fit" },
+                { id: "experience", label: "Seniority Match", desc: "Experience years vs required level fit" }
+              ].map(pref => (
+                <div key={pref.id} className="space-y-1.5">
+                  <div className="flex justify-between items-center text-xs font-bold">
+                    <span className="text-foreground">{pref.label}</span>
+                    <span className="text-primary">{(weights as any)[pref.id]}%</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0"
+                    max="100"
+                    step="5"
+                    value={(weights as any)[pref.id]}
+                    onChange={(e) => setWeights(prev => ({ ...prev, [pref.id]: parseInt(e.target.value) }))}
+                    className="w-full h-1 bg-secondary rounded-lg appearance-none cursor-pointer accent-primary"
+                  />
+                  <p className="text-[10px] text-muted-foreground/80 font-medium">{pref.desc}</p>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex gap-3 mt-2">
+              <button
+                type="button"
+                onClick={() => setShowPreferences(false)}
+                className="flex-1 bg-secondary text-secondary-foreground text-xs font-bold py-3 rounded-xl hover:bg-secondary/80 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={savePreferences}
+                className="flex-1 bg-primary text-primary-foreground text-xs font-bold py-3 rounded-xl hover:bg-primary/95 transition-colors"
+              >
+                Apply Criteria
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

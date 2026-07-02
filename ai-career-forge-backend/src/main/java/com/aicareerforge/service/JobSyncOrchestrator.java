@@ -40,6 +40,8 @@ public class JobSyncOrchestrator {
     private final JobRepository jobRepository;
     private final ApplicationEventPublisher eventPublisher;
 
+    private final JobSyncAgent jobSyncAgent;
+
     // ─── Adzuna ──────────────────────────────────────────────
 
     /**
@@ -187,13 +189,7 @@ public class JobSyncOrchestrator {
     public void scheduledJobSync() {
         log.info("Starting scheduled universal job sync...");
 
-        List<String> keywords = List.of(
-            "Software Engineer", "Frontend Developer", "Backend Developer", "Fullstack Developer",
-            "Data Scientist", "AI Engineer", "Machine Learning Engineer", "DevOps Engineer",
-            "Product Manager", "UI/UX Designer", "Cybersecurity Analyst", "Cloud Architect",
-            "Mobile Developer", "Java Developer", "Python Developer", "React Developer",
-            "Node.js Developer", "Embedded Systems Engineer", "Quality Assurance Engineer"
-        );
+        List<String> keywords = jobSyncAgent.generateDynamicKeywords();
 
         for (String keyword : keywords) {
             try {

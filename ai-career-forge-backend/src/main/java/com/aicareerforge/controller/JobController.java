@@ -188,4 +188,19 @@ public class JobController {
         jobService.purgeJobsForUser(user.getId());
         return ResponseEntity.noContent().build();
     }
+
+    @PutMapping("/{id}/stage")
+    public ResponseEntity<Void> updateJobStage(
+            @PathVariable String id,
+            @RequestBody java.util.Map<String, String> body,
+            @AuthenticationPrincipal User user) {
+        String stage = body.get("stage");
+        jobService.updateJobPipelineStage(user.getId(), id, stage);
+        return ResponseEntity.ok().build();
+    }
+
+    @GetMapping("/pipeline")
+    public ResponseEntity<List<Job>> getJobPipeline(@AuthenticationPrincipal User user) {
+        return ResponseEntity.ok(jobService.getJobPipeline(user.getId()));
+    }
 }

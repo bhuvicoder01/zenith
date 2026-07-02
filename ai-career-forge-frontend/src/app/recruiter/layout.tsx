@@ -81,7 +81,7 @@ export default function RecruiterLayout({ children }: { children: React.ReactNod
                   alt="Zenith" 
                   width={32} 
                   height={32} 
-                  className="w-auto h-auto"
+                  className="w-auto h-auto dark:invert-0 invert"
                 />
               </Link>
             ) : (

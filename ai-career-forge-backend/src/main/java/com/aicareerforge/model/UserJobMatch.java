@@ -31,4 +31,7 @@ public class UserJobMatch {
     private Double matchScore;
     private String relevanceExplanation;
     private List<String> matchedSkills;
+
+    @Builder.Default
+    private String pipelineStage = "DISCOVERED"; // SAVED, APPLYING, APPLIED, INTERVIEWING, OFFER, REJECTED
 }

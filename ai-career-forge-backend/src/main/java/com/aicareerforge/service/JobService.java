@@ -33,6 +33,8 @@ public class JobService {
     private final JobScoreCache scoreCache;
     private final JobSyncOrchestrator syncOrchestrator;
     private final JobEnrichmentService enrichmentService;
+    private final com.aicareerforge.repository.UserJobMatchRepository userJobMatchRepository;
+    private final com.aicareerforge.repository.ApplicationRepository applicationRepository;
 
     // ─── Catalog (CRUD) ──────────────────────────────────────
 
@@ -116,5 +118,86 @@ public class JobService {
 
     public String getCachedRelevanceExplanation(String jobId, String userId) {
         return enrichmentService.getCachedRelevanceExplanation(jobId, userId);
+    }
+
+    public void updateJobPipelineStage(String userId, String jobId, String stage) {
+        log.info("Updating pipeline stage to {} for user: {}, job: {}", stage, userId, jobId);
+        com.aicareerforge.model.UserJobMatch match = userJobMatchRepository.findFirstByUserIdAndJobId(userId, jobId)
+                .orElseGet(() -> com.aicareerforge.model.UserJobMatch.builder()
+                        .userId(userId)
+                        .jobId(jobId)
+                        .build());
+        
+        match.setPipelineStage(stage);
+        userJobMatchRepository.save(match);
+
+        // Optional: Synchronize with tracker (Application)
+        try {
+            List<com.aicareerforge.model.Application> apps = applicationRepository.findByUserIdAndJobId(userId, jobId);
+            if (apps.isEmpty()) {
+                if (!"DISCOVERED".equals(stage)) {
+                    Job job = catalogService.getJobById(jobId);
+                    if (job != null) {
+                        com.aicareerforge.model.Application.Status appStatus = getAppStatusFromPipelineStage(stage);
+                        com.aicareerforge.model.Application app = com.aicareerforge.model.Application.builder()
+                                .userId(userId)
+                                .jobId(jobId)
+                                .jobTitle(job.getTitle())
+                                .company(job.getCompany())
+                                .status(appStatus)
+                                .appliedDate(java.time.LocalDateTime.now())
+                                .build();
+                        applicationRepository.save(app);
+                        log.info("Automatically created Application tracking item for job: {}", jobId);
+                    }
+                }
+            } else {
+                com.aicareerforge.model.Application.Status appStatus = getAppStatusFromPipelineStage(stage);
+                apps.forEach(app -> {
+                    app.setStatus(appStatus);
+                    applicationRepository.save(app);
+                });
+                log.info("Synchronized existing Application tracking items to status: {}", appStatus);
+            }
+        } catch (Exception e) {
+            log.error("Failed to synchronize pipeline stage change to Application tracker: {}", e.getMessage());
+        }
+    }
+
+    private com.aicareerforge.model.Application.Status getAppStatusFromPipelineStage(String stage) {
+        if (stage == null) return com.aicareerforge.model.Application.Status.SAVED;
+        switch (stage.toUpperCase()) {
+            case "SAVED":
+                return com.aicareerforge.model.Application.Status.SAVED;
+            case "APPLYING":
+            case "APPLIED":
+                return com.aicareerforge.model.Application.Status.APPLIED;
+            case "INTERVIEWING":
+                return com.aicareerforge.model.Application.Status.INTERVIEW;
+            case "OFFER":
+                return com.aicareerforge.model.Application.Status.OFFER;
+            case "REJECTED":
+                return com.aicareerforge.model.Application.Status.REJECTED;
+            default:
+                return com.aicareerforge.model.Application.Status.SAVED;
+        }
+    }
+
+    public List<Job> getJobPipeline(String userId) {
+        log.info("Loading Kanban job pipeline for user: {}", userId);
+        List<String> pipelineStages = List.of("SAVED", "APPLYING", "APPLIED", "INTERVIEWING", "OFFER", "REJECTED");
+        List<com.aicareerforge.model.UserJobMatch> matches = userJobMatchRepository.findByUserIdAndPipelineStageIn(userId, pipelineStages);
+
+        List<Job> jobs = new java.util.ArrayList<>();
+        for (com.aicareerforge.model.UserJobMatch match : matches) {
+            Job job = catalogService.getJobById(match.getJobId());
+            if (job != null) {
+                job.setMatchScore(match.getMatchScore());
+                job.setRelevanceExplanation(match.getRelevanceExplanation());
+                job.setPipelineStage(match.getPipelineStage());
+                jobs.add(job);
+            }
+        }
+        return jobs;
     }
 }

@@ -66,6 +66,9 @@ public class UserProfile {
     private String e2eePublicKey;
     private String e2eePrivateKey;
 
+    @Builder.Default
+    private java.util.Map<String, Double> matchWeights = new java.util.HashMap<>();
+
     @Data
     @NoArgsConstructor
     @AllArgsConstructor

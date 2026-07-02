@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { toast } from "sonner";
 
 interface Application {
   id: string;
@@ -35,6 +36,22 @@ export default function ApplicationMaterialsPage({ params }: { params: Promise<{
   const [activeTab, setActiveTab] = useState<'RESUME' | 'LETTER' | 'INTRO' | 'PREP'>('RESUME');
   const [isComparing, setIsComparing] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const [generating, setGenerating] = useState(false);
+
+  const handleGeneratePrep = async () => {
+    setGenerating(true);
+    try {
+      await api.post(`/applications/${id}/prepare`);
+      toast.success("AI materials generated successfully!");
+      const appResponse = await api.get(`/applications/${id}`);
+      setApp(appResponse.data);
+    } catch (error) {
+      console.error("Failed to generate materials:", error);
+      toast.error("Failed to generate AI materials");
+    } finally {
+      setGenerating(false);
+    }
+  };
 
   useEffect(() => {
     const checkMobile = () => {
@@ -198,124 +215,155 @@ export default function ApplicationMaterialsPage({ params }: { params: Promise<{
       </div>
 
       {/* Content Area */}
-      <div className="bg-card border border-border rounded-3xl md:rounded-3xl p-4 md:p-12 min-h-[500px] shadow-sm overflow-hidden">
-         {activeTab === 'RESUME' && (
-           <div className="space-y-8 animate-in fade-in duration-300">
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                 <h2 className="text-xl md:text-3xl font-black flex items-center gap-3 uppercase tracking-tighter">
-                    <FileText className="w-6 h-6 md:w-8 md:h-8 opacity-40" /> Resume Spec
-                 </h2>
-                 <button 
-                   onClick={() => setIsComparing(!isComparing)}
-                   className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all ${
-                     isComparing 
-                        ? 'bg-foreground border-foreground text-background shadow-lg' 
-                        : 'bg-secondary border-border text-muted-foreground hover:bg-secondary/80'
-                   }`}
-                 >
-                   {isComparing ? 'Exit Comparison' : 'Side-by-Side Mode'}
-                 </button>
-              </div>
-              
-              <div className={`grid gap-6 ${isComparing ? 'grid-cols-1 xl:grid-cols-2' : 'grid-cols-1'}`}>
-                 {isComparing && (
-                    <div className="space-y-3">
-                       <p className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em] text-center italic">Baseline Record</p>
-                       <div className="aspect-[1/1.414] w-full bg-muted rounded-2xl border border-border overflow-hidden ring-1 ring-border relative flex items-center justify-center">
-                           {isValidS3Url(profile?.resumeS3Url) ? (
+      <div className="bg-card border border-border rounded-3xl md:rounded-3xl p-4 md:p-12 min-h-[500px] shadow-sm overflow-hidden flex flex-col justify-center">
+         {!app.tailoredResumeS3Url ? (
+           <div className="text-center py-20 max-w-md mx-auto space-y-6 animate-in fade-in duration-300">
+             <div className="bg-primary/10 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto border border-primary/20">
+               <Sparkles className="w-8 h-8 text-primary animate-pulse" />
+             </div>
+             <div className="space-y-2">
+               <h3 className="text-2xl font-black text-foreground uppercase tracking-tighter">AI Prep Materials Not Generated</h3>
+               <p className="text-muted-foreground text-sm font-semibold leading-relaxed">
+                 Generate custom high-impact resumes, cover letters, intro emails, and interview preparation questions tailored specifically for this opportunity.
+               </p>
+             </div>
+             <button
+               onClick={handleGeneratePrep}
+               disabled={generating}
+               className="inline-flex items-center gap-2 px-8 py-3.5 bg-primary text-primary-foreground rounded-xl font-black uppercase tracking-widest text-xs hover:bg-primary/95 transition-all shadow-xl disabled:opacity-50"
+             >
+               {generating ? (
+                 <>
+                   <Loader2 className="w-4 h-4 animate-spin" /> GENERATING MATERIALS...
+                 </>
+               ) : (
+                 <>
+                   <Sparkles className="w-4 h-4 animate-pulse" /> GENERATE AI MATERIALS
+                 </>
+               )}
+             </button>
+           </div>
+         ) : (
+           <>
+             {activeTab === 'RESUME' && (
+               <div className="space-y-8 animate-in fade-in duration-300">
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                     <h2 className="text-xl md:text-3xl font-black flex items-center gap-3 uppercase tracking-tighter">
+                        <FileText className="w-6 h-6 md:w-8 md:h-8 opacity-40" /> Resume Spec
+                     </h2>
+                     <button 
+                       onClick={() => setIsComparing(!isComparing)}
+                       className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all ${
+                         isComparing 
+                            ? 'bg-foreground border-foreground text-background shadow-lg' 
+                            : 'bg-secondary border-border text-muted-foreground hover:bg-secondary/80'
+                       }`}
+                     >
+                       {isComparing ? 'Exit Comparison' : 'Side-by-Side Mode'}
+                     </button>
+                  </div>
+                  
+                  <div className={`grid gap-6 ${isComparing ? 'grid-cols-1 xl:grid-cols-2' : 'grid-cols-1'}`}>
+                     {isComparing && (
+                        <div className="space-y-3">
+                           <p className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em] text-center italic">Baseline Record</p>
+                           <div className="aspect-[1/1.414] w-full bg-muted rounded-2xl border border-border overflow-hidden ring-1 ring-border relative flex items-center justify-center">
+                               {isValidS3Url(profile?.resumeS3Url) ? (
+                                  isMobile ? (
+                                     renderMobilePdf(profile?.resumeS3Url, "Baseline Resume")
+                                  ) : (
+                                     <object
+                                        data={profile?.resumeS3Url}
+                                        type="application/pdf"
+                                        className="w-full h-full border-none opacity-40 grayscale"
+                                     >
+                                        <embed
+                                           src={profile?.resumeS3Url}
+                                           type="application/pdf"
+                                           className="w-full h-full border-none"
+                                        />
+                                     </object>
+                                  )
+                               ) : (
+                                  <div className="text-muted-foreground font-black uppercase tracking-widest text-[8px] md:text-xs opacity-50 text-center px-4">No baseline resume found in your profile</div>
+                               )}
+                           </div>
+                        </div>
+                     )}
+                     <div className="space-y-3">
+                        <p className="text-[10px] font-black text-foreground uppercase tracking-[0.2em] text-center">{isComparing ? 'Optimized Intelligence' : ''}</p>
+                        <div className="aspect-[1/1.414] w-full bg-white rounded-2xl border border-border overflow-hidden shadow-2xl relative flex items-center justify-center">
+                           {isValidS3Url(app.tailoredResumeS3Url) ? (
                               isMobile ? (
-                                 renderMobilePdf(profile?.resumeS3Url, "Baseline Resume")
+                                 renderMobilePdf(app.tailoredResumeS3Url, "Tailored Resume")
                               ) : (
                                  <object
-                                    data={profile?.resumeS3Url}
+                                    data={app.tailoredResumeS3Url}
                                     type="application/pdf"
-                                    className="w-full h-full border-none opacity-40 grayscale"
+                                    className="w-full h-full border-none"
                                  >
                                     <embed
-                                       src={profile?.resumeS3Url}
+                                       src={app.tailoredResumeS3Url}
                                        type="application/pdf"
                                        className="w-full h-full border-none"
                                     />
                                  </object>
                               )
                            ) : (
-                              <div className="text-muted-foreground font-black uppercase tracking-widest text-[8px] md:text-xs opacity-50 text-center px-4">No baseline resume found in your profile</div>
+                              <div className="text-muted-foreground font-black uppercase tracking-widest text-[8px] md:text-xs opacity-50 text-center px-4">Intelligence generation in progress...</div>
                            )}
-                       </div>
+                        </div>
+                     </div>
+                  </div>
+               </div>
+             )}
+
+             {activeTab === 'LETTER' && (
+                <div className="space-y-6 md:space-y-10 animate-in fade-in slide-in-from-bottom-2 duration-400">
+                    <h2 className="text-xl md:text-3xl font-black flex items-center gap-3 uppercase tracking-tighter">
+                       <Sparkles className="w-6 h-6 opacity-40" /> Tailored Narrative
+                    </h2>
+                    <div className="bg-muted/30 border border-border rounded-2xl p-6 md:p-14 text-foreground leading-relaxed whitespace-pre-wrap font-serif text-base md:text-xl shadow-inner relative">
+                       <div className="absolute top-0 right-0 p-4 opacity-10"><Sparkles className="w-20 h-20" /></div>
+                       {app.coverLetterText}
                     </div>
-                 )}
-                 <div className="space-y-3">
-                    <p className="text-[10px] font-black text-foreground uppercase tracking-[0.2em] text-center">{isComparing ? 'Optimized Intelligence' : ''}</p>
-                    <div className="aspect-[1/1.414] w-full bg-white rounded-2xl border border-border overflow-hidden shadow-2xl relative flex items-center justify-center">
-                       {isValidS3Url(app.tailoredResumeS3Url) ? (
-                          isMobile ? (
-                             renderMobilePdf(app.tailoredResumeS3Url, "Tailored Resume")
-                          ) : (
-                             <object
-                                data={app.tailoredResumeS3Url}
-                                type="application/pdf"
-                                className="w-full h-full border-none"
-                             >
-                                <embed
-                                   src={app.tailoredResumeS3Url}
-                                   type="application/pdf"
-                                   className="w-full h-full border-none"
-                                />
-                             </object>
-                          )
+                </div>
+             )}
+
+             {activeTab === 'INTRO' && (
+                <div className="space-y-6 md:space-y-10 animate-in fade-in slide-in-from-bottom-2 duration-400">
+                    <h2 className="text-xl md:text-3xl font-black flex items-center gap-3 uppercase tracking-tighter">
+                       <Mail className="w-6 h-6 opacity-40" /> Comms Protocol
+                    </h2>
+                    <div className="bg-muted border border-border rounded-2xl p-6 md:p-10 text-foreground leading-relaxed whitespace-pre-wrap font-mono text-xs md:text-sm relative shadow-inner">
+                       <div className="absolute top-4 right-4 text-[9px] text-muted-foreground font-black uppercase tracking-[0.2em] opacity-40">Ready to transmit</div>
+                       {app.emailIntroduction}
+                    </div>
+                </div>
+             )}
+
+             {activeTab === 'PREP' && (
+                <div className="space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-400">
+                    <h2 className="text-2xl md:text-4xl font-black flex items-center gap-3 uppercase tracking-tighter">
+                       <LayoutDashboard className="w-8 h-8 opacity-40" /> Mission Readiness
+                    </h2>
+                     <div className="bg-card p-4 md:p-12 rounded-3xl border border-border shadow-sm">
+                        {app.interviewPrepText ? (
+                            <div className="prose prose-sm md:prose-lg dark:prose-invert prose-neutral max-w-none prose-p:leading-relaxed prose-headings:font-black prose-li:text-foreground/80">
+                               <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                                  {app.interviewPrepText}
+                               </ReactMarkdown>
+                            </div>
                        ) : (
-                          <div className="text-muted-foreground font-black uppercase tracking-widest text-[8px] md:text-xs opacity-50 text-center px-4">Intelligence generation in progress...</div>
+                         <div className="text-center py-20 opacity-50 bg-muted/20 border border-dashed border-border rounded-3xl">
+                            <AlertCircle className="w-12 h-12 mx-auto mb-4" />
+                            <p className="font-black text-xs uppercase tracking-widest">Intelligence generation in progress...</p>
+                         </div>
                        )}
                     </div>
-                 </div>
-              </div>
-           </div>
-         )}
-
-          {activeTab === 'LETTER' && (
-             <div className="space-y-6 md:space-y-10 animate-in fade-in slide-in-from-bottom-2 duration-400">
-                 <h2 className="text-xl md:text-3xl font-black flex items-center gap-3 uppercase tracking-tighter">
-                    <Sparkles className="w-6 h-6 opacity-40" /> Tailored Narrative
-                 </h2>
-                 <div className="bg-muted/30 border border-border rounded-2xl p-6 md:p-14 text-foreground leading-relaxed whitespace-pre-wrap font-serif text-base md:text-xl shadow-inner relative">
-                    <div className="absolute top-0 right-0 p-4 opacity-10"><Sparkles className="w-20 h-20" /></div>
-                    {app.coverLetterText}
-                 </div>
-             </div>
-          )}
-
-          {activeTab === 'INTRO' && (
-             <div className="space-y-6 md:space-y-10 animate-in fade-in slide-in-from-bottom-2 duration-400">
-                 <h2 className="text-xl md:text-3xl font-black flex items-center gap-3 uppercase tracking-tighter">
-                    <Mail className="w-6 h-6 opacity-40" /> Comms Protocol
-                 </h2>
-                 <div className="bg-muted border border-border rounded-2xl p-6 md:p-10 text-foreground leading-relaxed whitespace-pre-wrap font-mono text-xs md:text-sm relative shadow-inner">
-                    <div className="absolute top-4 right-4 text-[9px] text-muted-foreground font-black uppercase tracking-[0.2em] opacity-40">Ready to transmit</div>
-                    {app.emailIntroduction}
-                 </div>
-             </div>
-          )}
-
-         {activeTab === 'PREP' && (
-            <div className="space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-400">
-                <h2 className="text-2xl md:text-4xl font-black flex items-center gap-3 uppercase tracking-tighter">
-                   <LayoutDashboard className="w-8 h-8 opacity-40" /> Mission Readiness
-                </h2>
-                 <div className="bg-card p-4 md:p-12 rounded-3xl border border-border shadow-sm">
-                    {app.interviewPrepText ? (
-                        <div className="prose prose-sm md:prose-lg dark:prose-invert prose-neutral max-w-none prose-p:leading-relaxed prose-headings:font-black prose-li:text-foreground/80">
-                           <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                              {app.interviewPrepText}
-                           </ReactMarkdown>
-                        </div>
-                   ) : (
-                     <div className="text-center py-20 opacity-50 bg-muted/20 border border-dashed border-border rounded-3xl">
-                        <AlertCircle className="w-12 h-12 mx-auto mb-4" />
-                        <p className="font-black text-xs uppercase tracking-widest">Intelligence generation in progress...</p>
-                     </div>
-                   )}
                 </div>
-            </div>
+             )}
+           </>
          )}
       </div>
     </div>

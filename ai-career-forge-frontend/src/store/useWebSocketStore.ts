@@ -19,6 +19,7 @@ export interface PrepStatus {
   title: string;
   message: string;
   company?: string;
+  applicationId?: string;
   error?: string;
 }
 
@@ -157,16 +158,17 @@ export const useWebSocketStore = create<WebSocketStore>((set, get) => ({
 
           if (data.type === 'PREP_STATUS') {
             if (data.data) {
-              set({
-                prepStatus: {
-                  step: data.data.step,
-                  title: data.title || "",
-                  message: data.message || "",
-                  company: get().prepStatus?.company || data.data.company,
-                  error: data.data.error || ""
-                },
-                showPrepDialog: true
-              });
+               set({
+                 prepStatus: {
+                   step: data.data.step,
+                   title: data.title || "",
+                   message: data.message || "",
+                   company: data.data.company || get().prepStatus?.company,
+                   applicationId: data.data.applicationId || get().prepStatus?.applicationId,
+                   error: data.data.error || ""
+                 },
+                 showPrepDialog: true
+               });
             }
             return;
           }

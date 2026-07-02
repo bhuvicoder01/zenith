@@ -3,9 +3,11 @@ package com.aicareerforge.service;
 import com.aicareerforge.model.Application;
 import com.aicareerforge.model.User;
 import com.aicareerforge.model.UserProfile;
+import com.aicareerforge.model.Job;
 import com.aicareerforge.repository.ApplicationRepository;
 import com.aicareerforge.repository.UserProfileRepository;
 import com.aicareerforge.repository.UserRepository;
+import com.aicareerforge.repository.JobRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -28,6 +30,7 @@ public class ApplicationTrackerService {
     private final PdfGenerationService pdfGenerationService;
     private final S3Service s3Service;
     private final WebSocketAppHandler webSocketAppHandler;
+    private final JobRepository jobRepository;
 
     public List<Application> getUserApplications(String userId) {
         List<Application> apps = applicationRepository.findByUserId(userId);
@@ -80,18 +83,43 @@ public class ApplicationTrackerService {
     public Application prepareApplicationMaterials(String applicationId, String resumeText, String jobDescription, String company) {
         Application app = applicationRepository.findById(applicationId)
                 .orElseThrow(() -> new RuntimeException("Application not found for preparation: " + applicationId));
+
+        if ((jobDescription == null || jobDescription.isBlank()) && app.getJobId() != null) {
+            Job job = jobRepository.findById(app.getJobId()).orElse(null);
+            if (job != null) {
+                jobDescription = job.getDescription();
+                if (company == null || company.isBlank()) {
+                    company = job.getCompany();
+                }
+            }
+        }
+
+        if (company == null || company.isBlank()) {
+            company = app.getCompany() != null ? app.getCompany() : "Target Company";
+        }
+
+        if (jobDescription == null || jobDescription.isBlank()) {
+            jobDescription = "Position at " + company + ". Requirements: " + app.getJobTitle();
+        }
         
-        if (app.getTailoredResumeS3Url() != null && app.getCoverLetterText() != null && app.getInterviewPrepText() != null) {
+        if (app.getTailoredResumeS3Url() != null 
+                && !app.getTailoredResumeS3Url().equals("preparing") 
+                && app.getCoverLetterText() != null 
+                && app.getInterviewPrepText() != null) {
             log.info("Application materials already prepared for application: {}. Skipping re-generation.", applicationId);
-            webSocketAppHandler.sendNotification(app.getUserId(), "PREP_STATUS", "Preparation Completed", "Application materials retrieved successfully!", Map.of("step", "COMPLETED", "status", "success"));
+            webSocketAppHandler.sendNotification(app.getUserId(), "PREP_STATUS", "Preparation Completed", "Application materials retrieved successfully!", Map.of("step", "COMPLETED", "status", "success", "applicationId", applicationId));
             return app;
         }
 
         log.info("Preparing materials for application: {} (Company: {})", applicationId, company);
         
+        // Mark as preparing in DB so refresh/list reflects loading state
+        app.setTailoredResumeS3Url("preparing");
+        applicationRepository.save(app);
+        
         try {
             // Send initial progress update
-            webSocketAppHandler.sendNotification(app.getUserId(), "PREP_STATUS", "Preparation Started", "Retrieving user details...", Map.of("step", "STARTING", "status", "processing"));
+            webSocketAppHandler.sendNotification(app.getUserId(), "PREP_STATUS", "Preparation Started", "Retrieving user details...", Map.of("step", "STARTING", "status", "processing", "applicationId", applicationId));
 
             // 0. Fetch User and Profile Data
             User user = userRepository.findById(app.getUserId())
@@ -100,19 +128,22 @@ public class ApplicationTrackerService {
                     .orElseThrow(() -> new RuntimeException("UserProfile not found for user: " + app.getUserId()));
 
             // Send progress update: AI generation starting
-            webSocketAppHandler.sendNotification(app.getUserId(), "PREP_STATUS", "AI Generation", "Running AI agents in parallel...", Map.of("step", "AI_GENERATION", "status", "processing"));
+            webSocketAppHandler.sendNotification(app.getUserId(), "PREP_STATUS", "AI Generation", "Running AI agents in parallel...", Map.of("step", "AI_GENERATION", "status", "processing", "applicationId", applicationId));
 
             // 1. Kick off AI calls in parallel using CompletableFuture
+            final String finalJobDescription = jobDescription;
+            final String finalCompany = company;
+
             CompletableFuture<Map<String, Object>> tailoredDataFuture = CompletableFuture.supplyAsync(() -> 
-                prepAgent.tailorResume(profile, jobDescription)
+                prepAgent.tailorResume(profile, finalJobDescription)
             );
             
             CompletableFuture<Map<String, String>> commKitFuture = CompletableFuture.supplyAsync(() -> 
-                prepAgent.generateCommunicationKit(profile.getRawResumeText(), jobDescription)
+                prepAgent.generateCommunicationKit(profile.getRawResumeText(), finalJobDescription)
             );
             
             CompletableFuture<String> prepKitFuture = CompletableFuture.supplyAsync(() -> 
-                prepAgent.generateInterviewPrepKit(jobDescription, company, profile.getRawResumeText())
+                prepAgent.generateInterviewPrepKit(finalJobDescription, finalCompany, profile.getRawResumeText())
             );
 
             // Wait for all three AI tasks to complete concurrently
@@ -128,7 +159,7 @@ public class ApplicationTrackerService {
             app.setInterviewPrepText(prepKit);
 
             // Send progress update: PDF rendering starting
-            webSocketAppHandler.sendNotification(app.getUserId(), "PREP_STATUS", "PDF Rendering", "Generating custom PDF resume...", Map.of("step", "PDF_RENDERING", "status", "processing"));
+            webSocketAppHandler.sendNotification(app.getUserId(), "PREP_STATUS", "PDF Rendering", "Generating custom PDF resume...", Map.of("step", "PDF_RENDERING", "status", "processing", "applicationId", applicationId));
 
             // 3. PDF Rendering with Real Data
             String template = "MODERN".equalsIgnoreCase(app.getTemplateStyle()) ? "resume-modern" : "resume-classic";
@@ -151,12 +182,13 @@ public class ApplicationTrackerService {
             log.info("Materials successfully prepared for application: {}", applicationId);
 
             // Send final success notification
-            webSocketAppHandler.sendNotification(app.getUserId(), "PREP_STATUS", "Preparation Completed", "Application materials generated successfully!", Map.of("step", "COMPLETED", "status", "success"));
+            webSocketAppHandler.sendNotification(app.getUserId(), "PREP_STATUS", "Preparation Completed", "Application materials generated successfully!", Map.of("step", "COMPLETED", "status", "success", "applicationId", applicationId));
 
         } catch (Exception e) {
             log.error("Partial failure in materials preparation: {}", e.getMessage());
             app.setStatus(Application.Status.SAVED); // Rollback to saved status for retry
-            webSocketAppHandler.sendNotification(app.getUserId(), "PREP_STATUS", "Preparation Failed", "An error occurred during preparation: " + e.getMessage(), Map.of("step", "FAILED", "status", "failed", "error", e.getMessage()));
+            app.setTailoredResumeS3Url(null);
+            webSocketAppHandler.sendNotification(app.getUserId(), "PREP_STATUS", "Preparation Failed", "An error occurred during preparation: " + e.getMessage(), Map.of("step", "FAILED", "status", "failed", "error", e.getMessage(), "applicationId", applicationId));
         }
         
         Application saved = applicationRepository.save(app);

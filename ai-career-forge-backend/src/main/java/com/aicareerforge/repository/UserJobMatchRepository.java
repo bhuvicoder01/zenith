@@ -11,4 +11,5 @@ public interface UserJobMatchRepository extends MongoRepository<UserJobMatch, St
     java.util.List<com.aicareerforge.model.UserJobMatch> findByUserIdOrderByMatchScoreDesc(String userId);
     Optional<UserJobMatch> findFirstByUserIdAndJobId(String userId, String jobId);
     void deleteAllByUserId(String userId);
+    java.util.List<UserJobMatch> findByUserIdAndPipelineStageIn(String userId, java.util.Collection<String> stages);
 }

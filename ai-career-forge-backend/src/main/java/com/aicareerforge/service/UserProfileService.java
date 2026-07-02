@@ -29,6 +29,7 @@ public class UserProfileService {
     private final JobSyncService jobSyncService;
     private final org.springframework.ai.chat.client.ChatClient chatClient;
     private final com.aicareerforge.security.WebSocketAppHandler webSocketAppHandler;
+    private final org.springframework.cache.CacheManager cacheManager;
 
     public UserProfile getProfile(String userId) {
         UserProfile profile = userProfileRepository.findByUserId(userId)
@@ -244,6 +245,26 @@ public class UserProfileService {
             }
         }
 
+        boolean coreMatchingFieldsChanged = false;
+        if (updatedData.getHeadline() != null && !java.util.Objects.equals(updatedData.getHeadline(), profile.getHeadline())) {
+            coreMatchingFieldsChanged = true;
+        }
+        if (updatedData.getSkills() != null && !updatedData.getSkills().equals(profile.getSkills())) {
+            coreMatchingFieldsChanged = true;
+        }
+        if (updatedData.getExperiences() != null && !updatedData.getExperiences().equals(profile.getExperiences())) {
+            coreMatchingFieldsChanged = true;
+        }
+        if (updatedData.getInternships() != null && !updatedData.getInternships().equals(profile.getInternships())) {
+            coreMatchingFieldsChanged = true;
+        }
+        if (updatedData.getPreferredLocation() != null && !java.util.Objects.equals(updatedData.getPreferredLocation(), profile.getPreferredLocation())) {
+            coreMatchingFieldsChanged = true;
+        }
+        if (updatedData.getPreferredLifestyle() != null && !java.util.Objects.equals(updatedData.getPreferredLifestyle(), profile.getPreferredLifestyle())) {
+            coreMatchingFieldsChanged = true;
+        }
+
         if (updatedData.getFullName() != null) profile.setFullName(updatedData.getFullName());
         if (updatedData.getHeadline() != null) profile.setHeadline(updatedData.getHeadline());
         if (updatedData.getBio() != null) profile.setBio(updatedData.getBio());
@@ -260,15 +281,20 @@ public class UserProfileService {
         
         boolean newShowOnline = profile.getSettings() == null || profile.getSettings().isShowOnlineStatus();
 
-        // Only purge THIS user's jobs, not all jobs
-        jobService.purgeJobsForUser(userId);
         userProfileRepository.save(profile);
 
         if (oldShowOnline != newShowOnline) {
             webSocketAppHandler.handlePresenceToggle(userId, newShowOnline);
         }
 
-        jobSyncService.syncJobsForUser(userId);
+        if (coreMatchingFieldsChanged) {
+            log.info("Core matching profile fields changed for user {}. Purging and triggering a fresh sync.", userId);
+            jobService.purgeJobsForUser(userId);
+            jobSyncService.syncJobsForUser(userId);
+        } else {
+            log.info("No core matching profile fields changed for user {}. Skipping sync/purge.", userId);
+        }
+
         hydrateUrls(profile);
         return profile;
     }
@@ -567,6 +593,26 @@ public class UserProfileService {
                 .orElseGet(() -> UserProfile.builder().userId(userId).build());
         profile.setE2eePublicKey(publicKey);
         profile.setE2eePrivateKey(privateKey);
+        return userProfileRepository.save(profile);
+    }
+
+    public UserProfile updateMatchWeights(String userId, java.util.Map<String, Double> weights) {
+        UserProfile profile = userProfileRepository.findByUserId(userId)
+                .orElseThrow(() -> new IllegalArgumentException("Profile not found for user: " + userId));
+        profile.setMatchWeights(weights);
+
+        // Evict matching/recommendation cache after preferences update so they recalculate instantly!
+        try {
+            org.springframework.cache.Cache recommendedCache = cacheManager.getCache("recommendedJobs");
+            if (recommendedCache != null) recommendedCache.evict(userId);
+            org.springframework.cache.Cache catalogCache = cacheManager.getCache("jobCatalog");
+            if (catalogCache != null) catalogCache.evict(userId);
+            org.springframework.cache.Cache dashboardCache = cacheManager.getCache("jobDashboard");
+            if (dashboardCache != null) dashboardCache.evict(userId);
+        } catch (Exception e) {
+            log.error("Failed to evict caches on match preference update: {}", e.getMessage());
+        }
+
         return userProfileRepository.save(profile);
     }
 }

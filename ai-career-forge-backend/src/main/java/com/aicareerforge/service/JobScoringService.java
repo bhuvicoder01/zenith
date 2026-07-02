@@ -36,33 +36,116 @@ public class JobScoringService {
     public double calculateMatchScore(Job job, UserProfile profile, Double vectorSimilarity) {
         if (job == null || profile == null) return 70.0;
 
-        double baseScore = 70.0;
+        // Retrieve weights from user profile, or default to standard parameters
+        java.util.Map<String, Double> weights = profile.getMatchWeights();
+        double semanticWeight = weights != null && weights.containsKey("semantic") ? weights.get("semantic") : 0.3;
+        double skillsWeight = weights != null && weights.containsKey("skills") ? weights.get("skills") : 0.3;
+        double lifestyleWeight = weights != null && weights.containsKey("lifestyle") ? weights.get("lifestyle") : 0.2;
+        double experienceWeight = weights != null && weights.containsKey("experience") ? weights.get("experience") : 0.2;
 
-        // Factor 1: Vector similarity (0-15 points)
-        if (vectorSimilarity != null) {
-            baseScore += vectorSimilarity * 15.0;
+        // Normalize weights to sum up to 1.0
+        double totalWeight = semanticWeight + skillsWeight + lifestyleWeight + experienceWeight;
+        if (totalWeight > 0) {
+            semanticWeight /= totalWeight;
+            skillsWeight /= totalWeight;
+            lifestyleWeight /= totalWeight;
+            experienceWeight /= totalWeight;
+        } else {
+            semanticWeight = 0.3;
+            skillsWeight = 0.3;
+            lifestyleWeight = 0.2;
+            experienceWeight = 0.2;
         }
 
-        // Factor 2: Skill overlap bonus (0-10 points)
-        if (profile.getSkills() != null && job.getDescription() != null) {
-            String descLower = job.getDescription().toLowerCase();
-            long matchedCount = profile.getSkills().stream()
-                    .filter(skill -> skill.length() > 2 && descLower.contains(skill.toLowerCase()))
-                    .count();
-            double skillBonus = Math.min(matchedCount * 2.0, 10.0);
-            baseScore += skillBonus;
+        // 1. Semantic Match Score (0 - 100)
+        double semanticScore = vectorSimilarity != null ? vectorSimilarity * 100.0 : 75.0;
+
+        // 2. Skills Match Score (0 - 100)
+        double skillsScore = 0.0;
+        if (profile.getSkills() != null && !profile.getSkills().isEmpty()) {
+            // Check keyword matches in description
+            long matchedCount = 0;
+            if (job.getDescription() != null) {
+                String descLower = job.getDescription().toLowerCase();
+                matchedCount = profile.getSkills().stream()
+                        .filter(skill -> skill.length() > 2 && descLower.contains(skill.toLowerCase()))
+                        .count();
+            }
+            // Check techTags overlap if job has techTags
+            if (job.getTechTags() != null && !job.getTechTags().isEmpty()) {
+                long techTagMatches = job.getTechTags().stream()
+                        .filter(tag -> profile.getSkills().stream().anyMatch(s -> s.equalsIgnoreCase(tag)))
+                        .count();
+                matchedCount = Math.max(matchedCount, techTagMatches);
+            }
+            skillsScore = Math.min((matchedCount * 1.5 / Math.max(1, profile.getSkills().size())) * 100.0, 100.0);
+            if (matchedCount > 0 && skillsScore < 60) {
+                skillsScore = 60.0; // base score if at least one key skill matched
+            }
         }
 
-        // Factor 3: Experience alignment bonus (0-5 points)
-        int totalExperienceYears = estimateExperienceYears(profile);
-        if (totalExperienceYears > 0 && job.getDescription() != null) {
-            double expBonus = calculateExperienceBonus(job.getDescription(), totalExperienceYears);
-            baseScore += expBonus;
+        // 3. Lifestyle Match Score (0 - 100)
+        double lifestyleScore = 75.0; // baseline fallback
+        if (job.getRemotePolicy() != null && profile.getPreferredLifestyle() != null) {
+            String policy = job.getRemotePolicy().toUpperCase();
+            String pref = profile.getPreferredLifestyle().toUpperCase();
+            if (policy.equals(pref) || (policy.contains("REMOTE") && pref.contains("REMOTE"))) {
+                lifestyleScore = 100.0;
+            } else if (policy.contains("HYBRID") || pref.contains("HYBRID")) {
+                lifestyleScore = 80.0;
+            } else {
+                lifestyleScore = 40.0;
+            }
+        } else if (job.getLocation() != null && profile.getPreferredLocation() != null) {
+            if (job.getLocation().toLowerCase().contains(profile.getPreferredLocation().toLowerCase())) {
+                lifestyleScore = 95.0;
+            }
         }
 
-        // Clamp score between 65 and 100
-        baseScore = Math.max(65.0, Math.min(100.0, baseScore));
-        return Math.round(baseScore * 10.0) / 10.0; // 1 decimal place
+        // 4. Experience Match Score (0 - 100)
+        double experienceScore = 75.0; // default
+        int totalExpYears = estimateExperienceYears(profile);
+        String jobExpReq = job.getExperienceLevel();
+        if (jobExpReq != null) {
+            switch (jobExpReq.toUpperCase()) {
+                case "JUNIOR":
+                    experienceScore = totalExpYears <= 2 ? 100.0 : 85.0; // junior gets 100%, senior overqualified gets 85%
+                    break;
+                case "MID":
+                    if (totalExpYears >= 2 && totalExpYears <= 5) experienceScore = 100.0;
+                    else if (totalExpYears < 2) experienceScore = 60.0;
+                    else experienceScore = 90.0;
+                    break;
+                case "SENIOR":
+                    if (totalExpYears >= 5 && totalExpYears <= 9) experienceScore = 100.0;
+                    else if (totalExpYears < 3) experienceScore = 30.0;
+                    else if (totalExpYears < 5) experienceScore = 70.0;
+                    else experienceScore = 95.0;
+                    break;
+                case "LEAD":
+                    if (totalExpYears >= 9) experienceScore = 100.0;
+                    else if (totalExpYears < 5) experienceScore = 20.0;
+                    else experienceScore = 75.0;
+                    break;
+            }
+        } else if (job.getDescription() != null) {
+            // fallback experience calculation
+            double expBonus = calculateExperienceBonus(job.getDescription(), totalExpYears);
+            experienceScore = 60.0 + (expBonus * 8.0); // map 0-5 to 60-100
+        }
+
+        // Combine weighted score
+        double weightedScore = (semanticWeight * semanticScore) +
+                               (skillsWeight * skillsScore) +
+                               (lifestyleWeight * lifestyleScore) +
+                               (experienceWeight * experienceScore);
+
+        // Clamp between 0 and 100
+        weightedScore = Math.max(0.0, Math.min(100.0, weightedScore));
+
+        // Map to 65.0 - 100.0 range for the UI
+        double mappedScore = 65.0 + (weightedScore * 0.35);
+        return Math.round(mappedScore * 10.0) / 10.0;
     }
 
     /**

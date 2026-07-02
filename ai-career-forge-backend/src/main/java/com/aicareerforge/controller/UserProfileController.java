@@ -115,6 +115,13 @@ public class UserProfileController {
         return ResponseEntity.ok(userProfileService.updateE2eeKeys(user.getId(), publicKey, privateKey));
     }
 
+    @PostMapping("/match-preferences")
+    public ResponseEntity<UserProfile> updateMatchPreferences(
+            @AuthenticationPrincipal User user,
+            @RequestBody Map<String, Double> weights) {
+        return ResponseEntity.ok(userProfileService.updateMatchWeights(user.getId(), weights));
+    }
+
     @DeleteMapping
     public ResponseEntity<Void> deleteProfile(@AuthenticationPrincipal User user) {
         userProfileService.deleteProfile(user.getId());

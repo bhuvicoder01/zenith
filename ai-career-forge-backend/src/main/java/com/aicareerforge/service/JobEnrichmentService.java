@@ -34,6 +34,7 @@ public class JobEnrichmentService {
     private final JobRecommendationAgent recommendationAgent;
     private final JobRepository jobRepository;
     private final UserJobMatchRepository userJobMatchRepository;
+    private final JobProcessingAgent jobProcessingAgent;
 
     /** Limits concurrent AI/embedding API calls to avoid rate-limit exhaustion. */
     private final Semaphore enrichmentSemaphore = new Semaphore(2);
@@ -75,10 +76,17 @@ public class JobEnrichmentService {
                 job.setCompanyLogoColor(logoMeta.color());
             }
 
-            // 2. Save the job
+            // 2. Extract structured metadata (Experience, Remote model, technologies) using AI Processing Agent
+            try {
+                jobProcessingAgent.processAndStructureJob(job);
+            } catch (Exception e) {
+                log.error("AI Job processing/structuring failed: {}", e.getMessage());
+            }
+
+            // 3. Save the job
             jobRepository.save(job);
 
-            // 3. Update Vector Store with content
+            // 4. Update Vector Store with content
             recommendationAgent.indexJob(job);
 
             log.debug("Background enrichment completed for: {}", job.getTitle());
@@ -109,7 +117,9 @@ public class JobEnrichmentService {
                     UserJobMatch match = userJobMatchRepository.findFirstByUserIdAndJobId(userId, job.getId())
                             .orElse(UserJobMatch.builder().userId(userId).jobId(job.getId()).build());
 
-                    if (match.getRelevanceExplanation() == null || match.getRelevanceExplanation().isBlank()) {
+                    if (match.getRelevanceExplanation() == null 
+                            || match.getRelevanceExplanation().isBlank() 
+                            || match.getRelevanceExplanation().equals("Strong match based on your profile skills and goals.")) {
                         String explanation = recommendationAgent.generateRelevanceExplanation(job, userProfileData);
                         match.setRelevanceExplanation(explanation);
                         match.setMatchScore(job.getMatchScore());
@@ -159,7 +169,9 @@ public class JobEnrichmentService {
         UserJobMatch match = userJobMatchRepository.findFirstByUserIdAndJobId(userId, jobId)
                 .orElse(UserJobMatch.builder().userId(userId).jobId(jobId).build());
 
-        if (match.getRelevanceExplanation() != null && !match.getRelevanceExplanation().isBlank() && !match.getRelevanceExplanation().contains("profile")) {
+        if (match.getRelevanceExplanation() != null 
+                && !match.getRelevanceExplanation().isBlank() 
+                && !match.getRelevanceExplanation().equals("Strong match based on your profile skills and goals.")) {
             return match.getRelevanceExplanation();
         }
 

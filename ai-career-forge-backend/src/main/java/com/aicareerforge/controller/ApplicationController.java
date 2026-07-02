@@ -40,15 +40,17 @@ public class ApplicationController {
     public ResponseEntity<Application> prepareApplicationMaterials(
             @AuthenticationPrincipal User user,
             @PathVariable String applicationId,
-            @RequestBody PrepRequest req) {
+            @RequestBody(required = false) PrepRequest req) {
         
         String resumeText = userProfileService.getProfile(user.getId()).getRawResumeText();
+        String desc = req != null ? req.jobDescription() : null;
+        String comp = req != null ? req.company() : null;
         
         return ResponseEntity.ok(applicationTrackerService.prepareApplicationMaterials(
                 applicationId, 
                 resumeText, 
-                req.jobDescription(), 
-                req.company()
+                desc, 
+                comp
         ));
     }
 

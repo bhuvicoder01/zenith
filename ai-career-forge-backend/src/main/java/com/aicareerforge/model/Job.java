@@ -35,6 +35,11 @@ public class Job {
     private String fairPayEstimate;
     private String relevanceExplanation;
     
+    // AI Structured extraction fields
+    private String experienceLevel; // e.g. JUNIOR, MID, SENIOR, LEAD
+    private String remotePolicy; // e.g. REMOTE, HYBRID, ONSITE
+    private java.util.List<String> techTags;
+    
     // Additional info
     private String url;
     private String jobType; // e.g., "full_time", "remote", "contract", "part_time"
@@ -54,6 +59,9 @@ public class Job {
     
     @org.springframework.data.annotation.Transient
     private Double matchScore;
+
+    @org.springframework.data.annotation.Transient
+    private String pipelineStage;
 
     /**
      * Lifecycle status for catalog-style job management.

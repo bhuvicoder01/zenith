@@ -290,7 +290,8 @@ public class JobMatchingService {
                 .filter(j -> {
                     boolean needsEnrichment = j.getRelevanceExplanation() == null ||
                                               j.getRelevanceExplanation().isBlank() ||
-                                              j.getRelevanceExplanation().contains("background");
+                                              j.getRelevanceExplanation().contains("background") ||
+                                              j.getRelevanceExplanation().equals("Strong match based on your profile skills and goals.");
                     return needsEnrichment && !enrichmentService.isProcessing(userId, j.getId());
                 })
                 .limit(15)

@@ -133,5 +133,14 @@ public class PersonalizedJobService {
                 .timestamp(java.time.LocalDateTime.now())
                 .build();
         activityRepository.save(activity);
+
+        // Automatically add to corresponding Kanban stages when applying or saving
+        if (jobId != null) {
+            if (type == UserActivity.ActivityType.APPLY) {
+                jobService.updateJobPipelineStage(userId, jobId, "APPLIED");
+            } else if (type == UserActivity.ActivityType.SAVE) {
+                jobService.updateJobPipelineStage(userId, jobId, "SAVED");
+            }
+        }
     }
 }
