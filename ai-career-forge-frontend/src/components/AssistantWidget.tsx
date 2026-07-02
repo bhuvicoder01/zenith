@@ -5,7 +5,7 @@ import {
   Bot, Send, X, 
   ChevronRight, BrainCircuit, RotateCcw 
 } from "lucide-react";
-import { useRouter, usePathname } from "next/navigation";
+import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import api from "@/lib/api";
@@ -35,6 +35,11 @@ const getGuestId = () => {
 };
 
 export default function AssistantWidget() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const activeUserId = searchParams ? searchParams.get("userId") : null;
+
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
@@ -43,9 +48,6 @@ export default function AssistantWidget() {
   
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  
-  const router = useRouter();
-  const pathname = usePathname();
 
   // Draggable states and handlers
   const [position, setPosition] = useState({ x: 0, y: 0 });
@@ -227,6 +229,11 @@ export default function AssistantWidget() {
       console.log("Custom action:", action);
     }
   };
+
+  // Hide the AI assistant floating dragger/widget only when actively viewing a specific chat channel
+  if (pathname === "/dashboard/messages" && activeUserId) {
+    return null;
+  }
 
   return (
     <>

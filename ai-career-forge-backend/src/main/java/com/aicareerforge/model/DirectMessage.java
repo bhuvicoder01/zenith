@@ -27,8 +27,12 @@ public class DirectMessage {
     private Instant timestamp = Instant.now();
 
     private boolean isRead;
+    private Instant readAt;
 
     private boolean deletedBySender;
     private boolean deletedByReceiver;
+
+    @org.springframework.data.annotation.Transient
+    private String senderPublicKey;
 }
 

@@ -561,4 +561,12 @@ public class UserProfileService {
         String regex = "(?i)@" + java.util.regex.Pattern.quote(oldUsername) + "\\b";
         return text.replaceAll(regex, "@" + newUsername);
     }
+
+    public UserProfile updateE2eeKeys(String userId, String publicKey, String privateKey) {
+        UserProfile profile = userProfileRepository.findByUserId(userId)
+                .orElseGet(() -> UserProfile.builder().userId(userId).build());
+        profile.setE2eePublicKey(publicKey);
+        profile.setE2eePrivateKey(privateKey);
+        return userProfileRepository.save(profile);
+    }
 }

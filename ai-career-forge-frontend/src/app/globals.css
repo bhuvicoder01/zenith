@@ -213,3 +213,27 @@
 .animate-rotate-device {
   animation: rotate-device 2.2s ease-in-out infinite;
 }
+
+/* Base background and text color transitions for smooth theme changing */
+body, header, nav, aside, main, footer, .bg-card, .bg-background, .border, .text-foreground, .bg-secondary {
+  transition: background-color 350ms ease-in-out, border-color 350ms ease-in-out, color 200ms ease-in-out;
+}
+
+/* Document theme circular swipe view transitions for browser-supported environments */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+::view-transition-old(root) {
+  z-index: 1;
+}
+::view-transition-new(root) {
+  z-index: 9999;
+}
+.dark::view-transition-old(root) {
+  z-index: 9999;
+}
+.dark::view-transition-new(root) {
+  z-index: 1;
+}

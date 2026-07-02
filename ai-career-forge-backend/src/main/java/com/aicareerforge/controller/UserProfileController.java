@@ -106,6 +106,15 @@ public class UserProfileController {
         return ResponseEntity.ok(Map.of("needsOnboarding", needs));
     }
 
+    @PostMapping("/e2ee-key")
+    public ResponseEntity<UserProfile> updateE2eeKeys(
+            @AuthenticationPrincipal User user,
+            @RequestBody Map<String, String> body) {
+        String publicKey = body.get("publicKey");
+        String privateKey = body.get("privateKey");
+        return ResponseEntity.ok(userProfileService.updateE2eeKeys(user.getId(), publicKey, privateKey));
+    }
+
     @DeleteMapping
     public ResponseEntity<Void> deleteProfile(@AuthenticationPrincipal User user) {
         userProfileService.deleteProfile(user.getId());

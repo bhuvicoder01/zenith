@@ -4,7 +4,10 @@ import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
-import { Menu, X, Briefcase, Users, LayoutDashboard, LogOut, Search, Loader2 } from "lucide-react";
+import { 
+  Menu, X, Briefcase, Users, LayoutDashboard, LogOut, Search, Loader2,
+  MoreVertical, User, MessageSquare, Bell, Settings, Sun, Moon, Lock
+} from "lucide-react";
 import useAuthStore from "@/store/useAuthStore";
 import Image from "next/image";
 import api, { BACKEND_URL } from "@/lib/api";
@@ -12,10 +15,40 @@ import api, { BACKEND_URL } from "@/lib/api";
 export default function PublicNavbar() {
   const pathname = usePathname();
   const router = useRouter();
-  const { resolvedTheme } = useTheme();
-  const { isAuthenticated, logout } = useAuthStore();
+  const { theme, setTheme, resolvedTheme } = useTheme();
+  const { isAuthenticated, logout, user } = useAuthStore();
   const [mounted, setMounted] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
+  const [profile, setProfile] = useState<any>(null);
+  const [showProfileDropdown, setShowProfileDropdown] = useState(false);
+  
+  const profileDropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      const fetchProfile = async () => {
+        try {
+          const res = await api.get("/profile");
+          setProfile(res.data);
+        } catch (err) {
+          console.error("PublicNavbar: Failed to fetch profile info:", err);
+        }
+      };
+      fetchProfile();
+    } else {
+      setProfile(null);
+    }
+  }, [isAuthenticated]);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (profileDropdownRef.current && !profileDropdownRef.current.contains(e.target as Node)) {
+        setShowProfileDropdown(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   const getPhotoUrl = (url?: string) => {
     if (!url) return "";
@@ -284,17 +317,133 @@ export default function PublicNavbar() {
           </Link>
         </div>
 
-        {/* Desktop Auth/Dashboard Actions */}
-        <div className="hidden md:flex items-center gap-4">
+        {/* Desktop Actions */}
+        <div className="hidden md:flex items-center gap-4 pr-16 xl:pr-0">
           {isAuthenticated ? (
-            <Link 
-              href="/dashboard" 
-              className="px-5 py-2.5 bg-foreground text-background rounded-full text-xs font-black uppercase tracking-widest hover:opacity-90 transition-all shadow-sm"
-            >
-              Dashboard
-            </Link>
+            <div className="relative" ref={profileDropdownRef}>
+              <button
+                onClick={() => setShowProfileDropdown(!showProfileDropdown)}
+                className="w-10 h-10 rounded-full border-2 border-primary/20 bg-secondary flex items-center justify-center font-bold uppercase text-foreground relative overflow-hidden focus:outline-none transition-all hover:scale-105 active:scale-95"
+              >
+                {profile?.profilePhotoUrl ? (
+                  <img 
+                    src={getPhotoUrl(profile.profilePhotoUrl)} 
+                    alt={profile?.fullName || user?.name || ""} 
+                    className="w-full h-full object-cover" 
+                  />
+                ) : (
+                  <span className="text-xs font-black">
+                    {profile?.fullName ? (
+                      profile.fullName.split(" ").map((n: string) => n[0]).join("").toUpperCase().slice(0, 2)
+                    ) : (
+                      user?.name ? user.name.split(" ").map((n: string) => n[0]).join("").toUpperCase().slice(0, 2) : "U"
+                    )}
+                  </span>
+                )}
+              </button>
+
+              {showProfileDropdown && (
+                <div className="absolute right-0 mt-3 w-56 rounded-2xl bg-card border border-border shadow-2xl py-2 z-50 animate-in fade-in slide-in-from-top-2 duration-200">
+                  {/* User Info Header */}
+                  <div className="px-4 py-2.5 border-b border-border/60">
+                    <p className="text-xs font-black uppercase text-foreground truncate">{profile?.fullName || user?.name}</p>
+                    <p className="text-[10px] text-muted-foreground font-semibold truncate mt-0.5">{user?.email}</p>
+                  </div>
+
+                  {/* Dropdown Options */}
+                  <div className="py-1">
+                    <Link
+                      href={`/public/profiles/${profile?.username || user?.id}`}
+                      onClick={() => setShowProfileDropdown(false)}
+                      className="flex items-center gap-2.5 px-4 py-2.5 text-xs font-bold text-foreground hover:bg-secondary/70 transition-colors w-full text-left"
+                    >
+                      <User className="w-4 h-4 text-muted-foreground" />
+                      View Profile
+                    </Link>
+                    <Link
+                      href="/dashboard/connections"
+                      onClick={() => setShowProfileDropdown(false)}
+                      className="flex items-center gap-2.5 px-4 py-2.5 text-xs font-bold text-foreground hover:bg-secondary/70 transition-colors w-full text-left"
+                    >
+                      <Users className="w-4 h-4 text-muted-foreground" />
+                      Connections
+                    </Link>
+                    <Link
+                      href="/dashboard/messages"
+                      onClick={() => setShowProfileDropdown(false)}
+                      className="flex items-center gap-2.5 px-4 py-2.5 text-xs font-bold text-foreground hover:bg-secondary/70 transition-colors w-full text-left"
+                    >
+                      <MessageSquare className="w-4 h-4 text-muted-foreground" />
+                      Messages
+                    </Link>
+                    <Link
+                      href="/dashboard/notifications"
+                      onClick={() => setShowProfileDropdown(false)}
+                      className="flex items-center gap-2.5 px-4 py-2.5 text-xs font-bold text-foreground hover:bg-secondary/70 transition-colors w-full text-left"
+                    >
+                      <Bell className="w-4 h-4 text-muted-foreground" />
+                      Notifications
+                    </Link>
+                    <Link
+                      href="/dashboard/settings"
+                      onClick={() => setShowProfileDropdown(false)}
+                      className="flex items-center gap-2.5 px-4 py-2.5 text-xs font-bold text-foreground hover:bg-secondary/70 transition-colors w-full text-left"
+                    >
+                      <Settings className="w-4 h-4 text-muted-foreground" />
+                      Settings
+                    </Link>
+                    
+                    {/* Theme Mode Option */}
+                    <button
+                      onClick={() => {
+                        setTheme(resolvedTheme === "dark" ? "light" : "dark");
+                      }}
+                      className="flex items-center gap-2.5 px-4 py-2.5 text-xs font-bold text-foreground hover:bg-secondary/70 transition-colors w-full text-left"
+                    >
+                      {resolvedTheme === "dark" ? (
+                        <>
+                          <Sun className="w-4 h-4 text-orange-400 animate-in spin-in-180 duration-500" />
+                          <span>Light Mode</span>
+                        </>
+                      ) : (
+                        <>
+                          <Moon className="w-4 h-4 text-blue-500 animate-in spin-in-180 duration-500" />
+                          <span>Dark Mode</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                  {/* Logout Action */}
+                  <div className="border-t border-border/60 pt-1">
+                    <button
+                      onClick={() => {
+                        setShowProfileDropdown(false);
+                        logout();
+                      }}
+                      className="flex items-center gap-2.5 px-4 py-2.5 text-xs font-bold text-destructive hover:bg-destructive/10 transition-colors w-full text-left"
+                    >
+                      <LogOut className="w-4 h-4" />
+                      Logout
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
           ) : (
-            <>
+            <div className="flex items-center gap-4">
+              {/* Theme Mode Toggle in Navbar */}
+              <button
+                onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
+                className="p-2.5 rounded-xl bg-secondary/50 border border-border/60 hover:bg-secondary hover:text-foreground text-muted-foreground transition-all active:scale-95 flex items-center justify-center shadow-sm"
+                title={`Switch to ${resolvedTheme === "dark" ? "light" : "dark"} mode`}
+              >
+                {resolvedTheme === "dark" ? (
+                  <Sun className="w-4 h-4 text-orange-400 animate-in spin-in-180 duration-500" />
+                ) : (
+                  <Moon className="w-4 h-4 text-blue-500 animate-in spin-in-180 duration-500" />
+                )}
+              </button>
               <Link 
                 href="/auth/login" 
                 className="text-xs font-black uppercase tracking-widest hover:text-primary transition-colors"
@@ -307,7 +456,7 @@ export default function PublicNavbar() {
               >
                 Sign Up
               </Link>
-            </>
+            </div>
           )}
         </div>
 
@@ -318,7 +467,7 @@ export default function PublicNavbar() {
             className="p-2 rounded-xl hover:bg-secondary text-foreground transition-colors flex items-center justify-center"
             aria-label="Toggle Menu"
           >
-            {isOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+            {isOpen ? <X className="w-5 h-5" /> : <MoreVertical className="w-5 h-5" />}
           </button>
         </div>
       </div>
@@ -417,90 +566,151 @@ export default function PublicNavbar() {
               )}
             </div>
 
-            {/* Primary navigation links */}
-            <div className="flex flex-col space-y-2">
-              {pathname === "/about" && (
-                <a 
-                  href="#features"
-                  onClick={() => setIsOpen(false)}
-                  className="flex items-center gap-4 px-5 py-4 rounded-2xl transition-all font-bold border text-sm hover:bg-secondary/40 text-foreground border-transparent"
-                >
-                  <span className="w-5 h-5 flex items-center justify-center font-bold">🎯</span>
-                  <span>Agents</span>
-                </a>
-              )}
-              <Link 
-                href="/about"
-                className={`flex items-center gap-4 px-5 py-4 rounded-2xl transition-all font-bold border text-sm ${
-                  pathname === "/about" 
-                    ? "bg-foreground text-background border-transparent" 
-                    : "hover:bg-secondary/40 text-foreground border-transparent"
-                }`}
-              >
-                <span className="w-5 h-5 flex items-center justify-center font-bold">ℹ️</span>
-                <span>About</span>
-              </Link>
-              <Link 
-                href="/public/jobs"
-                className={`flex items-center gap-4 px-5 py-4 rounded-2xl transition-all font-bold border text-sm ${
-                  pathname === "/public/jobs" 
-                    ? "bg-foreground text-background border-transparent" 
-                    : "hover:bg-secondary/40 text-foreground border-transparent"
-                }`}
-              >
-                <Briefcase className="w-5 h-5" />
-                <span>Explore Jobs</span>
-              </Link>
+            {isAuthenticated ? (
+              <>
+                {/* User Info Header in Mobile Drawer */}
+                <div className="flex items-center gap-3 pb-4 border-b border-border/60">
+                  <div className="w-12 h-12 rounded-full border-2 border-primary/20 bg-secondary flex items-center justify-center font-bold uppercase text-foreground relative overflow-hidden">
+                    {profile?.profilePhotoUrl ? (
+                      <img src={getPhotoUrl(profile.profilePhotoUrl)} alt={profile?.fullName || user?.name || ""} className="w-full h-full object-cover" />
+                    ) : (
+                      <span className="text-sm font-black">
+                        {profile?.fullName ? (
+                          profile.fullName.split(" ").map((n: string) => n[0]).join("").toUpperCase().slice(0, 2)
+                        ) : (
+                          user?.name ? user.name.split(" ").map((n: string) => n[0]).join("").toUpperCase().slice(0, 2) : "U"
+                        )}
+                      </span>
+                    )}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-black uppercase text-foreground truncate">{profile?.fullName || user?.name}</p>
+                    <p className="text-xs text-muted-foreground font-semibold truncate mt-0.5">{user?.email}</p>
+                  </div>
+                </div>
 
-              <Link 
-                href="/public/profiles"
-                className={`flex items-center gap-4 px-5 py-4 rounded-2xl transition-all font-bold border text-sm ${
-                  pathname === "/public/profiles" 
-                    ? "bg-foreground text-background border-transparent" 
-                    : "hover:bg-secondary/40 text-foreground border-transparent"
-                }`}
-              >
-                <Users className="w-5 h-5" />
-                <span>Explore Profiles</span>
-              </Link>
-            </div>
-
-            {/* Auth / Account operations */}
-            <div className="mt-auto pt-6 border-t border-border flex flex-col gap-4">
-              {isAuthenticated ? (
-                <>
+                {/* Logged In Mobile Drawer Options */}
+                <div className="flex flex-col space-y-2">
                   <Link 
-                    href="/dashboard"
-                    className="flex items-center justify-center gap-2 px-5 py-4 bg-foreground text-background rounded-2xl font-bold text-sm shadow-md"
+                    href={`/public/profiles/${profile?.username || user?.id}`}
+                    onClick={() => setIsOpen(false)}
+                    className="flex items-center gap-4 px-5 py-4 rounded-2xl transition-all font-bold border text-sm hover:bg-secondary/40 text-foreground border-transparent"
                   >
-                    <LayoutDashboard className="w-5 h-5" />
-                    <span>Go to Dashboard</span>
+                    <User className="w-5 h-5 text-muted-foreground" />
+                    <span>Profile</span>
                   </Link>
+
+                  <Link 
+                    href="/dashboard/connections"
+                    onClick={() => setIsOpen(false)}
+                    className="flex items-center gap-4 px-5 py-4 rounded-2xl transition-all font-bold border text-sm hover:bg-secondary/40 text-foreground border-transparent"
+                  >
+                    <Users className="w-5 h-5 text-muted-foreground" />
+                    <span>Connections</span>
+                  </Link>
+
+                  <Link 
+                    href="/dashboard/messages"
+                    onClick={() => setIsOpen(false)}
+                    className="flex items-center gap-4 px-5 py-4 rounded-2xl transition-all font-bold border text-sm hover:bg-secondary/40 text-foreground border-transparent"
+                  >
+                    <MessageSquare className="w-5 h-5 text-muted-foreground" />
+                    <span>Messages</span>
+                  </Link>
+
+                  <Link 
+                    href="/dashboard/notifications"
+                    onClick={() => setIsOpen(false)}
+                    className="flex items-center gap-4 px-5 py-4 rounded-2xl transition-all font-bold border text-sm hover:bg-secondary/40 text-foreground border-transparent"
+                  >
+                    <Bell className="w-5 h-5 text-muted-foreground" />
+                    <span>Notifications</span>
+                  </Link>
+
+                  <Link 
+                    href="/dashboard/settings"
+                    onClick={() => setIsOpen(false)}
+                    className="flex items-center gap-4 px-5 py-4 rounded-2xl transition-all font-bold border text-sm hover:bg-secondary/40 text-foreground border-transparent"
+                  >
+                    <Settings className="w-5 h-5 text-muted-foreground" />
+                    <span>Settings</span>
+                  </Link>
+
+                  {/* Theme Mode Toggle */}
+                  <button
+                    onClick={() => {
+                      setTheme(resolvedTheme === "dark" ? "light" : "dark");
+                    }}
+                    className="flex items-center gap-4 px-5 py-4 rounded-2xl transition-all font-bold border text-sm hover:bg-secondary/40 text-foreground border-transparent w-full text-left"
+                  >
+                    {resolvedTheme === "dark" ? (
+                      <>
+                        <Sun className="w-5 h-5 text-orange-400 animate-in spin-in-180 duration-500" />
+                        <span>Light Mode</span>
+                      </>
+                    ) : (
+                      <>
+                        <Moon className="w-5 h-5 text-blue-500 animate-in spin-in-180 duration-500" />
+                        <span>Dark Mode</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                {/* Logout Button */}
+                <div className="mt-auto pt-6 border-t border-border">
                   <button 
-                    onClick={() => logout()}
-                    className="flex items-center justify-center gap-2 px-5 py-4 bg-destructive/10 text-destructive rounded-2xl font-bold text-sm hover:bg-destructive hover:text-white transition-all"
+                    onClick={() => { setIsOpen(false); logout(); }}
+                    className="flex items-center justify-center gap-2 px-5 py-4 bg-destructive/10 text-destructive rounded-2xl font-bold text-sm hover:bg-destructive hover:text-white transition-all w-full"
                   >
                     <LogOut className="w-5 h-5" />
                     <span>Logout</span>
                   </button>
-                </>
-              ) : (
-                <div className="grid grid-cols-2 gap-4">
+                </div>
+              </>
+            ) : (
+              /* Not Logged In Mobile Drawer: Only Theme Toggle, Login, Signup */
+              <div className="flex flex-col space-y-4 my-auto justify-center items-center py-10 w-full max-w-xs mx-auto">
+                <div className="p-4 bg-secondary/50 rounded-full border border-border flex items-center justify-center mb-2 shadow-inner">
+                  <Lock className="w-8 h-8 text-muted-foreground animate-pulse" />
+                </div>
+                
+                {/* Theme Mode Option */}
+                <button
+                  onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
+                  className="flex items-center justify-center gap-3 w-full py-4 bg-secondary border border-border text-foreground rounded-2xl font-bold text-sm hover:bg-secondary/80 transition-all shadow-sm"
+                >
+                  {resolvedTheme === "dark" ? (
+                    <>
+                      <Sun className="w-4 h-4 text-orange-400 animate-in spin-in-180 duration-500" />
+                      <span>Light Mode</span>
+                    </>
+                  ) : (
+                    <>
+                      <Moon className="w-4 h-4 text-blue-500 animate-in spin-in-180 duration-500" />
+                      <span>Dark Mode</span>
+                    </>
+                  )}
+                </button>
+
+                <div className="grid grid-cols-2 gap-4 w-full">
                   <Link 
                     href="/auth/login"
-                    className="flex items-center justify-center py-4 bg-secondary text-foreground rounded-2xl font-bold text-sm border border-border/80 hover:bg-secondary/80 transition-all"
+                    onClick={() => setIsOpen(false)}
+                    className="flex items-center justify-center py-4 bg-secondary border border-border text-foreground rounded-2xl font-bold text-sm hover:bg-secondary/80 transition-all shadow-sm"
                   >
                     Login
                   </Link>
                   <Link 
                     href="/auth/register"
-                    className="flex items-center justify-center py-4 bg-foreground text-background rounded-2xl font-bold text-sm hover:opacity-90 transition-all shadow-sm"
+                    onClick={() => setIsOpen(false)}
+                    className="flex items-center justify-center py-4 bg-foreground text-background rounded-2xl font-bold text-sm hover:opacity-90 transition-all shadow-md"
                   >
                     Sign Up
                   </Link>
                 </div>
-              )}
-            </div>
+              </div>
+            )}
 
           </div>
         </div>

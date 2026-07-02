@@ -13,6 +13,7 @@ import useAuthStore from "@/store/useAuthStore";
 import { toast } from "sonner";
 import Link from "next/link";
 import GifStickerPicker from "@/components/GifStickerPicker";
+import { generateE2eeKeyPair, deriveSharedKey, encryptMessage, decryptMessage } from "@/lib/e2ee";
 
 interface PublicProfile {
   userId: string;
@@ -22,6 +23,7 @@ interface PublicProfile {
   profilePhotoUrl?: string;
   skills?: string[];
   lastOnline?: string;
+  e2eePublicKey?: string;
 }
 
 interface DirectMessage {
@@ -31,6 +33,8 @@ interface DirectMessage {
   content: string;
   timestamp: string;
   read: boolean;
+  readAt?: string;
+  isE2ee?: boolean;
 }
 
 interface Conversation {
@@ -74,6 +78,8 @@ function ChatContainer() {
   const [showChatMenu, setShowChatMenu] = useState(false);
   const chatMenuRef = useRef<HTMLDivElement>(null);
 
+  const sharedKeysRef = useRef<Record<string, CryptoKey>>({});
+
   const { socket, isConnected, fetchUnreadMessageCount, onlineUserIds, setActiveChatUserId, sendTypingStatus } = useWebSocketStore();
   const { user } = useAuthStore();
   const currentUserId = user?.id;
@@ -94,6 +100,116 @@ function ChatContainer() {
       }
     };
   }, []);
+
+  // E2EE Key Enrollment & Self-Healing Sync
+  useEffect(() => {
+    const enrollE2ee = async () => {
+      if (typeof window === "undefined") return;
+      let myPrivateKey = localStorage.getItem("zenith_e2ee_private_key");
+      let myPublicKey = localStorage.getItem("zenith_e2ee_public_key");
+
+      try {
+        // 1. Fetch user's own profile to check vault status
+        const res = await api.get("/profile");
+        const profile = res.data;
+
+        if (profile.e2eePrivateKey && profile.e2eePublicKey) {
+          // If keys exist on the server, recover/restore them to local storage if they are missing
+          if (!myPrivateKey || !myPublicKey) {
+            console.log("E2EE: Restoring encryption key agreement pair from vault...");
+            myPrivateKey = profile.e2eePrivateKey;
+            myPublicKey = profile.e2eePublicKey;
+            localStorage.setItem("zenith_e2ee_private_key", myPrivateKey!);
+            localStorage.setItem("zenith_e2ee_public_key", myPublicKey!);
+          }
+        }
+
+        // 2. If keys are missing everywhere, generate new ones
+        if (!myPrivateKey || !myPublicKey) {
+          console.log("E2EE: Initializing new key agreement pair...");
+          const keys = await generateE2eeKeyPair();
+          myPrivateKey = JSON.stringify(keys.privateKeyJwk);
+          myPublicKey = JSON.stringify(keys.publicKeyJwk);
+          localStorage.setItem("zenith_e2ee_private_key", myPrivateKey);
+          localStorage.setItem("zenith_e2ee_public_key", myPublicKey);
+
+          console.log("E2EE: Vaulting new encryption keypair to the server...");
+          await api.post("/profile/e2ee-key", { publicKey: myPublicKey, privateKey: myPrivateKey });
+          fetchConversations();
+        } else if (profile.e2eePublicKey !== myPublicKey || profile.e2eePrivateKey !== myPrivateKey) {
+          // 3. Self-heal key synchronization if database keys differ from localStorage
+          console.log("E2EE: Syncing local encryption keys to server vault...");
+          await api.post("/profile/e2ee-key", { publicKey: myPublicKey, privateKey: myPrivateKey });
+          fetchConversations();
+        }
+      } catch (err) {
+        console.error("E2EE: Failed to verify or restore E2EE key vault:", err);
+      }
+    };
+    enrollE2ee();
+  }, []);
+
+  const decryptMessageItem = async (msg: DirectMessage, partner: PublicProfile): Promise<DirectMessage> => {
+    if (!msg.content.startsWith('{"encrypted":true')) {
+      return msg;
+    }
+    try {
+      let sharedKey = sharedKeysRef.current[partner.userId];
+      if (!sharedKey) {
+        const myPrivateKeyJwk = JSON.parse(localStorage.getItem("zenith_e2ee_private_key") || "null");
+        const theirPublicKeyJwk = JSON.parse(partner.e2eePublicKey || "null");
+        if (myPrivateKeyJwk && theirPublicKeyJwk) {
+          sharedKey = await deriveSharedKey(myPrivateKeyJwk, theirPublicKeyJwk);
+          sharedKeysRef.current[partner.userId] = sharedKey;
+        }
+      }
+      if (sharedKey) {
+        const plaintext = await decryptMessage(msg.content, sharedKey);
+        return { ...msg, content: plaintext, isE2ee: true };
+      }
+    } catch (e) {
+      console.error("E2EE: Failed to decrypt message content:", e);
+    }
+    return { ...msg, content: "[Encrypted Message]", isE2ee: true };
+  };
+
+  const decryptMessageList = async (msgList: DirectMessage[], partner: PublicProfile): Promise<DirectMessage[]> => {
+    return await Promise.all(msgList.map(msg => decryptMessageItem(msg, partner)));
+  };
+
+  const decryptConversationItem = async (conv: Conversation): Promise<Conversation> => {
+    if (!conv.lastMessage || !conv.lastMessage.content.startsWith('{"encrypted":true')) {
+      return conv;
+    }
+    try {
+      let sharedKey = sharedKeysRef.current[conv.otherUser.userId];
+      if (!sharedKey) {
+        const myPrivateKeyJwk = JSON.parse(localStorage.getItem("zenith_e2ee_private_key") || "null");
+        const theirPublicKeyJwk = JSON.parse(conv.otherUser.e2eePublicKey || "null");
+        if (myPrivateKeyJwk && theirPublicKeyJwk) {
+          sharedKey = await deriveSharedKey(myPrivateKeyJwk, theirPublicKeyJwk);
+          sharedKeysRef.current[conv.otherUser.userId] = sharedKey;
+        }
+      }
+      if (sharedKey) {
+        const plaintext = await decryptMessage(conv.lastMessage.content, sharedKey);
+        return {
+          ...conv,
+          lastMessage: { ...conv.lastMessage, content: plaintext, isE2ee: true }
+        };
+      }
+    } catch (e) {
+      console.error("E2EE: Failed to decrypt last message snippet:", e);
+    }
+    return {
+      ...conv,
+      lastMessage: { ...conv.lastMessage, content: "[Encrypted Message]", isE2ee: true }
+    };
+  };
+
+  const decryptConversationList = async (convList: Conversation[]): Promise<Conversation[]> => {
+    return await Promise.all(convList.map(conv => decryptConversationItem(conv)));
+  };
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -122,10 +238,12 @@ function ChatContainer() {
         
         // If we are currently chatting with the sender or receiver of this message
         if (activeUser && (msg.senderId === activeUser.userId || msg.receiverId === activeUser.userId)) {
-          setMessages(prev => {
-            // Prevent duplicates
-            if (prev.some(m => m.id === msg.id)) return prev;
-            return [...prev, msg];
+          decryptMessageItem(msg, activeUser).then((decryptedMsg) => {
+            setMessages(prev => {
+              // Prevent duplicates
+              if (prev.some(m => m.id === decryptedMsg.id)) return prev;
+              return [...prev, decryptedMsg];
+            });
           });
           
           if (msg.senderId === activeUser.userId) {
@@ -142,10 +260,11 @@ function ChatContainer() {
         }
       } else if (payload.type === "READ") {
         const readerId = payload.data?.readerId;
+        const readAt = payload.data?.readAt;
         if (activeUser && readerId === activeUser.userId) {
           // Mark all our sent messages to this user as read
           setMessages(prev => 
-            prev.map(m => m.senderId === currentUserId ? { ...m, read: true } : m)
+            prev.map(m => m.senderId === currentUserId ? { ...m, read: true, readAt: readAt || m.readAt || new Date().toISOString() } : m)
           );
         }
       } else if (payload.type === "TYPING") {
@@ -315,8 +434,9 @@ function ChatContainer() {
         const res = await api.get(`/messages/history/${activeUser.userId}?page=${nextPage}&size=30`);
         const olderMessages = res.data;
         if (olderMessages.length > 0) {
+          const decryptedOlder = await decryptMessageList(olderMessages, activeUser);
           setMessages(prev => {
-            const newMsgs = olderMessages.filter((m: DirectMessage) => !prev.some(p => p.id === m.id));
+            const newMsgs = decryptedOlder.filter((m: DirectMessage) => !prev.some(p => p.id === m.id));
             return [...newMsgs, ...prev];
           });
           setPage(nextPage);
@@ -341,7 +461,8 @@ function ChatContainer() {
   const fetchConversations = async () => {
     try {
       const res = await api.get("/messages/conversations");
-      setConversations(res.data);
+      const decrypted = await decryptConversationList(res.data);
+      setConversations(decrypted);
     } catch (err) {
       console.error("Failed to fetch conversations:", err);
     } finally {
@@ -407,7 +528,8 @@ function ChatContainer() {
 
     try {
       const res = await api.get(`/messages/history/${otherUser.userId}?page=0&size=30`);
-      setMessages(res.data);
+      const decrypted = await decryptMessageList(res.data, otherUser);
+      setMessages(decrypted);
       if (res.data.length < 30) {
         setHasMore(false);
       }
@@ -524,15 +646,41 @@ function ChatContainer() {
     setSending(true);
 
     try {
+      let payloadContent = content;
+      if (activeUser.e2eePublicKey) {
+        try {
+          let sharedKey = sharedKeysRef.current[activeUser.userId];
+          if (!sharedKey) {
+            const myPrivateKeyJwk = JSON.parse(localStorage.getItem("zenith_e2ee_private_key") || "null");
+            const theirPublicKeyJwk = JSON.parse(activeUser.e2eePublicKey);
+            if (myPrivateKeyJwk && theirPublicKeyJwk) {
+              sharedKey = await deriveSharedKey(myPrivateKeyJwk, theirPublicKeyJwk);
+              sharedKeysRef.current[activeUser.userId] = sharedKey;
+            }
+          }
+          if (sharedKey) {
+            payloadContent = await encryptMessage(content, sharedKey);
+          }
+        } catch (encryptErr) {
+          console.error("E2EE Encryption failed, sending plaintext fallback:", encryptErr);
+        }
+      }
+
       const res = await api.post("/messages/send", {
         receiverId: activeUser.userId,
-        content
+        content: payloadContent
       });
       
       const sentMsg = res.data;
+      const localMsg = {
+        ...sentMsg,
+        content: content,
+        isE2ee: !!activeUser.e2eePublicKey
+      };
+
       setMessages(prev => {
-        if (prev.some(m => m.id === sentMsg.id)) return prev;
-        return [...prev, sentMsg];
+        if (prev.some(m => m.id === localMsg.id)) return prev;
+        return [...prev, localMsg];
       });
 
       // Update conversations list so this partner is at the top with updated snippet
@@ -540,7 +688,7 @@ function ChatContainer() {
         const filtered = prev.filter(c => c.otherUser.userId !== activeUser.userId);
         const updatedConv: Conversation = {
           otherUser: activeUser,
-          lastMessage: sentMsg,
+          lastMessage: localMsg,
           unreadCount: 0
         };
         return [updatedConv, ...filtered];
@@ -592,22 +740,48 @@ function ChatContainer() {
     setSending(true);
 
     try {
+      let payloadContent = content;
+      if (activeUser.e2eePublicKey) {
+        try {
+          let sharedKey = sharedKeysRef.current[activeUser.userId];
+          if (!sharedKey) {
+            const myPrivateKeyJwk = JSON.parse(localStorage.getItem("zenith_e2ee_private_key") || "null");
+            const theirPublicKeyJwk = JSON.parse(activeUser.e2eePublicKey);
+            if (myPrivateKeyJwk && theirPublicKeyJwk) {
+              sharedKey = await deriveSharedKey(myPrivateKeyJwk, theirPublicKeyJwk);
+              sharedKeysRef.current[activeUser.userId] = sharedKey;
+            }
+          }
+          if (sharedKey) {
+            payloadContent = await encryptMessage(content, sharedKey);
+          }
+        } catch (encryptErr) {
+          console.error("E2EE Encryption failed for GIF/Sticker:", encryptErr);
+        }
+      }
+
       const res = await api.post("/messages/send", {
         receiverId: activeUser.userId,
-        content
+        content: payloadContent
       });
       
       const sentMsg = res.data;
+      const localMsg = {
+        ...sentMsg,
+        content: content,
+        isE2ee: !!activeUser.e2eePublicKey
+      };
+
       setMessages(prev => {
-        if (prev.some(m => m.id === sentMsg.id)) return prev;
-        return [...prev, sentMsg];
+        if (prev.some(m => m.id === localMsg.id)) return prev;
+        return [...prev, localMsg];
       });
 
       setConversations(prev => {
         const filtered = prev.filter(c => c.otherUser.userId !== activeUser.userId);
         const updatedConv: Conversation = {
           otherUser: activeUser,
-          lastMessage: sentMsg,
+          lastMessage: localMsg,
           unreadCount: 0
         };
         return [updatedConv, ...filtered];
@@ -668,6 +842,9 @@ function ChatContainer() {
   const formatLastMessageSnippet = (content?: string) => {
     if (!content) return "Click to start conversation";
     const trimmed = content.trim();
+    if (trimmed.startsWith('{"encrypted":true')) {
+      return "🔒 [Encrypted Message]";
+    }
     if (trimmed.startsWith('{"type":"POST_SHARE"')) {
       try {
         const parsed = JSON.parse(trimmed);
@@ -999,8 +1176,13 @@ function ChatContainer() {
 
                  {/* Name details */}
                  <div className="min-w-0">
-                   <h3 className="font-bold text-sm sm:text-base leading-tight truncate">
+                   <h3 className="font-bold text-sm sm:text-base leading-tight truncate flex items-center gap-1.5">
                      {activeUser.fullName}
+                     {activeUser.e2eePublicKey && (
+                       <span className="text-[10px] text-emerald-500 font-extrabold uppercase bg-emerald-500/10 px-1.5 py-0.5 rounded-md flex items-center gap-0.5 select-none shrink-0" title="End-to-End Encrypted">
+                         🔒 e2ee
+                       </span>
+                     )}
                    </h3>
                    {onlineUserIds.includes(activeUser.userId) ? (
                      <p className="text-[10px] sm:text-xs text-emerald-500 font-extrabold uppercase tracking-wider select-none mt-0.5">
@@ -1309,8 +1491,13 @@ function ChatContainer() {
                           {/* Detailed time and checkmarks */}
                           <div className="flex items-center gap-1.5 mt-1 px-1">
                             {visibleTimeMessageId === msg.id && (
-                              <span className="text-[9px] text-muted-foreground/60 font-semibold animate-in fade-in slide-in-from-top-1 duration-200">
-                                {formatDetailedTime(msg.timestamp)}
+                              <span className="text-[9px] text-muted-foreground/60 font-semibold animate-in fade-in slide-in-from-top-1 duration-200 flex items-center gap-1">
+                                <span>Sent {formatDetailedTime(msg.timestamp)}</span>
+                                {msg.read && msg.readAt && (
+                                  <span className="text-[9px] text-emerald-500 font-bold">
+                                    • Seen {formatDetailedTime(msg.readAt)}
+                                  </span>
+                                )}
                               </span>
                             )}
                             {isSelf && (

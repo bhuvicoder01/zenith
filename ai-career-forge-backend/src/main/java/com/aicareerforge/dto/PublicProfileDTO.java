@@ -27,6 +27,7 @@ public class PublicProfileDTO {
     private List<UserProfile.Certification> certifications;
     private List<UserProfile.Internship> internships;
     private java.time.Instant lastOnline;
+    private String e2eePublicKey;
 
     public static PublicProfileDTO fromEntity(UserProfile profile) {
         if (profile == null) return null;
@@ -53,6 +54,7 @@ public class PublicProfileDTO {
                 .certifications(profile.getCertifications())
                 .internships(profile.getInternships())
                 .lastOnline(resolvedLastOnline)
+                .e2eePublicKey(profile.getE2eePublicKey())
                 .build();
     }
 }

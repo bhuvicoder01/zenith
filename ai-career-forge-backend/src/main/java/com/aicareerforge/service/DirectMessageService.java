@@ -4,8 +4,10 @@ import com.aicareerforge.dto.ConversationDTO;
 import com.aicareerforge.dto.PublicProfileDTO;
 import com.aicareerforge.model.DirectMessage;
 import com.aicareerforge.model.User;
+import com.aicareerforge.model.UserProfile;
 import com.aicareerforge.repository.DirectMessageRepository;
 import com.aicareerforge.repository.UserRepository;
+import com.aicareerforge.repository.UserProfileRepository;
 import com.aicareerforge.security.WebSocketAppHandler;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -24,6 +26,7 @@ public class DirectMessageService {
 
     private final DirectMessageRepository directMessageRepository;
     private final UserRepository userRepository;
+    private final UserProfileRepository userProfileRepository;
     private final UserProfileService userProfileService;
     private final WebSocketAppHandler webSocketAppHandler;
 
@@ -37,15 +40,28 @@ public class DirectMessageService {
             throw new IllegalArgumentException("Receiver does not exist");
         }
 
+        // Fetch sender's public key
+        String senderPublicKey = null;
+        try {
+            Optional<UserProfile> senderProfileOpt = userProfileRepository.findByUserId(senderId);
+            if (senderProfileOpt.isPresent()) {
+                senderPublicKey = senderProfileOpt.get().getE2eePublicKey();
+            }
+        } catch (Exception e) {
+            log.error("Failed to fetch sender public key for message event: {}", e.getMessage());
+        }
+
         DirectMessage message = DirectMessage.builder()
                 .senderId(senderId)
                 .receiverId(receiverId)
                 .content(content)
                 .timestamp(Instant.now())
                 .isRead(false)
+                .senderPublicKey(senderPublicKey)
                 .build();
 
         DirectMessage savedMessage = directMessageRepository.save(message);
+        savedMessage.setSenderPublicKey(senderPublicKey);
         log.info("Direct message sent from {} to {}", senderId, receiverId);
 
         // Push real-time event to receiver and sender (for multi-device sync)
@@ -83,7 +99,11 @@ public class DirectMessageService {
     public void markChatAsRead(String receiverId, String senderId) {
         List<DirectMessage> unread = directMessageRepository.findUnreadMessagesForChat(receiverId, senderId, false);
         if (!unread.isEmpty()) {
-            unread.forEach(m -> m.setRead(true));
+            Instant now = Instant.now();
+            unread.forEach(m -> {
+                m.setRead(true);
+                m.setReadAt(now);
+            });
             directMessageRepository.saveAll(unread);
             log.info("Marked {} messages from {} to {} as read", unread.size(), senderId, receiverId);
             
@@ -93,7 +113,10 @@ public class DirectMessageService {
                         "READ",
                         "Messages Read",
                         "Receiver read messages",
-                        java.util.Map.of("readerId", receiverId)
+                        java.util.Map.of(
+                                "readerId", receiverId,
+                                "readAt", now.toString()
+                        )
                 );
             } catch (Exception e) {
                 log.error("Failed to push read receipt WS notification: {}", e.getMessage());
@@ -109,9 +132,11 @@ public class DirectMessageService {
         List<DirectMessage> toUpdate = new ArrayList<>();
         java.util.Set<String> sendersToNotify = new java.util.HashSet<>();
         
+        Instant now = Instant.now();
         for (DirectMessage m : messages) {
             if (m.getReceiverId().equals(receiverId) && !m.isRead()) {
                 m.setRead(true);
+                m.setReadAt(now);
                 toUpdate.add(m);
                 sendersToNotify.add(m.getSenderId());
             }
@@ -128,7 +153,10 @@ public class DirectMessageService {
                             "READ",
                             "Messages Read",
                             "Receiver read messages",
-                            java.util.Map.of("readerId", receiverId)
+                            java.util.Map.of(
+                                    "readerId", receiverId,
+                                    "readAt", now.toString()
+                            )
                     );
                 } catch (Exception e) {
                     log.error("Failed to push read receipt WS notification: {}", e.getMessage());

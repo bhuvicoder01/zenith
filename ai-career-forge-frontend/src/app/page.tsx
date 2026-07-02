@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { 
   Heart, Trash2, Link2, FileText, Image as ImageIcon, Send, Loader2, Plus, 
   ExternalLink, Sparkles, MessageSquare, AlertCircle, File, LogOut, LayoutDashboard, Globe, Share2,
-  Edit2, Eye, CornerDownRight, Video, Play, Pause, Volume2, VolumeX, Maximize, Minimize
+  Edit2, Eye, CornerDownRight, Video, Play, Pause, Volume2, VolumeX, Maximize, Minimize, Lock
 } from "lucide-react";
 import useAuthStore from "@/store/useAuthStore";
 import PublicNavbar from "@/components/PublicNavbar";
@@ -592,50 +592,119 @@ export default function HomeFeed() {
               </form>
             )}
 
-            {/* TIMELINE LIST */}
-            <div className="space-y-6">
-              {posts.length > 0 ? (
-                posts.map(post => (
-                  <PostCard 
-                    key={post.id} 
-                    post={post} 
-                    userAvatar={profile?.profilePhotoUrl}
-                    onDelete={(postId) => setPosts(prev => prev.filter(p => p.id !== postId))}
-                    onShare={handleOpenShare}
-                  />
-                ))
-              ) : (
-                !loadingFeed && (
-                  <div className="bg-card border border-border rounded-[2.5rem] p-12 text-center space-y-4">
-                    <AlertCircle className="w-12 h-12 text-muted-foreground mx-auto" />
-                    <div>
-                      <h3 className="text-xl font-black uppercase tracking-tight">Timeline Empty</h3>
-                      <p className="text-xs text-muted-foreground mt-1 max-w-sm mx-auto leading-relaxed">
-                        No broadcasts have been established on this network yet. Log in to initialize the first post update!
-                      </p>
-                    </div>
-                  </div>
-                )
-              )}
+            {/* TIMELINE LIST OR LOCKED OVERLAY */}
+            {!isAuthenticated ? (
+              <div className="relative min-h-[500px] rounded-[2.5rem] border border-border bg-card/45 overflow-hidden flex items-center justify-center p-6 sm:p-8">
+                {/* Blurred teaser posts inside */}
+                <div className="absolute inset-0 w-full h-full p-6 space-y-6 blur-[8px] pointer-events-none select-none opacity-20 overflow-hidden">
+                  {posts.length > 0 ? (
+                    posts.slice(0, 3).map((post, idx) => (
+                      <div key={idx} className="bg-card border border-border rounded-[2rem] p-6 space-y-4 shadow-sm">
+                        <div className="flex gap-4">
+                          <div className="w-10 h-10 rounded-full bg-secondary"></div>
+                          <div className="space-y-2 flex-1">
+                            <div className="h-4 bg-secondary rounded w-1/4"></div>
+                            <div className="h-3 bg-secondary rounded w-1/3"></div>
+                          </div>
+                        </div>
+                        <div className="space-y-2 pt-2">
+                          <div className="h-3 bg-secondary rounded w-full"></div>
+                          <div className="h-3 bg-secondary rounded w-5/6"></div>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    Array.from({ length: 3 }).map((_, idx) => (
+                      <div key={idx} className="bg-card border border-border rounded-[2rem] p-6 space-y-4 shadow-sm">
+                        <div className="flex gap-4">
+                          <div className="w-10 h-10 rounded-full bg-secondary"></div>
+                          <div className="space-y-2 flex-1">
+                            <div className="h-4 bg-secondary rounded w-1/4"></div>
+                            <div className="h-3 bg-secondary rounded w-1/3"></div>
+                          </div>
+                        </div>
+                        <div className="space-y-2 pt-2">
+                          <div className="h-3 bg-secondary rounded w-full"></div>
+                          <div className="h-3 bg-secondary rounded w-5/6"></div>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
 
-              {/* Infinite Scroll Sentinel & Loader */}
-              <div ref={lastPostElementRef} className="py-6 flex justify-center items-center">
-                {loadingFeed ? (
-                  <div className="flex items-center gap-2 text-muted-foreground text-xs font-bold">
-                    <Loader2 className="w-5 h-5 animate-spin text-primary" />
-                    Synching timeline...
+                {/* Glassmorphic overlay lock card */}
+                <div className="relative z-10 w-full max-w-sm bg-card/85 dark:bg-card/75 border border-border/80 rounded-[2.5rem] p-8 text-center shadow-2xl backdrop-blur-md space-y-6 animate-in zoom-in-95 duration-200">
+                  <div className="p-4 bg-primary/10 text-primary w-fit mx-auto rounded-2xl relative shadow-inner ring-1 ring-primary/20">
+                    <Lock className="w-6 h-6 animate-pulse" />
                   </div>
-                ) : hasMore ? (
-                  <div className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40 animate-pulse">
-                    Scanning for older updates...
+                  <div className="space-y-2">
+                    <h3 className="text-lg font-black uppercase tracking-tight text-foreground">Timeline Feed Locked</h3>
+                    <p className="text-xs text-muted-foreground font-semibold leading-relaxed max-w-[280px] mx-auto">
+                      Access to community transmissions is restricted. Please log in to decrypt this feed.
+                    </p>
                   </div>
-                ) : posts.length > 0 ? (
-                  <div className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/30">
-                    Transmission complete. You have read all updates.
+                  <div className="flex flex-col gap-2 pt-2">
+                    <Link
+                      href="/auth/login"
+                      className="w-full py-3.5 bg-foreground text-background text-xs font-black uppercase tracking-widest rounded-2xl text-center hover:opacity-90 transition-all shadow-md active:scale-95"
+                    >
+                      Log In
+                    </Link>
+                    <Link
+                      href="/auth/register"
+                      className="w-full py-3.5 bg-secondary border border-border text-foreground text-xs font-black uppercase tracking-widest rounded-2xl text-center hover:bg-secondary/80 transition-all active:scale-95"
+                    >
+                      Create Account
+                    </Link>
                   </div>
-                ) : null}
+                </div>
               </div>
-            </div>
+            ) : (
+              /* TIMELINE LIST */
+              <div className="space-y-6">
+                {posts.length > 0 ? (
+                  posts.map(post => (
+                    <PostCard 
+                      key={post.id} 
+                      post={post} 
+                      userAvatar={profile?.profilePhotoUrl}
+                      onDelete={(postId) => setPosts(prev => prev.filter(p => p.id !== postId))}
+                      onShare={handleOpenShare}
+                    />
+                  ))
+                ) : (
+                  !loadingFeed && (
+                    <div className="bg-card border border-border rounded-[2.5rem] p-12 text-center space-y-4">
+                      <AlertCircle className="w-12 h-12 text-muted-foreground mx-auto" />
+                      <div>
+                        <h3 className="text-xl font-black uppercase tracking-tight">Timeline Empty</h3>
+                        <p className="text-xs text-muted-foreground mt-1 max-w-sm mx-auto leading-relaxed">
+                          No broadcasts have been established on this network yet. Log in to initialize the first post update!
+                        </p>
+                      </div>
+                    </div>
+                  )
+                )}
+
+                {/* Infinite Scroll Sentinel & Loader */}
+                <div ref={lastPostElementRef} className="py-6 flex justify-center items-center">
+                  {loadingFeed ? (
+                    <div className="flex items-center gap-2 text-muted-foreground text-xs font-bold">
+                      <Loader2 className="w-5 h-5 animate-spin text-primary" />
+                      Synching timeline...
+                    </div>
+                  ) : hasMore ? (
+                    <div className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40 animate-pulse">
+                      Scanning for older updates...
+                    </div>
+                  ) : posts.length > 0 ? (
+                    <div className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/30">
+                      Transmission complete. You have read all updates.
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+            )}
           </main>
 
           {/* RIGHT COLUMN: PLATFORM CONNECTIONS / TRENDING */}

@@ -63,6 +63,9 @@ public class UserProfile {
     @Builder.Default
     private UserSettings settings = new UserSettings();
 
+    private String e2eePublicKey;
+    private String e2eePrivateKey;
+
     @Data
     @NoArgsConstructor
     @AllArgsConstructor

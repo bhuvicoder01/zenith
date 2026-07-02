@@ -158,6 +158,8 @@ public class WebSocketAppHandler extends TextWebSocketHandler {
     }
 
     public void sendNotification(String userId, String type, String title, String message, Object data) {
+        String displayMessage = "MESSAGE".equals(type) ? formatNotificationMessage(message) : message;
+
         if ("PREP_STATUS".equals(type)) {
             if (data instanceof Map) {
                 Map<String, Object> dataMap = (Map<String, Object>) data;
@@ -180,7 +182,7 @@ public class WebSocketAppHandler extends TextWebSocketHandler {
         if (sessions == null || sessions.isEmpty()) {
             log.debug("No active WebSocket sessions for user ID: {}, triggering background push", userId);
             try {
-                pushNotificationService.sendPushNotification(userId, title, message, data);
+                pushNotificationService.sendPushNotification(userId, title, displayMessage, data);
             } catch (Exception e) {
                 log.error("Failed to send fallback device level push notification for user {}: {}", userId, e.getMessage());
             }
@@ -190,7 +192,7 @@ public class WebSocketAppHandler extends TextWebSocketHandler {
         Map<String, Object> payload = Map.of(
                 "type", type,
                 "title", title,
-                "message", message,
+                "message", displayMessage,
                 "timestamp", java.time.Instant.now().toString(),
                 "data", data != null ? data : Map.of()
         );
@@ -302,5 +304,39 @@ public class WebSocketAppHandler extends TextWebSocketHandler {
         } catch (Exception e) {
             return true;
         }
+    }
+
+    private String formatNotificationMessage(String message) {
+        if (message == null) return "";
+        String trimmed = message.trim();
+        if (trimmed.startsWith("{\"encrypted\":true")) {
+            return "🔒 [Encrypted Message]";
+        }
+        if (trimmed.startsWith("[GIF]")) {
+            return "[GIF]";
+        }
+        if (trimmed.startsWith("[STICKER]")) {
+            return "[Sticker]";
+        }
+        if (trimmed.startsWith("{\"type\":\"POST_SHARE\"")) {
+            return "Sent a post";
+        }
+        if (trimmed.startsWith("{\"type\":\"REPLY\"")) {
+            try {
+                // Quick parse reply text snippet
+                int textIdx = trimmed.indexOf("\"text\":\"");
+                if (textIdx != -1) {
+                    int start = textIdx + 8;
+                    int end = trimmed.indexOf("\"", start);
+                    if (end != -1) {
+                        return trimmed.substring(start, end);
+                    }
+                }
+            } catch (Exception e) {
+                // ignore
+            }
+            return "Replied to a message";
+        }
+        return message;
     }
 }

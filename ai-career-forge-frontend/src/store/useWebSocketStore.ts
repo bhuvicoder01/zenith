@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { toast } from 'sonner';
 import api from '@/lib/api';
 import useAuthStore from './useAuthStore';
+import { deriveSharedKey, decryptMessage } from '@/lib/e2ee';
 
 export interface NotificationItem {
   id: string;
@@ -222,48 +223,84 @@ export const useWebSocketStore = create<WebSocketStore>((set, get) => ({
                 get().fetchUnreadMessageCount();
               }
 
-              // Only show toast and add to notifications feed if user is not active/online (tab is blurred/out of focus)
-              const isUserOffline = typeof document !== 'undefined' && !document.hasFocus();
-              if (isUserOffline) {
-                // Show native browser desktop notification via service worker (works reliably in device notification drawers)
-                if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted' && 'serviceWorker' in navigator) {
-                  navigator.serviceWorker.ready.then(registration => {
-                    registration.showNotification(`New message from ${data.title || 'Connection'}`, {
-                      body: data.message,
-                      icon: '/zenith-favicon.png',
-                      badge: '/zenith-favicon.png',
-                      data: { url: `/dashboard/messages?userId=${data.data.senderId}` }
-                    });
-                  }).catch(err => {
-                    console.error('Failed to trigger native message notification via worker:', err);
-                  });
+              // Decrypt notification payload if encrypted
+              const triggerNotification = async () => {
+                let displayMsg = data.message;
+                if (data.data.content && data.data.content.startsWith('{"encrypted":true')) {
+                  try {
+                    const myPrivateKeyJwk = JSON.parse(localStorage.getItem("zenith_e2ee_private_key") || "null");
+                    const theirPublicKeyJwk = JSON.parse(data.data.senderPublicKey || "null");
+                    if (myPrivateKeyJwk && theirPublicKeyJwk) {
+                      const sharedKey = await deriveSharedKey(myPrivateKeyJwk, theirPublicKeyJwk);
+                      const decrypted = await decryptMessage(data.data.content, sharedKey);
+                      // Decrypted successfully, let's extract rich content text
+                      if (decrypted.startsWith("[GIF]")) {
+                        displayMsg = "[GIF]";
+                      } else if (decrypted.startsWith("[STICKER]")) {
+                        displayMsg = "[Sticker]";
+                      } else if (decrypted.startsWith('{"type":"REPLY"')) {
+                        try {
+                          const parsed = JSON.parse(decrypted);
+                          displayMsg = parsed.text || "Replied to a message";
+                        } catch (e) {
+                          displayMsg = "Replied to a message";
+                        }
+                      } else {
+                        displayMsg = decrypted;
+                      }
+                    }
+                  } catch (decryptErr) {
+                    console.error("Failed to decrypt live notification message:", decryptErr);
+                  }
                 }
 
-                // Show a reply toast alert
-                toast.info(`New message from ${data.title || 'Connection'}`, {
-                  description: data.message,
-                  action: routerPush ? {
-                    label: 'Reply',
-                    onClick: () => routerPush(`/dashboard/messages?userId=${data.data.senderId}`)
-                  } : undefined,
-                  duration: 5000,
-                });
+                // Show alerts and add to feed if not currently viewing this specific conversation
+                if (!isCurrentChat) {
+                  // Show native browser desktop notification ONLY if tab is out of focus
+                  const isUserOffline = typeof document !== 'undefined' && !document.hasFocus();
+                  if (isUserOffline) {
+                    if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted' && 'serviceWorker' in navigator) {
+                      navigator.serviceWorker.ready.then(registration => {
+                        registration.showNotification(`New message from ${data.title || 'Connection'}`, {
+                          body: displayMsg,
+                          icon: '/zenith-favicon.png',
+                          badge: '/zenith-favicon.png',
+                          data: { url: `/dashboard/messages?userId=${data.data.senderId}` }
+                        });
+                      }).catch(err => {
+                        console.error('Failed to trigger native message notification via worker:', err);
+                      });
+                    }
+                  }
 
-                // Save as a notification item so it shows up in their Feed
-                const newNotif: NotificationItem = {
-                  id: `msg_${data.data.id || Date.now().toString()}`,
-                  type: 'NEW_MESSAGE',
-                  title: `New Message from ${data.title || 'Connection'}`,
-                  message: data.message || '',
-                  timestamp: data.timestamp || new Date().toISOString(),
-                  read: false,
-                  data: data.data,
-                };
+                  // Always show a toast popup when outside the chat window
+                  toast.info(`New message from ${data.title || 'Connection'}`, {
+                    description: displayMsg,
+                    action: routerPush ? {
+                      label: 'Reply',
+                      onClick: () => routerPush(`/dashboard/messages?userId=${data.data.senderId}`)
+                    } : undefined,
+                    duration: 5000,
+                  });
 
-                const updatedNotifications = [newNotif, ...get().notifications];
-                set({ notifications: updatedNotifications });
-                localStorage.setItem('zenith_notifications', JSON.stringify(updatedNotifications));
-              }
+                  // Save as a notification item so it shows up in their Feed
+                  const newNotif: NotificationItem = {
+                    id: `msg_${data.data.id || Date.now().toString()}`,
+                    type: 'NEW_MESSAGE',
+                    title: `New Message from ${data.title || 'Connection'}`,
+                    message: displayMsg || '',
+                    timestamp: data.timestamp || new Date().toISOString(),
+                    read: false,
+                    data: data.data,
+                  };
+
+                  const updatedNotifications = [newNotif, ...get().notifications];
+                  set({ notifications: updatedNotifications });
+                  localStorage.setItem('zenith_notifications', JSON.stringify(updatedNotifications));
+                }
+              };
+
+              triggerNotification();
             }
             return;
           }

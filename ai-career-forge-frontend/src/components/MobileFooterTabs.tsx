@@ -244,7 +244,7 @@ export default function MobileFooterTabs() {
   const isAuthPage = pathname.startsWith("/auth");
   const isAdminPage = pathname.startsWith("/admin");
 
-  if (isAuthPage || isAdminPage || hasActiveChat) return null;
+  if (isAuthPage || isAdminPage || hasActiveChat || !isAuthenticated) return null;
 
   const len = allTabs.length;
   const visibleTabs = [

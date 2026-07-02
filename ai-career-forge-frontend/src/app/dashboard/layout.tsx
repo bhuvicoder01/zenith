@@ -115,12 +115,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     return () => disconnect();
   }, [connect, disconnect]);
 
-  // Connect WebSocket channel once at layout level
+  // Synchronize notifications list on mount at layout level
   useEffect(() => {
     loadSavedNotifications();
-    connectWebSocket((url: string) => router.push(url));
-    return () => disconnectWebSocket();
-  }, [connectWebSocket, disconnectWebSocket, loadSavedNotifications, router]);
+  }, [loadSavedNotifications]);
 
   // Fetch pending connection count on mount and when connection notifications change
   useEffect(() => {
