@@ -4,7 +4,7 @@ import Link from "next/link";
 import { 
   ShieldCheck, Users, Settings, LogOut, Menu, X, 
   Database, Activity, Lock, Search, Bell, Grid, PanelLeftClose, PanelLeftOpen,
-  Sun, Moon
+  Sun, Moon, Briefcase
 } from "lucide-react";
 import { useRouter, usePathname } from "next/navigation";
 import Image from "next/image";
@@ -55,6 +55,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const navLinks = [
     { href: "/admin/dashboard", label: "Control Center", icon: Grid },
     { href: "/admin/users", label: "User Directory", icon: Users },
+    { href: "/admin/jobs", label: "Job Nexus", icon: Briefcase },
     { href: "/admin/security", label: "Access Protocols", icon: Lock },
     { href: "/admin/system", label: "Core Services", icon: Database },
     { href: "/admin/logs", label: "Activity Logs", icon: Activity },

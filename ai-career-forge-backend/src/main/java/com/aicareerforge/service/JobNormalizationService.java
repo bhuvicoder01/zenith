@@ -1,8 +1,6 @@
 package com.aicareerforge.service;
 
-import com.aicareerforge.dto.AdzunaJobResponse;
-import com.aicareerforge.dto.JSearchJobResponse;
-import com.aicareerforge.dto.RemotiveJobResponse;
+import com.aicareerforge.dto.*;
 import com.aicareerforge.model.Job;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -12,15 +10,52 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 /**
  * Converts provider-specific DTOs into the canonical {@link Job} model.
  * All provider quirks (field naming, salary parsing, HTML stripping) are
  * isolated here so the rest of the pipeline works with clean, normalized data.
+ *
+ * Supports 9 sources: LinkedIn (primary), Adzuna, Remotive, JSearch,
+ * Indeed, Glassdoor, The Muse, Arbeitnow, USAJobs.
  */
 @Slf4j
 @Service
 public class JobNormalizationService {
+
+    // ─── LinkedIn (PRIMARY) ──────────────────────────────────
+
+    /**
+     * Convert a LinkedIn Jobs API response into a canonical Job.
+     * LinkedIn is the primary source — jobs get a source priority flag.
+     */
+    public Job fromLinkedIn(LinkedInJobResponse.LinkedInJobDto dto, String userId) {
+        String sourceJobId = "linkedin-" + dto.getJobId();
+
+        Double[] salary = parseSalaryRange(dto.getSalaryRange());
+
+        return Job.builder()
+                .userId(userId)
+                .title(dto.getJobTitle())
+                .company(dto.getCompanyName() != null ? dto.getCompanyName() : "Unknown")
+                .location(dto.getJobLocation() != null ? dto.getJobLocation() : "Remote")
+                .description(stripHtml(dto.getJobDescription()))
+                .salaryMin(salary[0])
+                .salaryMax(salary[1])
+                .url(dto.getJobUrl())
+                .jobType(dto.getJobEmploymentType())
+                .source("linkedin")
+                .sourceJobId(sourceJobId)
+                .companyLogoUrl(dto.getCompanyLogo())
+                .postedDate(LocalDateTime.now())
+                .firstSeenAt(LocalDateTime.now())
+                .lastSeenAt(LocalDateTime.now())
+                .status(Job.JobStatus.ACTIVE)
+                .build();
+    }
+
+    // ─── Adzuna ──────────────────────────────────────────────
 
     /**
      * Convert an Adzuna API response DTO into a canonical Job.
@@ -44,6 +79,8 @@ public class JobNormalizationService {
                 .status(Job.JobStatus.ACTIVE)
                 .build();
     }
+
+    // ─── Remotive ────────────────────────────────────────────
 
     /**
      * Convert a Remotive API response DTO into a canonical Job.
@@ -75,6 +112,8 @@ public class JobNormalizationService {
                 .build();
     }
 
+    // ─── JSearch ─────────────────────────────────────────────
+
     /**
      * Convert a JSearch (RapidAPI) response DTO into a canonical Job.
      * Handles multi-part location formatting.
@@ -104,6 +143,180 @@ public class JobNormalizationService {
                 .status(Job.JobStatus.ACTIVE)
                 .build();
     }
+
+    // ─── Indeed ──────────────────────────────────────────────
+
+    /**
+     * Convert an Indeed API response DTO into a canonical Job.
+     */
+    public Job fromIndeed(IndeedJobResponse.IndeedJobDto dto, String userId) {
+        String sourceJobId = "indeed-" + dto.getJobId();
+
+        Double[] salary = parseSalaryRange(dto.getSalary());
+
+        return Job.builder()
+                .userId(userId)
+                .title(dto.getTitle())
+                .company(dto.getCompanyName() != null ? dto.getCompanyName() : "Unknown")
+                .location(dto.getLocation() != null ? dto.getLocation() : "Unknown")
+                .description(stripHtml(dto.getDescription()))
+                .salaryMin(salary[0])
+                .salaryMax(salary[1])
+                .url(dto.getJobUrl())
+                .jobType(dto.getJobType())
+                .source("indeed")
+                .sourceJobId(sourceJobId)
+                .companyLogoUrl(dto.getCompanyLogo())
+                .postedDate(LocalDateTime.now())
+                .firstSeenAt(LocalDateTime.now())
+                .lastSeenAt(LocalDateTime.now())
+                .status(Job.JobStatus.ACTIVE)
+                .build();
+    }
+
+    // ─── Glassdoor ───────────────────────────────────────────
+
+    /**
+     * Convert a Glassdoor API response DTO into a canonical Job.
+     */
+    public Job fromGlassdoor(GlassdoorJobResponse.GlassdoorJobDto dto, String userId) {
+        String sourceJobId = "glassdoor-" + dto.getJobId();
+
+        return Job.builder()
+                .userId(userId)
+                .title(dto.getJobTitle())
+                .company(dto.getEmployerName() != null ? dto.getEmployerName() : "Unknown")
+                .location(dto.getLocation() != null ? dto.getLocation() : "Unknown")
+                .description(stripHtml(dto.getDescription()))
+                .salaryMin(dto.getSalaryMin())
+                .salaryMax(dto.getSalaryMax())
+                .url(dto.getApplyUrl())
+                .jobType(dto.getJobType())
+                .source("glassdoor")
+                .sourceJobId(sourceJobId)
+                .companyLogoUrl(dto.getEmployerLogo())
+                .postedDate(LocalDateTime.now())
+                .firstSeenAt(LocalDateTime.now())
+                .lastSeenAt(LocalDateTime.now())
+                .status(Job.JobStatus.ACTIVE)
+                .build();
+    }
+
+    // ─── The Muse ────────────────────────────────────────────
+
+    /**
+     * Convert a The Muse API response DTO into a canonical Job.
+     */
+    public Job fromTheMuse(TheMuseJobResponse.TheMuseJobDto dto, String userId) {
+        String sourceJobId = "themuse-" + dto.getId();
+
+        String locationStr = "Remote";
+        if (dto.getLocations() != null && !dto.getLocations().isEmpty()) {
+            locationStr = dto.getLocations().stream()
+                    .map(TheMuseJobResponse.TheMuseJobDto.TheMuseLocation::getName)
+                    .collect(Collectors.joining(", "));
+        }
+
+        String applyUrl = null;
+        if (dto.getRefs() != null) {
+            applyUrl = dto.getRefs().getLandingPage();
+        }
+
+        return Job.builder()
+                .userId(userId)
+                .title(dto.getName())
+                .company(dto.getCompany() != null ? dto.getCompany().getName() : "Unknown")
+                .location(locationStr)
+                .description(stripHtml(dto.getContents()))
+                .url(applyUrl)
+                .source("themuse")
+                .sourceJobId(sourceJobId)
+                .postedDate(LocalDateTime.now())
+                .firstSeenAt(LocalDateTime.now())
+                .lastSeenAt(LocalDateTime.now())
+                .status(Job.JobStatus.ACTIVE)
+                .build();
+    }
+
+    // ─── Arbeitnow ───────────────────────────────────────────
+
+    /**
+     * Convert an Arbeitnow API response DTO into a canonical Job.
+     */
+    public Job fromArbeitnow(ArbeitnowJobResponse.ArbeitnowJobDto dto, String userId) {
+        String sourceJobId = "arbeitnow-" + dto.getSlug();
+
+        String remotePolicy = dto.isRemote() ? "REMOTE" : "ONSITE";
+
+        return Job.builder()
+                .userId(userId)
+                .title(dto.getTitle())
+                .company(dto.getCompanyName() != null ? dto.getCompanyName() : "Unknown")
+                .location(dto.getLocation() != null ? dto.getLocation() : (dto.isRemote() ? "Remote" : "Unknown"))
+                .description(stripHtml(dto.getDescription()))
+                .url(dto.getUrl())
+                .remotePolicy(remotePolicy)
+                .techTags(dto.getTags())
+                .source("arbeitnow")
+                .sourceJobId(sourceJobId)
+                .postedDate(LocalDateTime.now())
+                .firstSeenAt(LocalDateTime.now())
+                .lastSeenAt(LocalDateTime.now())
+                .status(Job.JobStatus.ACTIVE)
+                .build();
+    }
+
+    // ─── USAJobs ─────────────────────────────────────────────
+
+    /**
+     * Convert a USAJobs.gov API response DTO into a canonical Job.
+     */
+    public Job fromUsaJobs(UsaJobsResponse.SearchResultItem item, String userId) {
+        UsaJobsResponse.MatchedObjectDescriptor desc = item.getMatchedObjectDescriptor();
+        String sourceJobId = "usajobs-" + item.getMatchedObjectId();
+
+        Double salaryMin = null;
+        Double salaryMax = null;
+        if (desc.getPositionRemuneration() != null && !desc.getPositionRemuneration().isEmpty()) {
+            UsaJobsResponse.PositionRemuneration pay = desc.getPositionRemuneration().get(0);
+            try {
+                salaryMin = Double.parseDouble(pay.getMinimumRange());
+                salaryMax = Double.parseDouble(pay.getMaximumRange());
+            } catch (NumberFormatException e) {
+                // Ignore — salary not parseable
+            }
+        }
+
+        String applyUrl = desc.getPositionUri();
+        if (desc.getApplyUri() != null && !desc.getApplyUri().isEmpty()) {
+            applyUrl = desc.getApplyUri().get(0);
+        }
+
+        String jobType = null;
+        if (desc.getPositionSchedule() != null && !desc.getPositionSchedule().isEmpty()) {
+            jobType = desc.getPositionSchedule().get(0).getName();
+        }
+
+        return Job.builder()
+                .userId(userId)
+                .title(desc.getPositionTitle())
+                .company(desc.getOrganizationName() != null ? desc.getOrganizationName() : "U.S. Government")
+                .location(desc.getPositionLocationDisplay() != null ? desc.getPositionLocationDisplay() : "USA")
+                .description(desc.getQualificationSummary())
+                .salaryMin(salaryMin)
+                .salaryMax(salaryMax)
+                .url(applyUrl)
+                .jobType(jobType)
+                .source("usajobs")
+                .sourceJobId(sourceJobId)
+                .postedDate(LocalDateTime.now())
+                .firstSeenAt(LocalDateTime.now())
+                .lastSeenAt(LocalDateTime.now())
+                .status(Job.JobStatus.ACTIVE)
+                .build();
+    }
+
+    // ─── Utility Methods ─────────────────────────────────────
 
     /**
      * Parse a free-text salary string into [min, max].

@@ -131,6 +131,19 @@ adzuna:
 rapidapi:
   key: ${RAPIDAPI_KEY}
   jsearch-host: jsearch.p.rapidapi.com
+  linkedin-jobs:
+    key: ${RAPIDAPI_LINKEDIN_KEY:${rapidapi.key}}
+    host: ${RAPIDAPI_LINKEDIN_HOST:jobbank-real-time-linkedin-indeed-glassdoor.p.rapidapi.com}
+  indeed:
+    key: ${RAPIDAPI_INDEED_KEY:${rapidapi.key}}
+    host: ${RAPIDAPI_INDEED_HOST:jobbank-real-time-linkedin-indeed-glassdoor.p.rapidapi.com}
+  glassdoor:
+    key: ${RAPIDAPI_GLASSDOOR_KEY:${rapidapi.key}}
+    host: ${RAPIDAPI_GLASSDOOR_HOST:jobbank-real-time-linkedin-indeed-glassdoor.p.rapidapi.com}
+
+usajobs:
+  api-key: ${USAJOBS_API_KEY:NOT_CONFIGURED}
+  email: ${USAJOBS_EMAIL:NOT_CONFIGURED}
 
 app:
   frontend-url: ${FRONTEND_URL:https://ai-career-forge-sable.vercel.app}

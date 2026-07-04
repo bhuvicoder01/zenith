@@ -8,8 +8,16 @@ import com.aicareerforge.repository.UserJobMatchRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.document.Document;
-import org.springframework.cache.annotation.Cacheable;
+import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.data.mongodb.core.query.Criteria;
+import org.springframework.data.mongodb.core.query.Query;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.stereotype.Service;
+import org.springframework.cache.annotation.Cacheable;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -38,6 +46,7 @@ public class JobMatchingService {
     private final JobEnrichmentService enrichmentService;
     private final UserJobMatchRepository userJobMatchRepository;
     private final JobRepository jobRepository;
+    private final MongoTemplate mongoTemplate;
 
     // Self-reference for @Async proxy (set via setter injection to break circular dep)
     @lombok.Setter(onMethod_ = {@org.springframework.beans.factory.annotation.Autowired, @org.springframework.context.annotation.Lazy})
@@ -301,5 +310,115 @@ public class JobMatchingService {
             jobsToEnrich.forEach(j -> enrichmentService.markProcessing(userId, j.getId()));
             enrichmentService.enrichJobRelevanceAsync(jobsToEnrich, userProfileData, userId);
         }
+    }
+
+    // ─── Paginated Catalog & Recommendations ──────────────────
+
+    /**
+     * Highly performant dynamic server-side paginated catalog fetching.
+     * Scores only the requested subset of results, and gives a priority boost to LinkedIn jobs.
+     */
+    public Page<Job> getJobCatalogPaginated(UserProfile profile, String search, String location, String source, 
+                                            String experienceLevel, String remotePolicy, Double salaryMin, int page, int size) {
+        String userId = profile.getUserId();
+        log.info("Fetching paginated catalog for user: {} (page: {}, size: {})", userId, page, size);
+
+        List<Criteria> criteriaList = new ArrayList<>();
+
+        // Scope: global pool (userId = null) OR user-specific jobs
+        criteriaList.add(new Criteria().orOperator(
+            Criteria.where("userId").is(null),
+            Criteria.where("userId").is(userId)
+        ));
+
+        // Filter out EXPIRED jobs
+        criteriaList.add(Criteria.where("status").ne(Job.JobStatus.EXPIRED));
+
+        // Search text filter
+        if (search != null && !search.isBlank()) {
+            criteriaList.add(new Criteria().orOperator(
+                Criteria.where("title").regex(search, "i"),
+                Criteria.where("company").regex(search, "i"),
+                Criteria.where("description").regex(search, "i")
+            ));
+        }
+
+        // Location filter
+        if (location != null && !location.isBlank()) {
+            criteriaList.add(Criteria.where("location").regex(location, "i"));
+        }
+
+        // Source filter
+        if (source != null && !source.isBlank()) {
+            criteriaList.add(Criteria.where("source").is(source.toLowerCase()));
+        }
+
+        // Experience Level filter
+        if (experienceLevel != null && !experienceLevel.isBlank()) {
+            criteriaList.add(Criteria.where("experienceLevel").is(experienceLevel.toUpperCase()));
+        }
+
+        // Remote Policy filter
+        if (remotePolicy != null && !remotePolicy.isBlank()) {
+            criteriaList.add(Criteria.where("remotePolicy").is(remotePolicy.toUpperCase()));
+        }
+
+        // Salary minimum filter
+        if (salaryMin != null && salaryMin > 0) {
+            criteriaList.add(Criteria.where("salaryMin").gte(salaryMin));
+        }
+
+        Query query = new Query();
+        if (!criteriaList.isEmpty()) {
+            query.addCriteria(new Criteria().andOperator(criteriaList.toArray(new Criteria[0])));
+        }
+
+        // Count total matches
+        long total = mongoTemplate.count(query, Job.class);
+
+        // Sorting & Pagination parameters
+        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "postedDate"));
+        query.with(pageable);
+
+        List<Job> jobs = mongoTemplate.find(query, Job.class);
+
+        // Score only the returned page of jobs
+        for (Job job : jobs) {
+            Double cachedScore = scoreCache.getScore(userId, job.getId());
+            UserJobMatch match = userJobMatchRepository.findFirstByUserIdAndJobId(userId, job.getId()).orElse(null);
+            
+            if (match != null) {
+                job.setRelevanceExplanation(match.getRelevanceExplanation());
+                job.setMatchScore(match.getMatchScore() != null ? match.getMatchScore() : cachedScore);
+                job.setPipelineStage(match.getPipelineStage());
+            }
+
+            if (job.getMatchScore() == null) {
+                Double calculatedScore = scoringService.calculateMatchScore(job, profile, 0.5);
+                job.setMatchScore(calculatedScore);
+                scoreCache.putScore(userId, job.getId(), calculatedScore);
+            }
+
+            // LinkedIn Primary Source matching score boost (+3.0 points up to a limit of 100)
+            if ("linkedin".equalsIgnoreCase(job.getSource()) && job.getMatchScore() != null && job.getMatchScore() < 100) {
+                job.setMatchScore(Math.min(100.0, job.getMatchScore() + 3.0));
+            }
+        }
+
+        return new PageImpl<>(catalogService.deduplicateJobs(jobs), pageable, total);
+    }
+
+    /**
+     * Get paginated AI-recommended jobs.
+     * Paginates the top 50 semantic matches in-memory.
+     */
+    public Page<Job> getRecommendedJobsPaginated(UserProfile profile, int page, int size) {
+        List<Job> allRecommendations = getRecommendedJobs(profile);
+        int start = Math.min(page * size, allRecommendations.size());
+        int end = Math.min(start + size, allRecommendations.size());
+        
+        List<Job> subList = allRecommendations.subList(start, end);
+        Pageable pageable = PageRequest.of(page, size);
+        return new PageImpl<>(subList, pageable, allRecommendations.size());
     }
 }

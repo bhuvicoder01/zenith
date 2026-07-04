@@ -69,7 +69,7 @@ public class WebSocketAppHandler extends TextWebSocketHandler {
             // Store userId in session attributes so we can clean up easily on close
             session.getAttributes().put("userId", userId);
 
-            userSessions.computeIfAbsent(userId, k -> Collections.synchronizedList(new ArrayList<>())).add(session);
+            userSessions.computeIfAbsent(userId, k -> new java.util.concurrent.CopyOnWriteArrayList<>()).add(session);
             log.info("WebSocket connection established for user: {} (Session ID: {})", userId, session.getId());
 
             // Send initial connection confirmation along with currently online users
@@ -198,22 +198,18 @@ public class WebSocketAppHandler extends TextWebSocketHandler {
         );
 
         log.info("Pushing notification of type {} to user {}", type, userId);
-        synchronized (sessions) {
-            List<WebSocketSession> closedSessions = new ArrayList<>();
-            for (WebSocketSession session : sessions) {
-                if (session.isOpen()) {
-                    try {
-                        sendNotificationToSession(session, payload);
-                    } catch (IOException e) {
-                        log.error("Failed to send socket message, marking session for removal: {}", session.getId());
-                        closedSessions.add(session);
-                    }
-                } else {
-                    closedSessions.add(session);
+        sessions.removeIf(session -> {
+            if (session.isOpen()) {
+                try {
+                    sendNotificationToSession(session, payload);
+                    return false; // keep open session
+                } catch (IOException e) {
+                    log.error("Failed to send socket message, removing session: {}", session.getId());
+                    return true; // remove failing session
                 }
             }
-            sessions.removeAll(closedSessions);
-        }
+            return true; // remove closed session
+        });
     }
 
     public void broadcastNotification(String type, String title, String message, Object data) {
@@ -227,21 +223,17 @@ public class WebSocketAppHandler extends TextWebSocketHandler {
         );
 
         userSessions.forEach((userId, sessions) -> {
-            synchronized (sessions) {
-                List<WebSocketSession> closedSessions = new ArrayList<>();
-                for (WebSocketSession session : sessions) {
-                    if (session.isOpen()) {
-                        try {
-                            sendNotificationToSession(session, payload);
-                        } catch (IOException e) {
-                            closedSessions.add(session);
-                        }
-                    } else {
-                        closedSessions.add(session);
+            sessions.removeIf(session -> {
+                if (session.isOpen()) {
+                    try {
+                        sendNotificationToSession(session, payload);
+                        return false; // keep open session
+                    } catch (IOException e) {
+                        return true; // remove failing session
                     }
                 }
-                sessions.removeAll(closedSessions);
-            }
+                return true; // remove closed session
+            });
         });
     }
 

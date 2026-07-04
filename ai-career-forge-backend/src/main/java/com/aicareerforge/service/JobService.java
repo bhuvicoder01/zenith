@@ -85,13 +85,22 @@ public class JobService {
     }
 
     // ─── Matching ────────────────────────────────────────────
-
+ 
     public List<Job> getRecommendedJobs(UserProfile profile) {
         return matchingService.getRecommendedJobs(profile);
     }
-
+ 
     public List<Job> getJobCatalog(UserProfile profile) {
         return matchingService.getJobCatalog(profile);
+    }
+
+    public Page<Job> getRecommendedJobsPaginated(UserProfile profile, int page, int size) {
+        return matchingService.getRecommendedJobsPaginated(profile, page, size);
+    }
+
+    public Page<Job> getJobCatalogPaginated(UserProfile profile, String search, String location, String source, 
+                                            String experienceLevel, String remotePolicy, Double salaryMin, int page, int size) {
+        return matchingService.getJobCatalogPaginated(profile, search, location, source, experienceLevel, remotePolicy, salaryMin, page, size);
     }
 
     // ─── Scoring ─────────────────────────────────────────────

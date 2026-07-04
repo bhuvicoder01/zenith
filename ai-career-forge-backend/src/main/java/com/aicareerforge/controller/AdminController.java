@@ -1,13 +1,16 @@
 package com.aicareerforge.controller;
 
+import com.aicareerforge.model.Job;
 import com.aicareerforge.model.SystemConfig;
 import com.aicareerforge.model.User;
 import com.aicareerforge.repository.ApplicationRepository;
 import com.aicareerforge.repository.JobRepository;
 import com.aicareerforge.repository.SystemConfigRepository;
 import com.aicareerforge.repository.UserRepository;
+import com.aicareerforge.service.JobAdminService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
@@ -28,6 +31,7 @@ public class AdminController {
     private final ApplicationRepository applicationRepository;
     private final SystemConfigRepository systemConfigRepository;
     private final com.aicareerforge.security.WebSocketAppHandler webSocketAppHandler;
+    private final JobAdminService jobAdminService;
 
     @GetMapping("/config")
     public ResponseEntity<SystemConfig> getConfig() {
@@ -97,5 +101,52 @@ public class AdminController {
         String message = body.getOrDefault("message", "");
         webSocketAppHandler.broadcastNotification("NEWS", title, message, null);
         return ResponseEntity.ok().build();
+    }
+
+    // ─── Job Nexus Administration ────────────────────────────
+
+    @GetMapping("/jobs/stats")
+    public ResponseEntity<Map<String, Object>> getJobStats() {
+        return ResponseEntity.ok(jobAdminService.getJobStats());
+    }
+
+    @GetMapping("/jobs")
+    public ResponseEntity<Page<Job>> getAdminJobs(
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String source,
+            @RequestParam(required = false) String search,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(jobAdminService.browseJobs(status, source, search, page, size));
+    }
+
+    @PostMapping("/jobs/sync")
+    public ResponseEntity<Map<String, String>> triggerSync() {
+        jobAdminService.triggerManualSync();
+        return ResponseEntity.ok(Map.of("message", "Manual synchronization protocol initiated."));
+    }
+
+    @PostMapping("/jobs/reindex")
+    public ResponseEntity<Map<String, String>> triggerReindex() {
+        jobAdminService.reindexVectorStore();
+        return ResponseEntity.ok(Map.of("message", "Vector store re-indexing protocol initiated."));
+    }
+
+    @DeleteMapping("/jobs/expired")
+    public ResponseEntity<Map<String, Object>> purgeExpired() {
+        long count = jobAdminService.purgeExpiredJobs();
+        return ResponseEntity.ok(Map.of("message", "Expired job purge complete.", "purgedCount", count));
+    }
+
+    @DeleteMapping("/jobs/{id}")
+    public ResponseEntity<Void> deleteJob(@PathVariable String id) {
+        jobAdminService.deleteJob(id);
+        return ResponseEntity.noContent().build();
+    }
+
+    @DeleteMapping("/jobs/purge-all")
+    public ResponseEntity<Map<String, String>> purgeAllJobs() {
+        jobAdminService.purgeAllJobs();
+        return ResponseEntity.ok(Map.of("message", "Nuclear purge executed. Database and vector store are clean."));
     }
 }

@@ -66,9 +66,15 @@ public class JobController {
     }
 
     @GetMapping("/recommended")
-    public ResponseEntity<List<Job>> getRecommendedJobs(@AuthenticationPrincipal User user) {
+    public ResponseEntity<?> getRecommendedJobs(
+            @AuthenticationPrincipal User user,
+            @RequestParam(required = false) Integer page,
+            @RequestParam(required = false) Integer size) {
         try {
             UserProfile profile = userProfileService.getProfile(user.getId());
+            if (page != null && size != null) {
+                return ResponseEntity.ok(jobService.getRecommendedJobsPaginated(profile, page, size));
+            }
             return ResponseEntity.ok(jobService.getRecommendedJobs(profile));
         } catch (Exception e) {
             // Absolute safety net — never return 500 for recommendations
@@ -77,11 +83,24 @@ public class JobController {
     }
 
     @GetMapping("/catalog")
-    public ResponseEntity<List<Job>> getJobCatalog(@AuthenticationPrincipal User user) {
+    public ResponseEntity<?> getJobCatalog(
+            @AuthenticationPrincipal User user,
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) String location,
+            @RequestParam(required = false) String source,
+            @RequestParam(required = false) String experienceLevel,
+            @RequestParam(required = false) String remotePolicy,
+            @RequestParam(required = false) Double salaryMin,
+            @RequestParam(required = false) Integer page,
+            @RequestParam(required = false) Integer size) {
         try {
             if (user == null) return ResponseEntity.status(401).build();
             UserProfile profile = userProfileService.getProfile(user.getId());
             if (profile == null) return ResponseEntity.ok(List.of());
+            if (page != null && size != null) {
+                return ResponseEntity.ok(jobService.getJobCatalogPaginated(
+                        profile, search, location, source, experienceLevel, remotePolicy, salaryMin, page, size));
+            }
             return ResponseEntity.ok(jobService.getJobCatalog(profile));
         } catch (Exception e) {
             log.error("Failed to fetch job catalog for user {}: {}", user != null ? user.getId() : "null", e.getMessage(), e);
