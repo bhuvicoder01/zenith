@@ -672,6 +672,12 @@ export default function PostCard({
   const rootComments = comments.filter(c => !c.parentCommentId);
   const getReplies = (commentId: string) => comments.filter(c => c.parentCommentId === commentId);
 
+  const oldestComment = rootComments.reduce((oldest, current) => {
+    if (!oldest) return current;
+    return new Date(current.createdAt).getTime() < new Date(oldest.createdAt).getTime() ? current : oldest;
+  }, null as any);
+  const firstCommentId = oldestComment?.id;
+
   return (
     <article className="bg-card border border-border rounded-[2rem] p-6 shadow-sm space-y-4 hover:border-border/80 transition-all animate-in fade-in duration-300">
       {/* Header */}
@@ -1224,7 +1230,14 @@ export default function PostCard({
                               )}
                             </div>
                             <div>
-                              <p className="font-bold text-foreground hover:underline">{comment.authorName}</p>
+                              <div className="flex items-center gap-1.5">
+                                <p className="font-bold text-foreground hover:underline">{comment.authorName}</p>
+                                {comment.id === firstCommentId && (
+                                  <span className="inline-flex items-center px-1.5 py-0.5 bg-primary/10 border border-primary/20 text-primary text-[7px] font-black uppercase tracking-wider rounded-md">
+                                    First Comment
+                                  </span>
+                                )}
+                              </div>
                               <p className="text-[8px] text-muted-foreground font-semibold">@{comment.authorUsername || "zenith_member"}</p>
                             </div>
                           </Link>

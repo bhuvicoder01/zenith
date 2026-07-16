@@ -73,6 +73,14 @@ export default function PublicNavbar() {
   const mobileSearchInputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
+  const handleSearchSubmit = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!searchQuery.trim()) return;
+    setShowDropdown(false);
+    setIsOpen(false);
+    router.push(`/search?q=${encodeURIComponent(searchQuery.trim())}`);
+  };
+
   useEffect(() => {
     setMounted(true);
   }, []);
@@ -196,10 +204,14 @@ export default function PublicNavbar() {
 
         {/* Desktop Mixed Search Bar */}
         <div ref={dropdownRef} className="hidden md:block relative w-64 lg:w-80 xl:w-96">
-          <div className="relative">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
+          <form onSubmit={handleSearchSubmit} className="relative">
+            <button 
+              type="submit" 
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-primary transition-colors cursor-pointer"
+              title="Search"
+            >
               <Search className="w-4 h-4 text-muted-foreground/80" />
-            </span>
+            </button>
             <input
               ref={searchInputRef}
               type="text"
@@ -215,7 +227,7 @@ export default function PublicNavbar() {
             <kbd className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none hidden sm:inline-flex h-5 select-none items-center gap-0.5 rounded border border-border bg-muted px-1.5 font-mono text-[9px] font-medium text-muted-foreground opacity-100">
               <span className="text-[10px]">⌘</span>K
             </kbd>
-          </div>
+          </form>
 
           {showDropdown && (searchQuery.trim() || loading) && (
             <div className="absolute z-50 left-0 right-0 mt-2 bg-card/95 backdrop-blur-md border border-border rounded-2xl shadow-2xl p-2 max-h-80 overflow-y-auto animate-in fade-in slide-in-from-top-1 duration-150">
@@ -479,10 +491,14 @@ export default function PublicNavbar() {
             
             {/* Mobile Search Bar */}
             <div className="relative w-full">
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
+              <form onSubmit={handleSearchSubmit} className="relative">
+                <button 
+                  type="submit"
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-primary transition-colors cursor-pointer"
+                  title="Search"
+                >
                   <Search className="w-4 h-4 text-muted-foreground/80" />
-                </span>
+                </button>
                 <input
                   ref={mobileSearchInputRef}
                   type="text"
@@ -491,7 +507,7 @@ export default function PublicNavbar() {
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="w-full bg-secondary/40 border border-border/80 focus:border-primary/50 rounded-full pl-9 pr-4 py-2.5 text-xs font-semibold text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-1 focus:ring-primary/20 transition-all"
                 />
-              </div>
+              </form>
 
               {searchQuery.trim() && (
                 <div className="relative mt-2 bg-secondary/20 border border-border/60 rounded-2xl p-2 max-h-60 overflow-y-auto space-y-3">

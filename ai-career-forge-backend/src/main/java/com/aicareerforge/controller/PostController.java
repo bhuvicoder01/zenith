@@ -30,10 +30,11 @@ public class PostController {
     @GetMapping
     public ResponseEntity<Page<Post>> getFeed(
             @RequestParam(value = "tag", required = false) String tag,
+            @RequestParam(value = "query", required = false) String query,
             @RequestParam(value = "page", defaultValue = "0") int page,
             @RequestParam(value = "size", defaultValue = "20") int size) {
         Pageable pageable = PageRequest.of(page, size);
-        return ResponseEntity.ok(postService.getFeed(tag, pageable));
+        return ResponseEntity.ok(postService.getFeed(tag, query, pageable));
     }
 
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -178,6 +179,14 @@ public class PostController {
     public ResponseEntity<List<ReactingUserDto>> getReactingUsers(
             @PathVariable("id") String postId) {
         return ResponseEntity.ok(postService.getReactingUsers(postId));
+    }
+
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<String> handleIllegalArgument(IllegalArgumentException ex) {
+        if ("Post not found".equals(ex.getMessage())) {
+            return ResponseEntity.status(org.springframework.http.HttpStatus.NOT_FOUND).body(ex.getMessage());
+        }
+        return ResponseEntity.status(org.springframework.http.HttpStatus.BAD_REQUEST).body(ex.getMessage());
     }
 
     public static class CommentRequest {

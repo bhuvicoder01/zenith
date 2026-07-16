@@ -16,4 +16,11 @@ public interface PostRepository extends MongoRepository<Post, String> {
 
     @Query("{ 'content' : { $regex: ?0, $options: 'i' } }")
     Page<Post> findByContentRegexOrderByCreatedAtDesc(String regex, Pageable pageable);
+
+    @Query("{ $or: [ " +
+           "  { 'content': { $regex: ?0, $options: 'i' } }, " +
+           "  { 'authorName': { $regex: ?0, $options: 'i' } }, " +
+           "  { 'authorUsername': { $regex: ?0, $options: 'i' } } " +
+           "] }")
+    Page<Post> findBySearchQueryOrderByCreatedAtDesc(String regex, Pageable pageable);
 }

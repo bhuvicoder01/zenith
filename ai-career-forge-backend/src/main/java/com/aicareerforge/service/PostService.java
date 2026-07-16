@@ -11,6 +11,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -37,15 +39,27 @@ public class PostService {
     private final WebSocketAppHandler webSocketAppHandler;
 
     public Page<Post> getFeed(Pageable pageable) {
-        return getFeed(null, pageable);
+        return getFeed(null, null, pageable);
     }
 
     public Page<Post> getFeed(String tag, Pageable pageable) {
+        return getFeed(tag, null, pageable);
+    }
+
+    public Page<Post> getFeed(String tag, String query, Pageable pageable) {
         Page<Post> posts;
         if (tag != null && !tag.trim().isEmpty()) {
             String cleanTag = tag.trim().replaceAll("[#\\s]", "");
             String regex = "(?:^|\\s)#" + java.util.regex.Pattern.quote(cleanTag) + "(?:\\b|\\s|$)";
             posts = postRepository.findByContentRegexOrderByCreatedAtDesc(regex, pageable);
+        } else if (query != null && !query.trim().isEmpty()) {
+            String regex = java.util.regex.Pattern.quote(query.trim());
+            Pageable sortedPageable = PageRequest.of(
+                pageable.getPageNumber(),
+                pageable.getPageSize(),
+                Sort.by(Sort.Direction.DESC, "createdAt")
+            );
+            posts = postRepository.findBySearchQueryOrderByCreatedAtDesc(regex, sortedPageable);
         } else {
             posts = postRepository.findAllByOrderByCreatedAtDesc(pageable);
         }

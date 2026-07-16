@@ -101,7 +101,7 @@ export default function HashtagFeedPage() {
     <div className="min-h-screen bg-background text-foreground font-sans">
       <PublicNavbar />
       
-      <main className="max-w-4xl mx-auto px-4 py-8 sm:px-6">
+      <main className="max-w-4xl mx-auto px-4 pt-8 pb-24 md:pb-8 sm:px-6">
         {/* Header Block */}
         <div className="flex flex-col gap-4 mb-8">
           <button 
