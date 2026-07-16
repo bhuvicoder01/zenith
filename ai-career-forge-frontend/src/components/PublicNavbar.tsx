@@ -262,9 +262,11 @@ export default function PublicNavbar() {
                         >
                           <div className="w-7 h-7 rounded-full bg-secondary flex-shrink-0 flex items-center justify-center text-[10px] font-black uppercase border border-border/80 overflow-hidden">
                             {profile.profilePhotoUrl ? (
-                              <img src={getPhotoUrl(profile.profilePhotoUrl)} alt={profile.fullName} className="w-full h-full object-cover" />
+                              <img src={getPhotoUrl(profile.profilePhotoUrl)} alt={profile.fullName || ""} className="w-full h-full object-cover" />
                             ) : (
-                              profile.fullName.split(" ").map((n: string) => n[0]).join("").toUpperCase().slice(0, 2)
+                              profile.fullName 
+                                ? profile.fullName.split(" ").map((n: string) => n[0]).join("").toUpperCase().slice(0, 2)
+                                : "U"
                             )}
                           </div>
                           <div className="min-w-0 flex-1">
@@ -542,9 +544,11 @@ export default function PublicNavbar() {
                             >
                               <div className="w-7 h-7 rounded-full bg-secondary flex-shrink-0 flex items-center justify-center text-[10px] font-black uppercase border border-border/80 overflow-hidden">
                                 {profile.profilePhotoUrl ? (
-                                  <img src={getPhotoUrl(profile.profilePhotoUrl)} alt={profile.fullName} className="w-full h-full object-cover" />
+                                  <img src={getPhotoUrl(profile.profilePhotoUrl)} alt={profile.fullName || ""} className="w-full h-full object-cover" />
                                 ) : (
-                                  profile.fullName.split(" ").map((n: string) => n[0]).join("").toUpperCase().slice(0, 2)
+                                  profile.fullName 
+                                    ? profile.fullName.split(" ").map((n: string) => n[0]).join("").toUpperCase().slice(0, 2)
+                                    : "U"
                                 )}
                               </div>
                               <div className="min-w-0 flex-1">
