@@ -29,6 +29,8 @@ interface Job {
   relevanceExplanation?: string;
   companyLogoUrl?: string;
   companyLogoTheme?: string;
+  experienceLevel?: string;
+  techTags?: string[];
 }
 
 interface Application {
@@ -59,6 +61,10 @@ export default function JobDetailsPage({ params }: { params: Promise<{ id: strin
   const [selectedTemplate, setSelectedTemplate] = useState("MODERN");
   const [showTemplates, setShowTemplates] = useState(false);
   const [isPending, setIsPending] = useState(false);
+  const [showStyleChooserModal, setShowStyleChooserModal] = useState(false);
+  const [activeSection, setActiveSection] = useState("specifications-section");
+
+
 
   const { prepStatus, setPrepStatus } = useWebSocketStore();
   const isCurrentlyGenerating = prepStatus && prepStatus.step && prepStatus.step !== "COMPLETED" && prepStatus.step !== "FAILED";
@@ -204,29 +210,61 @@ export default function JobDetailsPage({ params }: { params: Promise<{ id: strin
 
   const { job, matchedSkills, matchScore } = data;
 
+  let matchLevel = "LOW";
+  let matchColor = "text-rose-500 bg-rose-500/10 border-rose-500/20";
+  if (matchScore >= 80) {
+    matchLevel = "HIGH";
+    matchColor = "text-emerald-500 bg-emerald-500/10 border-emerald-500/20";
+  } else if (matchScore >= 50) {
+    matchLevel = "MEDIUM";
+    matchColor = "text-amber-500 bg-amber-500/10 border-amber-500/20";
+  }
+
+  const detectRequiredKeywords = (desc: string) => {
+    const commonSkills = [
+      "React", "Node", "Java", "Python", "JavaScript", "Docker", "Kubernetes", 
+      "TypeScript", "AWS", "SQL", "HTML", "CSS", "Go", "C++", "C#", "Ruby", 
+      "PostgreSQL", "MongoDB", "Redis", "Figma", "Git", "CI/CD", "Next.js", "Spring"
+    ];
+    const detected: string[] = [];
+    const lowerDesc = desc.toLowerCase();
+    for (const skill of commonSkills) {
+      if (lowerDesc.includes(skill.toLowerCase())) {
+        detected.push(skill);
+      }
+    }
+    return detected.slice(0, 6);
+  };
+
+  const requiredSkillsList = job.techTags && job.techTags.length > 0
+    ? job.techTags
+    : job.description
+      ? detectRequiredKeywords(job.description)
+      : ["Software Development"];
+
   return (
-    <div className="w-full px-4 py-8 font-sans pb-24">
+    <div className="w-full px-3 sm:px-4 py-6 md:py-8 font-sans pb-24">
       {/* Back Button */}
       <Link 
         href="/dashboard/jobs" 
-        className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors mb-8 group font-black uppercase text-[10px] tracking-widest"
+        className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors mb-6 md:mb-8 group font-black uppercase text-[10px] tracking-widest"
       >
         <ArrowLeft className="w-3.5 h-3.5 group-hover:-translate-x-1 transition-transform" />
         Back to Intelligence Feed
       </Link>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+      <div className="grid grid-cols-1 md:grid-cols-12 gap-6 md:gap-8">
         {/* Main Content (8 cols) */}
-        <div className="lg:col-span-8 space-y-8">
+        <div className="md:col-span-8 space-y-6 md:space-y-8">
           
           {/* Header Card */}
-          <div className="relative bg-card backdrop-blur-md border border-border rounded-3xl p-8 md:p-10 overflow-hidden shadow-xl">
+          <div id="header-section" className="relative bg-card backdrop-blur-md border border-border rounded-2xl md:rounded-3xl p-4 sm:p-6 md:p-8 overflow-hidden shadow-xl">
             <div className="absolute top-0 right-0 w-64 h-64 bg-foreground/5 rounded-full blur-[100px] -mr-32 -mt-32"></div>
             
-            <div className="relative flex flex-col md:flex-row gap-8 items-start justify-between">
-              <div className="space-y-6 flex-1">
-                <div className="flex items-center gap-6">
-                  <div className={`h-22 w-auto min-w-[180px] max-w-[260px] rounded-3xl flex items-center justify-center border shadow-2xl overflow-hidden relative p-5 transition-all duration-700 ${
+            <div className="relative flex flex-col md:flex-row gap-6 md:gap-8 items-start justify-between">
+              <div className="space-y-4 md:space-y-6 flex-1 w-full">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-6">
+                  <div className={`h-16 w-16 sm:h-20 sm:w-20 rounded-2xl flex items-center justify-center border shadow-xl overflow-hidden relative p-3 shrink-0 transition-all duration-700 ${
                     job.companyLogoTheme === 'light' 
                       ? 'bg-zinc-900 border-zinc-800 shadow-zinc-900/40' 
                       : job.companyLogoTheme === 'dark' 
@@ -244,168 +282,259 @@ export default function JobDetailsPage({ params }: { params: Promise<{ id: strin
                         }}
                       />
                     ) : (
-                      <Building2 className="w-10 h-10 text-muted-foreground opacity-50" />
+                      <Building2 className="w-8 h-8 text-muted-foreground opacity-50" />
                     )}
-                    <Building2 className="absolute w-10 h-10 text-muted-foreground opacity-20 -z-10" />
+                    <Building2 className="absolute w-8 h-8 text-muted-foreground opacity-20 -z-10" />
                   </div>
-                  <div className="space-y-1">
-                    <h1 className="text-3xl md:text-5xl font-black text-foreground tracking-tighter">{job.title}</h1>
-                    <p className="text-xl text-muted-foreground font-black uppercase tracking-widest">{job.company}</p>
+                  <div className="space-y-2 min-w-0 flex-1">
+                    <h1 className="text-2xl sm:text-3xl md:text-4xl font-black text-foreground tracking-tighter leading-tight break-words">{job.title}</h1>
+                    <div className="space-y-1">
+                      <p className="text-xs sm:text-sm text-muted-foreground font-black uppercase tracking-widest truncate">{job.company}</p>
+                    </div>
                   </div>
                 </div>
 
-                <div className="flex flex-wrap gap-4 text-sm font-black uppercase tracking-widest">
-                  <div className="bg-secondary border border-border px-4 py-2.5 rounded-xl text-foreground flex items-center gap-2">
+                <div className="flex flex-wrap gap-2 md:gap-4 text-xs md:text-sm font-black uppercase tracking-widest">
+                  <div className="bg-secondary border border-border px-3 py-2 md:px-4 md:py-2.5 rounded-lg md:rounded-xl text-foreground flex items-center gap-1.5 md:gap-2">
                     <MapPin className="w-4 h-4 opacity-50" /> {job.location}
                   </div>
                   {job.salaryMin && (
-                    <div className="bg-secondary border border-border px-4 py-2.5 rounded-xl text-foreground flex items-center gap-2">
+                    <div className="bg-secondary border border-border px-3 py-2 md:px-4 md:py-2.5 rounded-lg md:rounded-xl text-foreground flex items-center gap-1.5 md:gap-2">
                       <DollarSign className="w-4 h-4 text-green-600 dark:text-green-400" /> ${job.salaryMin.toLocaleString()} - ${job.salaryMax?.toLocaleString()}
                     </div>
                   )}
                 </div>
-              </div>
 
-              <div className="w-full md:w-auto space-y-3">
-                 <div className="relative">
-                    <button 
-                      onClick={() => setShowTemplates(!showTemplates)}
-                      className="w-full bg-secondary text-foreground px-6 py-4 rounded-2xl font-black flex items-center justify-between gap-4 border border-border hover:bg-secondary/80 transition-all uppercase text-xs tracking-widest"
-                    >
-                       <div className="flex items-center gap-2">
-                          <Layout className="w-5 h-5 opacity-50" />
-                          <span>Style: {selectedTemplate}</span>
-                       </div>
-                       <ChevronDown className={`w-4 h-4 transition-transform ${showTemplates ? 'rotate-180' : ''}`} />
-                    </button>
-                    
-                    {showTemplates && (
-                      <div className="absolute top-full left-0 right-0 mt-2 bg-card border border-border rounded-2xl p-2 z-50 shadow-2xl animate-in fade-in zoom-in-95 duration-200">
-                        {["MODERN", "CLASSIC"].map(t => (
-                          <button 
-                            key={t}
-                            onClick={() => { setSelectedTemplate(t); setShowTemplates(false); }}
-                            className="w-full text-left px-4 py-3 hover:bg-foreground hover:text-background rounded-xl transition-all text-xs font-black uppercase tracking-widest"
-                          >
-                            {t} UI
-                          </button>
-                        ))}
+                {/* Experience & Skills Section (Shifted below Location) */}
+                <div className="flex flex-col gap-4 pt-4 border-t border-border/40 w-full mt-4">
+                  {/* Match pill at the top */}
+                  <div className="flex items-center gap-2">
+                    <span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Match Compatibility:</span>
+                    <span className={`border px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider flex items-center gap-1.5 shrink-0 shadow-sm ${matchColor}`}>
+                      <Target className="w-3.5 h-3.5 opacity-75" /> {matchLevel} Match ({Math.round(matchScore)}%)
+                    </span>
+                  </div>
+
+                  <div className="flex flex-wrap gap-4">
+                    <div className="flex flex-col gap-1.5">
+                      <span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Required Experience</span>
+                      <span className="inline-block text-[10px] font-bold text-foreground bg-secondary/60 px-3 py-1.5 rounded-xl border border-border/60 uppercase tracking-wide w-fit">
+                        {job.experienceLevel || "Mid-Senior Level"}
+                      </span>
+                    </div>
+                    <div className="flex flex-col gap-1.5 flex-1 min-w-[200px]">
+                      <span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground block">Key Tech Required</span>
+                      <div className="flex flex-wrap gap-1.5 pt-0.5">
+                        {requiredSkillsList.map(skill => {
+                          const isMatch = matchedSkills.some(s => s.toLowerCase() === skill.toLowerCase());
+                          return (
+                            <span 
+                              key={skill} 
+                              className={`px-2.5 py-1 rounded-xl text-[9px] font-bold border transition-all ${
+                                isMatch
+                                  ? "bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/20 shadow-sm"
+                                  : "bg-secondary/60 text-foreground/80 border-border/40"
+                              }`}
+                            >
+                              {skill}
+                            </span>
+                          );
+                        })}
                       </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+ 
+              <div className="w-full md:w-[280px] shrink-0 space-y-3">
+                {existingAppForStyle ? (
+                  <Link 
+                    href={`/dashboard/applications/${existingAppForStyle.id}/prep`}
+                    className="w-full bg-green-600 hover:bg-green-700 text-white px-8 py-5 rounded-2xl font-black text-lg flex items-center justify-center gap-3 shadow-2xl transition-all hover:scale-[1.02] active:scale-[0.98] uppercase tracking-tighter"
+                  >
+                    <CheckCircle className="w-6 h-6" />
+                    View Materials
+                  </Link>
+                ) : (
+                  <button 
+                    onClick={() => setShowStyleChooserModal(true)}
+                    disabled={!!isGeneratingOrPending}
+                    className="w-full bg-foreground hover:bg-foreground/90 text-background px-8 py-5 rounded-2xl font-black text-lg flex items-center justify-center gap-3 shadow-2xl transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 uppercase tracking-tighter"
+                  >
+                    {isGeneratingOrPending ? (
+                      <>
+                         <Loader2 className="w-6 h-6 animate-spin" />
+                         TAILORING...
+                      </>
+                    ) : (
+                      <>
+                         <Sparkles className="w-6 h-6 fill-current" />
+                         One-Click Tailor
+                      </>
                     )}
-                 </div>
-
-                  {existingAppForStyle ? (
-                    <Link 
-                      href={`/dashboard/applications/${existingAppForStyle.id}/prep`}
-                      className="w-full bg-green-600 hover:bg-green-700 text-white px-8 py-5 rounded-2xl font-black text-lg flex items-center justify-center gap-3 shadow-2xl transition-all hover:scale-[1.02] active:scale-[0.98] uppercase tracking-tighter"
-                    >
-                      <CheckCircle className="w-6 h-6" />
-                      View Materials
-                    </Link>
-                  ) : (
-                    <button 
-                      onClick={handleOneClickTailor}
-                      disabled={!!isGeneratingOrPending}
-                      className="w-full bg-foreground hover:bg-foreground/90 text-background px-8 py-5 rounded-2xl font-black text-lg flex items-center justify-center gap-3 shadow-2xl transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 uppercase tracking-tighter"
-                    >
-                      {isGeneratingOrPending ? (
-                        <>
-                           <Loader2 className="w-6 h-6 animate-spin" />
-                           TAILORING...
-                        </>
-                      ) : (
-                        <>
-                           <Sparkles className="w-6 h-6 fill-current" />
-                           One-Click Tailor
-                        </>
-                      )}
-                    </button>
-                  )}
-
-                 {job.url && (
-                    <a 
-                      href={job.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="group w-full bg-secondary text-foreground px-8 py-4 rounded-2xl font-black text-sm flex items-center justify-center gap-2 border border-border hover:border-foreground/30 hover:shadow-xl hover:scale-[1.01] transition-all uppercase tracking-widest"
-                    >
-                      Apply Now
-                      <ExternalLink className="w-4 h-4 opacity-50 group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform" />
-                    </a>
-                  )}
+                  </button>
+                )}
+ 
+                {job.url && (
+                  <a 
+                    href={job.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="group w-full bg-secondary text-foreground px-8 py-4 rounded-2xl font-black text-sm flex items-center justify-center gap-3 border border-border hover:border-foreground/30 hover:shadow-xl hover:scale-[1.01] transition-all uppercase tracking-widest"
+                  >
+                    <span>Apply Now</span>
+                    <span className="text-[10px] bg-primary/10 text-primary px-2 py-0.5 rounded-full font-black text-[9px] border border-primary/20 shrink-0">
+                      {Math.round(matchScore)}% Match
+                    </span>
+                    <ExternalLink className="w-4 h-4 opacity-50 group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform shrink-0" />
+                  </a>
+                )}
               </div>
             </div>
           </div>
 
-          {/* AI Insights Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-             <div className="bg-card border border-border rounded-3xl p-8 space-y-4 shadow-sm">
-                <h3 className="text-[10px] font-black flex items-center gap-2 uppercase tracking-[0.2em] text-muted-foreground">
-                   <Target className="w-4 h-4 opacity-50" />
-                   Match Intelligence
-                </h3>
-                <div className="text-foreground leading-relaxed text-sm font-medium">
-                  {relevanceLoading ? (
-                    <div className="flex items-center gap-3 opacity-60">
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      <span>Synthesizing alignment intelligence...</span>
-                    </div>
-                  ) : (
-                    relevance || "Alignment intelligence is currently unavailable."
-                  )}
-                </div>
-             </div>
-             
-             <div className="bg-card border border-border rounded-3xl p-8 space-y-4 shadow-sm">
-                <h3 className="text-[10px] font-black flex items-center gap-2 uppercase tracking-[0.2em] text-muted-foreground">
-                   <Shield className="w-4 h-4 opacity-50" />
-                   Fair-Pay Intelligence
-                </h3>
-                <div className="text-foreground leading-relaxed text-sm font-medium">
-                  {job.fairPayEstimate ? (
-                    <div dangerouslySetInnerHTML={{ __html: job.fairPayEstimate }} />
-                  ) : (
-                    "Analyzing market standards and company benchmarks..."
-                  )}
-                </div>
-             </div>
+          {/* Horizontal Tab Navigator for Mobile/Tablet */}
+          <div className="xl:hidden sticky top-[-16px] md:top-[-24px] z-30 bg-background/95 backdrop-blur-md border-b border-border/40 py-3.5 flex flex-col items-center justify-center gap-2.5 px-4 shrink-0 shadow-sm">
+            {/* Primary Tab (Job Description) */}
+            <button
+              onClick={() => setActiveSection("specifications-section")}
+              className={`px-6 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-widest border transition-all scale-[1.03] shadow-sm shrink-0 ${
+                activeSection === "specifications-section"
+                  ? "bg-foreground text-background border-foreground shadow-md"
+                  : "bg-secondary/40 text-muted-foreground border-border/70 hover:bg-secondary/80 hover:text-foreground"
+              }`}
+            >
+              Job Description
+            </button>
+
+            {/* Secondary Tabs (AI Insights & Culture Analysis) */}
+            <div className="flex items-center justify-center gap-2 shrink-0">
+              {[
+                { id: "insights-section", label: "AI Insights" },
+                { id: "culture-section", label: "Culture Analysis" }
+              ].map((sec) => {
+                const isActive = activeSection === sec.id;
+                return (
+                  <button
+                    key={sec.id}
+                    onClick={() => setActiveSection(sec.id)}
+                    className={`px-3.5 py-2 rounded-xl text-[9px] font-bold uppercase tracking-wider border transition-all shrink-0 ${
+                      isActive 
+                        ? "bg-foreground text-background border-foreground shadow-md" 
+                        : "bg-secondary/40 text-muted-foreground border-border/40 hover:bg-secondary/80 hover:text-foreground"
+                    }`}
+                  >
+                    {sec.label}
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
-          {/* Company Culture (RAG) */}
-          <div className="bg-card border border-border rounded-3xl p-6 md:p-10 space-y-6 shadow-sm">
-             <h3 className="text-xl md:text-2xl font-black flex items-center gap-3 uppercase tracking-tighter">
-                <Building2 className="w-6 h-6 opacity-40" />
-                Company Culture Analysis
-             </h3>
-               {culture ? (
-                 <div className="prose prose-sm md:prose-base dark:prose-invert prose-neutral max-w-none prose-p:leading-relaxed prose-headings:font-black prose-li:text-foreground/80 animate-in fade-in duration-500">
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                       {culture}
+          {/* Content Switcher panels */}
+          <div className="transition-all duration-300">
+            {activeSection === "insights-section" && (
+              <div id="insights-section" className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-in fade-in duration-300">
+                 <div className="bg-card border border-border rounded-2xl md:rounded-3xl p-5 md:p-8 space-y-4 shadow-sm">
+                    <h3 className="text-[10px] font-black flex items-center gap-2 uppercase tracking-[0.2em] text-muted-foreground">
+                       <Target className="w-4 h-4 opacity-50" />
+                       Match Intelligence
+                    </h3>
+                    <div className="text-foreground/90 leading-relaxed text-sm font-sans font-normal">
+                      {relevanceLoading ? (
+                        <div className="flex items-center gap-3 opacity-60">
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          <span>Synthesizing alignment intelligence...</span>
+                        </div>
+                      ) : (
+                        relevance || "Alignment intelligence is currently unavailable."
+                      )}
+                    </div>
+                 </div>
+                 
+                 <div className="bg-card border border-border rounded-2xl md:rounded-3xl p-5 md:p-8 space-y-4 shadow-sm">
+                    <h3 className="text-[10px] font-black flex items-center gap-2 uppercase tracking-[0.2em] text-muted-foreground">
+                       <Shield className="w-4 h-4 opacity-50" />
+                       Fair-Pay Intelligence
+                    </h3>
+                    <div className="text-foreground/90 leading-relaxed text-sm font-sans font-normal">
+                      {job.fairPayEstimate ? (
+                        <div dangerouslySetInnerHTML={{ __html: job.fairPayEstimate }} />
+                      ) : (
+                        "Analyzing market standards and company benchmarks..."
+                      )}
+                    </div>
+                 </div>
+              </div>
+            )}
+
+            {activeSection === "culture-section" && (
+              <div id="culture-section" className="bg-card border border-border rounded-2xl md:rounded-3xl p-5 md:p-8 space-y-4 md:space-y-6 shadow-sm animate-in fade-in duration-300">
+                 <h3 className="text-lg md:text-2xl font-black flex items-center gap-3 uppercase tracking-tighter">
+                    <Building2 className="w-6 h-6 opacity-40" />
+                    Company Culture Analysis
+                 </h3>
+                   {culture ? (
+                     <div className="prose prose-sm md:prose-base dark:prose-invert prose-neutral max-w-none prose-p:leading-relaxed prose-headings:font-black prose-li:text-foreground/80 animate-in fade-in duration-500 font-sans font-normal">
+                        <ReactMarkdown 
+                          remarkPlugins={[remarkGfm]}
+                          components={{
+                            p: ({ node, ...props }) => <p className="mb-6 leading-relaxed last:mb-0" {...props} />,
+                            h1: ({ node, ...props }) => <h1 className="text-xl md:text-2xl font-black mt-8 mb-4 tracking-tight" {...props} />,
+                            h2: ({ node, ...props }) => <h2 className="text-lg md:text-xl font-black mt-8 mb-4 tracking-tight" {...props} />,
+                            h3: ({ node, ...props }) => <h3 className="text-base md:text-lg font-black mt-6 mb-3 tracking-tight" {...props} />,
+                            h4: ({ node, ...props }) => <h4 className="text-sm md:text-base font-black mt-5 mb-2 tracking-tight" {...props} />,
+                            ul: ({ node, ...props }) => <ul className="list-disc pl-6 mb-6 space-y-2" {...props} />,
+                            ol: ({ node, ...props }) => <ol className="list-decimal pl-6 mb-6 space-y-2" {...props} />,
+                            li: ({ node, ...props }) => <li className="leading-relaxed" {...props} />
+                          }}
+                        >
+                           {culture}
+                        </ReactMarkdown>
+                     </div>
+                   ) : cultureLoading ? (
+                     <div className="flex flex-col items-center justify-center py-10 gap-4 opacity-70">
+                        <Loader2 className="w-8 h-8 animate-spin" />
+                        <p className="font-black text-xs uppercase tracking-widest animate-pulse">Crawling culture nodes & Glassdoor reviews...</p>
+                     </div>
+                   ) : (
+                     <p className="text-sm text-muted-foreground font-sans font-normal">Culture analysis data is currently unavailable.</p>
+                   )}
+              </div>
+            )}
+
+            {activeSection === "specifications-section" && (
+              <div id="specifications-section" className="bg-card border border-border rounded-2xl md:rounded-3xl p-5 md:p-8 space-y-4 shadow-sm animate-in fade-in duration-300">
+                  <h3 className="text-lg md:text-2xl font-black flex items-center gap-3 uppercase tracking-tighter border-b border-border/40 pb-3">
+                     <FileText className="w-6 h-6 opacity-40" />
+                     Job Description
+                  </h3>
+                 <div className="prose dark:prose-invert prose-sm md:prose-base max-w-none text-foreground/90 leading-relaxed font-sans font-normal">
+                    <ReactMarkdown 
+                      remarkPlugins={[remarkGfm]}
+                      components={{
+                        p: ({ node, ...props }) => <p className="mb-6 leading-relaxed last:mb-0" {...props} />,
+                        h1: ({ node, ...props }) => <h1 className="text-xl md:text-2xl font-black mt-8 mb-4 tracking-tight" {...props} />,
+                        h2: ({ node, ...props }) => <h2 className="text-lg md:text-xl font-black mt-8 mb-4 tracking-tight" {...props} />,
+                        h3: ({ node, ...props }) => <h3 className="text-base md:text-lg font-black mt-6 mb-3 tracking-tight" {...props} />,
+                        h4: ({ node, ...props }) => <h4 className="text-sm md:text-base font-black mt-5 mb-2 tracking-tight" {...props} />,
+                        ul: ({ node, ...props }) => <ul className="list-disc pl-6 mb-6 space-y-2" {...props} />,
+                        ol: ({ node, ...props }) => <ol className="list-decimal pl-6 mb-6 space-y-2" {...props} />,
+                        li: ({ node, ...props }) => <li className="leading-relaxed" {...props} />
+                      }}
+                    >
+                       {job.description}
                     </ReactMarkdown>
                  </div>
-               ) : cultureLoading ? (
-                 <div className="flex flex-col items-center justify-center py-10 gap-4 opacity-70">
-                    <Loader2 className="w-8 h-8 animate-spin" />
-                    <p className="font-black text-xs uppercase tracking-widest animate-pulse">Crawling culture nodes & Glassdoor reviews...</p>
-                 </div>
-               ) : (
-                 <p className="text-sm text-muted-foreground font-medium">Culture analysis data is currently unavailable.</p>
-               )}
-          </div>
-
-          {/* JD */}
-          <div className="bg-muted border border-border rounded-3xl p-10 space-y-6">
-             <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground">Original Specification</h3>
-             <div className="text-foreground text-sm leading-8 whitespace-pre-wrap font-medium opacity-80">
-               {job.description}
-             </div>
+              </div>
+            )}
           </div>
         </div>
 
         {/* Sidebar (4 cols) */}
-        <div className="lg:col-span-4 space-y-6">
+        <div className="md:col-span-4 space-y-6">
            {/* Dynamic Match Score */}
-           <div className="bg-foreground text-background border border-border rounded-3xl p-8 relative overflow-hidden shadow-2xl">
+           <div className="hidden md:block bg-foreground text-background border border-border rounded-3xl p-8 relative overflow-hidden shadow-2xl">
               <div className="relative z-10 space-y-4 text-center">
                  <h4 className="font-black text-background/50 uppercase tracking-widest text-[10px]">Match Confidence</h4>
                  <div className="text-8xl font-black text-background">{Math.round(matchScore)}%</div>
@@ -417,7 +546,7 @@ export default function JobDetailsPage({ params }: { params: Promise<{ id: strin
            </div>
 
            {/* Matched Skills */}
-           <div className="bg-card border border-border rounded-3xl p-8 space-y-6 shadow-sm">
+           <div className="hidden md:block bg-card border border-border rounded-3xl p-8 space-y-6 shadow-sm">
               <h4 className="font-black flex items-center gap-2 text-foreground/70 uppercase text-xs tracking-widest">
                  <CheckCircle className="w-4 h-4 text-green-600 dark:text-green-500" />
                  Verified Skills
@@ -432,7 +561,7 @@ export default function JobDetailsPage({ params }: { params: Promise<{ id: strin
            </div>
 
            {/* Quick Support */}
-           <div className="bg-card border border-border rounded-3xl p-6 text-center space-y-4 shadow-sm">
+           <div className="bg-card border border-border rounded-2xl md:rounded-3xl p-5 md:p-6 text-center space-y-4 shadow-sm">
               <div className="bg-muted w-12 h-12 rounded-2xl flex items-center justify-center mx-auto border border-border">
                  <MessageSquare className="w-6 h-6 opacity-40" />
               </div>
@@ -441,6 +570,114 @@ export default function JobDetailsPage({ params }: { params: Promise<{ id: strin
            </div>
         </div>
       </div>
+
+      {/* Floating Section Navigator (Table of Contents Tab Switcher) */}
+      <div className="hidden xl:flex fixed right-8 top-1/2 -translate-y-1/2 flex-col gap-6 z-40 bg-card/60 backdrop-blur-md border border-border px-3 py-6 rounded-full shadow-xl animate-in slide-in-from-right duration-500">
+        {[
+          { id: "insights-section", label: "AI Insights", icon: Sparkles },
+          { id: "specifications-section", label: "Job Description", icon: FileText },
+          { id: "culture-section", label: "Culture Analysis", icon: Target }
+        ].map((sec) => {
+          const Icon = sec.icon;
+          const isActive = activeSection === sec.id;
+          return (
+            <button
+              key={sec.id}
+              onClick={() => setActiveSection(sec.id)}
+              className="group relative flex items-center justify-center w-10 h-10 rounded-full transition-all duration-300 hover:scale-110"
+              title={sec.label}
+            >
+              <div className={`absolute inset-0 rounded-full transition-all duration-300 ${
+                isActive 
+                  ? "bg-foreground scale-100 shadow-md" 
+                  : "bg-transparent scale-0 group-hover:scale-50 group-hover:bg-secondary"
+              }`} />
+              <Icon className={`w-4 h-4 z-10 transition-colors duration-300 ${
+                isActive 
+                  ? "text-background" 
+                  : "text-muted-foreground group-hover:text-foreground"
+              }`} />
+              
+              {/* Tooltip */}
+              <span className="absolute right-full mr-4 px-3 py-1.5 bg-foreground text-background text-[10px] font-black uppercase tracking-widest rounded-lg opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity shadow-xl whitespace-nowrap">
+                {sec.label}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      {showStyleChooserModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[999] flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-card border border-border rounded-[2rem] p-6 max-w-md w-full shadow-2xl space-y-6 animate-in zoom-in-95 duration-200 text-left">
+            <div className="space-y-2">
+              <h4 className="text-lg font-black uppercase tracking-tight text-foreground flex items-center gap-2">
+                <Sparkles className="w-5 h-5 text-primary fill-current" />
+                Choose Tailoring Style blueprint
+              </h4>
+              <p className="text-xs text-muted-foreground font-bold leading-relaxed">
+                Select the aesthetic template style blueprint for your tailored resume application package.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              {/* MODERN option */}
+              <button
+                onClick={() => setSelectedTemplate("MODERN")}
+                className={`p-4 rounded-2xl border text-left transition-all space-y-2 relative overflow-hidden ${
+                  selectedTemplate === "MODERN"
+                    ? "border-primary bg-primary/5 text-foreground ring-1 ring-primary"
+                    : "border-border bg-secondary/30 text-muted-foreground hover:border-foreground/20 hover:text-foreground"
+                }`}
+              >
+                <div className="font-black uppercase tracking-wider text-xs">Modern UI</div>
+                <div className="text-[10px] leading-relaxed opacity-85 font-semibold">
+                  Minimal, spacious design with accent headers and sidebars.
+                </div>
+                {selectedTemplate === "MODERN" && (
+                  <CheckCircle className="absolute top-2 right-2 w-4 h-4 text-primary" />
+                )}
+              </button>
+
+              {/* CLASSIC option */}
+              <button
+                onClick={() => setSelectedTemplate("CLASSIC")}
+                className={`p-4 rounded-2xl border text-left transition-all space-y-2 relative overflow-hidden ${
+                  selectedTemplate === "CLASSIC"
+                    ? "border-primary bg-primary/5 text-foreground ring-1 ring-primary"
+                    : "border-border bg-secondary/30 text-muted-foreground hover:border-foreground/20 hover:text-foreground"
+                }`}
+              >
+                <div className="font-black uppercase tracking-wider text-xs">Classic UI</div>
+                <div className="text-[10px] leading-relaxed opacity-85 font-semibold">
+                  Traditional structured layout focusing on content density.
+                </div>
+                {selectedTemplate === "CLASSIC" && (
+                  <CheckCircle className="absolute top-2 right-2 w-4 h-4 text-primary" />
+                )}
+              </button>
+            </div>
+
+            <div className="flex gap-3 pt-2">
+              <button
+                onClick={() => setShowStyleChooserModal(false)}
+                className="flex-1 bg-secondary text-foreground hover:bg-secondary/80 px-4 py-3 rounded-xl font-black uppercase text-xs tracking-widest border border-border transition-all"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  setShowStyleChooserModal(false);
+                  handleOneClickTailor();
+                }}
+                className="flex-1 bg-foreground text-background hover:bg-foreground/90 px-4 py-3 rounded-xl font-black uppercase text-xs tracking-widest transition-all"
+              >
+                Confirm & Tailor
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

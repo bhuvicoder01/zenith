@@ -1,18 +1,18 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, Suspense } from "react";
 import api, { BACKEND_URL } from "@/lib/api";
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import { 
   Briefcase, MapPin, DollarSign, ExternalLink, RotateCcw, 
   ChevronRight, ChevronLeft, Zap, Target, History, Globe, 
   Sliders, Grid, List, Search, Filter, Sparkles, CheckCircle2,
-  Building2, Layout, ChevronDown, Loader2, ArrowLeft, CheckCircle
+  Building2, Layout, ChevronDown, Loader2, ArrowLeft, CheckCircle, Maximize2
 } from "lucide-react";
 import useSyncStore from "@/store/useSyncStore";
 import { useWebSocketStore } from "@/store/useWebSocketStore";
 import { toast } from "sonner";
-import PipelineBoard from "@/components/PipelineBoard";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
@@ -66,25 +66,61 @@ interface DashboardData {
   easyApply: Job[];
 }
 
-export default function JobsPage() {
+function JobsContent() {
   const [dashboard, setDashboard] = useState<DashboardData | null>(null);
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [searching, setSearching] = useState(false);
   
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const jobParamId = searchParams.get("id");
+
   // Tab states
-  const [activeTab, setActiveTab] = useState<"dashboard" | "discovery" | "catalog" | "pipeline">("dashboard");
+  const [activeTab, setActiveTab] = useState<"dashboard" | "discovery" | "catalog">("dashboard");
   const [showPreferences, setShowPreferences] = useState(false);
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+
+  const handleJobClick = (jobId: string) => {
+    if (typeof window !== "undefined" && window.innerWidth < 1024) {
+      router.push(`/dashboard/jobs/${jobId}`);
+    } else {
+      setSelectedJobId(jobId);
+      trackActivity(jobId, "VIEW");
+    }
+  };
+
+  const handleDashboardJobClick = (jobId: string) => {
+    if (typeof window !== "undefined" && window.innerWidth < 1024) {
+      router.push(`/dashboard/jobs/${jobId}`);
+    } else {
+      setSelectedJobId(jobId);
+      if (activeTab === "dashboard") {
+        setActiveTab("catalog");
+      }
+    }
+  };
 
   // Split-Screen Layout Selected Job State
   const [selectedJobId, setSelectedJobId] = useState<string>("");
   const [detailData, setDetailData] = useState<JobDetailResponse | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [selectedTemplate, setSelectedTemplate] = useState("MODERN");
+  const [activeDetailSection, setActiveDetailSection] = useState("specifications-section");
   const [showTemplates, setShowTemplates] = useState(false);
   const [isPending, setIsPending] = useState(false);
+  const [isDesktop, setIsDesktop] = useState(false);
+  const hasHandledInitialParam = useRef(false);
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsDesktop(window.innerWidth >= 1024);
+    };
+    handleResize();
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
 
   // Background relevance / culture loading states
   const [relevanceLoading, setRelevanceLoading] = useState(false);
@@ -115,6 +151,14 @@ export default function JobsPage() {
   const { prepStatus, setPrepStatus } = useWebSocketStore();
   const isCurrentlyGenerating = prepStatus && prepStatus.step && prepStatus.step !== "COMPLETED" && prepStatus.step !== "FAILED";
   const isGeneratingOrPending = isCurrentlyGenerating || isPending;
+
+  useEffect(() => {
+    if (jobParamId && !hasHandledInitialParam.current) {
+      hasHandledInitialParam.current = true;
+      setSelectedJobId(jobParamId);
+      setActiveTab("catalog");
+    }
+  }, [jobParamId]);
 
   // Reactively mark application as completed when background prep finishes
   useEffect(() => {
@@ -157,9 +201,21 @@ export default function JobsPage() {
 
   // Fetch full details when selectedJobId changes
   useEffect(() => {
+    setActiveDetailSection("specifications-section");
     if (!selectedJobId) {
       setDetailData(null);
+      if (typeof window !== "undefined") {
+        const url = new URL(window.location.href);
+        url.searchParams.delete("id");
+        window.history.replaceState(null, '', url.pathname + url.search);
+      }
       return;
+    }
+
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      url.searchParams.set("id", selectedJobId);
+      window.history.replaceState(null, '', url.pathname + url.search);
     }
 
     const fetchDetail = async () => {
@@ -238,7 +294,7 @@ export default function JobsPage() {
       setLoading(true);
       if (activeTab === "dashboard") {
         await fetchDashboard();
-      } else if (activeTab !== "pipeline") {
+      } else {
         await fetchJobs(activeTab, 0, false);
       }
       setLoading(false);
@@ -301,9 +357,14 @@ export default function JobsPage() {
 
       setJobs(prev => {
         const nextList = append ? [...prev, ...fetchedJobs] : fetchedJobs;
-        // Select the first job if none is selected
-        if (nextList.length > 0 && (!selectedJobId || !nextList.some((j: Job) => j.id === selectedJobId))) {
-          setSelectedJobId(nextList[0].id);
+        if (nextList.length > 0) {
+          if (!selectedJobId || !nextList.some((j: Job) => j.id === selectedJobId)) {
+            setSelectedJobId(nextList[0].id);
+          }
+        } else {
+          if (!append) {
+            setSelectedJobId("");
+          }
         }
         return nextList;
       });
@@ -319,11 +380,6 @@ export default function JobsPage() {
   // Re-fetch jobs on page change or filter/tab updates
   useEffect(() => {
     const initPage = async () => {
-      if (activeTab === "pipeline") {
-        setLoading(false);
-        return;
-      }
-      
       if (page === 0) {
         setLoading(true);
         if (activeTab === "dashboard") {
@@ -340,6 +396,8 @@ export default function JobsPage() {
     };
     initPage();
   }, [activeTab, page, syncStatus.status]);
+
+
 
   const handleApplyFilters = (e: React.FormEvent) => {
     e.preventDefault();
@@ -359,22 +417,19 @@ export default function JobsPage() {
     fetchJobs(activeTab, 0, false);
   };
 
-  const handleReset = async () => {
-    if (!confirm("This will clear all current jobs and perform a fresh, diversified sync based on your profile. Continue?")) {
-      return;
-    }
+  const handleRefresh = async () => {
     setSearching(true);
     try {
-      await api.delete("/jobs");
-      setJobs([]);
-      setDashboard(null);
-      setSelectedJobId("");
-      setDetailData(null);
-      setActiveTab("dashboard");
-      toast.success("Profile sync reset initiated");
+      setPage(0);
+      if (activeTab === "dashboard") {
+        await fetchDashboard();
+      } else {
+        await fetchJobs(activeTab, 0, false);
+      }
+      toast.success("Listings refreshed successfully");
     } catch (error) {
-      console.error("Reset failed:", error);
-      toast.error("Failed to reset sync");
+      console.error("Refresh failed:", error);
+      toast.error("Failed to refresh listings");
     } finally {
       setSearching(false);
     }
@@ -478,6 +533,7 @@ export default function JobsPage() {
                 setActiveTab("catalog");
               }
               setPage(0);
+              setSelectedJobId("");
             }}
             className="text-primary text-xs font-black uppercase tracking-widest hover:underline flex items-center gap-1 group"
           >
@@ -494,12 +550,7 @@ export default function JobsPage() {
               <div 
                 key={job.id} 
                 className="snap-start"
-                onClick={() => {
-                  setSelectedJobId(job.id);
-                  if (activeTab === "dashboard") {
-                    setActiveTab("catalog");
-                  }
-                }}
+                onClick={() => handleDashboardJobClick(job.id)}
               >
                 {/* Nominal horizontal card */}
                 <div className="w-[320px] flex-shrink-0 group bg-card border border-border/80 hover:border-primary/40 rounded-3xl p-6 hover:shadow-2xl hover:shadow-primary/5 transition-all duration-300 flex flex-col gap-4 cursor-pointer">
@@ -540,40 +591,39 @@ export default function JobsPage() {
   };
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-500 pb-20">
+    <div className="space-y-4 md:space-y-8 animate-in fade-in duration-500 pb-20">
       {/* Header Panel */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 bg-card p-6 rounded-[2rem] border border-border/80 shadow-sm relative">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 md:gap-6 bg-card p-4 md:p-6 rounded-2xl md:rounded-[2rem] border border-border/80 shadow-sm relative">
         {isSyncing && (
-          <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-blue-500 via-indigo-500 to-primary rounded-t-[2rem] animate-pulse" />
+          <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-blue-500 via-indigo-500 to-primary rounded-t-2xl md:rounded-t-[2rem] animate-pulse" />
         )}
         
-        <div className="space-y-4">
-          <div className="space-y-1.5 hidden md:block">
+        <div className="space-y-3 md:space-y-4 w-full">
+          <div className="space-y-1 md:space-y-1.5">
             <div className="flex items-center gap-2">
-              <h1 className="text-3xl font-black tracking-tighter text-foreground">Job Discovery</h1>
+              <h1 className="text-2xl md:text-3xl font-black tracking-tighter text-foreground">Job Discovery</h1>
               {isSyncing && (
                 <span className="flex items-center gap-1.5 text-[8px] font-black uppercase tracking-widest px-2 py-0.5 bg-blue-500/10 text-blue-500 border border-blue-500/20 rounded-full animate-pulse">
                   <RotateCcw className="w-2.5 h-2.5 animate-spin" /> Sync active
                 </span>
               )}
             </div>
-            <p className="text-muted-foreground font-medium max-w-lg text-xs">
+            <p className="text-muted-foreground font-medium max-w-lg text-[10px] md:text-xs">
               LinkedIn priority integrations and autonomous AI compatibility calculations.
             </p>
           </div>
           
           {/* Navigation Tab Bar */}
-          <div className="flex p-1 bg-secondary/40 rounded-xl w-fit border border-border/40">
+          <div className="flex p-1 bg-secondary/40 rounded-xl w-full md:w-fit border border-border/40 overflow-x-auto scrollbar-none whitespace-nowrap">
             {[
               { id: "dashboard", label: "Dashboard" },
               { id: "discovery", label: "Discovery Feed" },
-              { id: "catalog", label: "All Jobs" },
-              { id: "pipeline", label: "Pipeline Board" }
+              { id: "catalog", label: "All Jobs" }
             ].map((tab) => (
               <button
                 key={tab.id}
-                onClick={() => { setActiveTab(tab.id as any); setPage(0); }}
-                className={`px-5 py-2.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${
+                onClick={() => { setActiveTab(tab.id as any); setPage(0); setSelectedJobId(""); }}
+                className={`px-3 py-2 md:px-5 md:py-2.5 rounded-lg text-[10px] md:text-[9px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${
                   activeTab === tab.id 
                     ? "bg-background text-foreground shadow-sm border border-border/10" 
                     : "text-muted-foreground hover:text-foreground"
@@ -610,12 +660,12 @@ export default function JobsPage() {
             </button>
             <button
               type="button"
-              onClick={handleReset}
-              disabled={searching || isSyncing}
+              onClick={handleRefresh}
+              disabled={searching}
               className="p-3 rounded-xl bg-secondary/40 text-foreground hover:bg-secondary transition-all border border-border disabled:opacity-50"
-              title="Reset & Re-sync Profile"
+              title="Refresh Listing"
             >
-              <RotateCcw className={`w-4 h-4 ${(searching || isSyncing) ? 'animate-spin' : ''}`} />
+              <RotateCcw className={`w-4 h-4 ${searching ? 'animate-spin' : ''}`} />
             </button>
           </div>
         </div>
@@ -747,8 +797,6 @@ export default function JobsPage() {
           <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
           <p className="text-muted-foreground animate-pulse font-black tracking-widest uppercase text-[10px]">Scanning active channels...</p>
         </div>
-      ) : activeTab === "pipeline" ? (
-        <PipelineBoard />
       ) : activeTab === "dashboard" ? (
         dashboard ? (
           <div className="space-y-16">
@@ -790,10 +838,10 @@ export default function JobsPage() {
         ) : null
       ) : (
         /* LinkedIn-style Split Screen Layout */
-        <div className="flex flex-col lg:flex-row gap-6 min-h-[600px] h-[calc(100vh-220px)] relative overflow-hidden">
+        <div className="flex flex-col lg:flex-row gap-6 min-h-0 lg:min-h-[600px] h-auto lg:h-[calc(100vh-220px)] relative overflow-visible lg:overflow-hidden">
           
           {/* Left Side: Scrollable Job Snippets List */}
-          <div className="w-full lg:w-[350px] xl:w-[420px] flex-shrink-0 flex flex-col bg-card border border-border/80 rounded-3xl overflow-hidden h-full">
+          <div className="w-full lg:w-[350px] xl:w-[420px] flex-shrink-0 flex flex-col bg-card border border-border/80 rounded-3xl overflow-hidden h-[600px] lg:h-full">
             <div className="px-5 py-3 border-b border-border/40 bg-secondary/20 flex justify-between items-center shrink-0">
               <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
                 Feed Listings
@@ -809,32 +857,32 @@ export default function JobsPage() {
             >
               {jobs.length > 0 ? (
                 jobs.map((job) => {
-                  const isSelected = selectedJobId === job.id;
+                  const isSelected = selectedJobId === job.id && isDesktop;
                   return (
                     <div
                       key={job.id}
-                      onClick={() => { setSelectedJobId(job.id); trackActivity(job.id, "VIEW"); }}
-                      className={`p-4 rounded-2xl border transition-all duration-300 flex flex-col gap-2.5 cursor-pointer relative group ${
+                      onClick={() => handleJobClick(job.id)}
+                      className={`p-3 md:p-4 rounded-xl md:rounded-2xl border transition-all duration-300 flex flex-col gap-2 md:gap-2.5 cursor-pointer relative group ${
                         isSelected 
                           ? "bg-primary/[0.03] border-primary shadow-lg shadow-primary/5" 
                           : "bg-card border-border/50 hover:bg-secondary/40"
                       }`}
                     >
                       <div className="flex justify-between items-start gap-2">
-                        <span className={`text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded border ${
+                        <span className={`text-[9px] md:text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded border ${
                           job.matchScore >= 85 
                             ? 'text-emerald-500 bg-emerald-500/10 border-emerald-500/20' 
                             : 'text-blue-500 bg-blue-500/10 border-blue-500/20'
                         }`}>
                           {Math.round(job.matchScore)}% Match
                         </span>
-                        <span className="text-[8px] font-black uppercase tracking-wider text-muted-foreground/80 bg-secondary px-1.5 py-0.5 rounded">
+                        <span className="text-[9px] md:text-[8px] font-black uppercase tracking-wider text-muted-foreground/80 bg-secondary px-1.5 py-0.5 rounded">
                           {job.source}
                         </span>
                       </div>
 
                       <div className="flex items-center gap-3">
-                        <div className={`h-9 w-9 rounded-lg border overflow-hidden flex items-center justify-center p-1 bg-secondary shrink-0 ${
+                        <div className={`h-8 w-8 md:h-9 md:w-9 rounded-lg border overflow-hidden flex items-center justify-center p-1 bg-secondary shrink-0 ${
                           job.companyLogoTheme === 'light' ? 'bg-zinc-950 border-zinc-800' : 'bg-zinc-50 border-zinc-200'
                         }`}>
                           {job.companyLogoUrl ? (
@@ -844,12 +892,12 @@ export default function JobsPage() {
                           )}
                         </div>
                         <div className="min-w-0 flex-1 leading-snug">
-                          <h4 className="text-xs font-black truncate group-hover:text-primary transition-colors">{job.title}</h4>
-                          <p className="text-[10px] text-muted-foreground truncate pt-0.5">{job.company}</p>
+                          <h4 className="text-sm md:text-xs font-black truncate group-hover:text-primary transition-colors">{job.title}</h4>
+                          <p className="text-xs md:text-[10px] text-muted-foreground truncate pt-0.5">{job.company}</p>
                         </div>
                       </div>
 
-                      <div className="flex items-center justify-between text-[10px] text-muted-foreground mt-1 border-t border-border/30 pt-2 flex-wrap gap-2">
+                      <div className="flex items-center justify-between text-xs md:text-[10px] text-muted-foreground mt-1 border-t border-border/30 pt-2 flex-wrap gap-2">
                         <span className="flex items-center gap-1"><MapPin className="w-3.5 h-3.5 shrink-0" /> {job.location}</span>
                         {job.salaryMin && (
                           <span className="font-bold text-foreground/80">
@@ -875,122 +923,266 @@ export default function JobsPage() {
           </div>
 
           {/* Right Side: Scrollable Interactive Details Workspace */}
-          <div className="flex-1 bg-card border border-border/85 rounded-[2rem] h-full overflow-y-auto relative p-6 md:p-8 no-scrollbar">
+          <div className="hidden lg:block flex-1 bg-card border border-border/85 rounded-[2rem] h-full overflow-y-auto relative px-6 md:px-8 pb-6 md:pb-8 no-scrollbar">
             {detailLoading ? (
               <div className="absolute inset-0 bg-background/50 backdrop-blur-[2px] flex flex-col items-center justify-center gap-3 z-50">
                 <Loader2 className="w-8 h-8 text-primary animate-spin" />
                 <p className="text-[9px] font-black text-muted-foreground uppercase tracking-widest animate-pulse">Loading detailed workspace analytics...</p>
               </div>
             ) : detailData ? (
-              <div className="space-y-8 animate-in fade-in duration-300">
+              <div className="animate-in fade-in duration-300">
                 
-                {/* Header Information Box */}
-                <div className="bg-secondary/20 border border-border/50 rounded-2xl p-6 relative overflow-hidden shadow-sm flex flex-col md:flex-row gap-6 justify-between items-start">
-                  <div className="space-y-4 flex-1">
-                    <div className="flex items-center gap-4">
-                      <div className={`h-16 w-16 rounded-xl border flex items-center justify-center p-2 shadow-md shrink-0 ${
-                        detailData.job.companyLogoTheme === 'light' ? 'bg-zinc-950 border-zinc-800' : 'bg-zinc-50 border-zinc-200'
-                      }`}>
-                        {detailData.job.companyLogoUrl ? (
-                          <img src={detailData.job.companyLogoUrl} alt={detailData.job.company} className="w-full h-full object-contain" />
-                        ) : (
-                          <Building2 className="w-6 h-6 text-muted-foreground opacity-55" />
+                {/* Header Card — Mirrors Job-Specific Page */}
+                <div className="relative bg-card backdrop-blur-md border border-border rounded-2xl p-5 md:p-6 overflow-hidden shadow-xl mt-6 md:mt-8">
+                  <div className="absolute top-0 right-0 w-48 h-48 bg-foreground/5 rounded-full blur-[80px] -mr-24 -mt-24"></div>
+                  
+                  <div className="relative flex flex-col gap-5 items-start">
+                    <div className="space-y-4 w-full">
+                      <div className="flex items-center gap-4">
+                        <div className={`h-14 w-14 rounded-2xl flex items-center justify-center border shadow-lg overflow-hidden relative p-2.5 shrink-0 transition-all duration-700 ${
+                          detailData.job.companyLogoTheme === 'light' 
+                            ? 'bg-zinc-900 border-zinc-800 shadow-zinc-900/40' 
+                            : detailData.job.companyLogoTheme === 'dark' 
+                              ? 'bg-white border-zinc-200 shadow-black/5' 
+                              : 'bg-zinc-100 border-zinc-200'
+                        }`}>
+                          {detailData.job.companyLogoUrl ? (
+                            <img 
+                              src={detailData.job.companyLogoUrl} 
+                              alt={detailData.job.company} 
+                              className="w-full h-full object-contain"
+                              onError={(e) => {
+                                (e.target as HTMLImageElement).src = "";
+                                (e.target as HTMLImageElement).className = "hidden";
+                              }}
+                            />
+                          ) : (
+                            <Building2 className="w-6 h-6 text-muted-foreground opacity-50" />
+                          )}
+                          <Building2 className="absolute w-6 h-6 text-muted-foreground opacity-20 -z-10" />
+                        </div>
+                        <div className="space-y-1 min-w-0 flex-1">
+                          <h2 className="text-xl md:text-2xl font-black text-foreground tracking-tighter leading-tight break-words">{detailData.job.title}</h2>
+                          <p className="text-[10px] md:text-xs text-muted-foreground font-black uppercase tracking-widest truncate">{detailData.job.company}</p>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-wrap gap-2 text-[10px] font-black uppercase tracking-widest">
+                        <div className="bg-secondary border border-border px-3 py-1.5 rounded-lg text-foreground flex items-center gap-1.5">
+                          <MapPin className="w-3.5 h-3.5 opacity-50" /> {detailData.job.location}
+                        </div>
+                        {detailData.job.salaryMin && (
+                          <div className="bg-secondary border border-border px-3 py-1.5 rounded-lg text-foreground flex items-center gap-1.5">
+                            <DollarSign className="w-3.5 h-3.5 text-green-600 dark:text-green-400" /> ${detailData.job.salaryMin.toLocaleString()} - ${detailData.job.salaryMax.toLocaleString()}
+                          </div>
                         )}
                       </div>
-                      <div className="min-w-0">
-                        <h2 className="text-xl md:text-2xl font-black tracking-tight leading-tight text-foreground truncate">{detailData.job.title}</h2>
-                        <h3 className="text-xs md:text-sm font-black text-muted-foreground uppercase tracking-widest pt-1">{detailData.job.company}</h3>
+
+                      {/* Experience & Skills Section */}
+                      {(() => {
+                        const matchScore = detailData.matchScore || 0;
+                        let matchLevel = "LOW";
+                        let matchColor = "text-rose-500 bg-rose-500/10 border-rose-500/20";
+                        if (matchScore >= 80) {
+                          matchLevel = "HIGH";
+                          matchColor = "text-emerald-500 bg-emerald-500/10 border-emerald-500/20";
+                        } else if (matchScore >= 50) {
+                          matchLevel = "MEDIUM";
+                          matchColor = "text-amber-500 bg-amber-500/10 border-amber-500/20";
+                        }
+
+                        const detectRequiredKeywords = (desc: string) => {
+                          const commonSkills = [
+                            "React", "Node", "Java", "Python", "JavaScript", "Docker", "Kubernetes", 
+                            "TypeScript", "AWS", "SQL", "HTML", "CSS", "Go", "C++", "C#", "Ruby", 
+                            "PostgreSQL", "MongoDB", "Redis", "Figma", "Git", "CI/CD", "Next.js", "Spring"
+                          ];
+                          const detected: string[] = [];
+                          const lowerDesc = desc.toLowerCase();
+                          for (const skill of commonSkills) {
+                            if (lowerDesc.includes(skill.toLowerCase())) {
+                              detected.push(skill);
+                            }
+                          }
+                          return detected.slice(0, 6);
+                        };
+
+                        const requiredSkillsList = detailData.job.techTags && detailData.job.techTags.length > 0
+                          ? detailData.job.techTags
+                          : detailData.job.description
+                            ? detectRequiredKeywords(detailData.job.description)
+                            : ["Software Development"];
+
+                        return (
+                          <div className="flex flex-col gap-4 pt-4 border-t border-border/40 w-full mt-2">
+                            <div className="flex items-center gap-2">
+                              <span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Match Compatibility:</span>
+                              <span className={`border px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider flex items-center gap-1.5 shrink-0 shadow-sm ${matchColor}`}>
+                                <Target className="w-3.5 h-3.5 opacity-75" /> {matchLevel} Match ({Math.round(matchScore)}%)
+                              </span>
+                            </div>
+
+                            <div className="flex flex-wrap gap-4">
+                              <div className="flex flex-col gap-1.5">
+                                <span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Required Experience</span>
+                                <span className="inline-block text-[10px] font-bold text-foreground bg-secondary/60 px-3 py-1.5 rounded-xl border border-border/60 uppercase tracking-wide w-fit">
+                                  {detailData.job.experienceLevel || "Mid-Senior Level"}
+                                </span>
+                              </div>
+                              <div className="flex flex-col gap-1.5 flex-1 min-w-[180px]">
+                                <span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground block">Key Tech Required</span>
+                                <div className="flex flex-wrap gap-1.5 pt-0.5">
+                                  {requiredSkillsList.map(skill => {
+                                    const isMatch = detailData.matchedSkills.some(s => s.toLowerCase() === skill.toLowerCase());
+                                    return (
+                                      <span 
+                                        key={skill} 
+                                        className={`px-2.5 py-1 rounded-xl text-[9px] font-bold border transition-all ${
+                                          isMatch
+                                            ? "bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/20 shadow-sm"
+                                            : "bg-secondary/60 text-foreground/80 border-border/40"
+                                        }`}
+                                      >
+                                        {skill}
+                                      </span>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })()}
+                    </div>
+
+                    {/* Actions Block — Mirrors Job-Specific Page */}
+                    <div className="w-full flex flex-col gap-2.5 pt-4 border-t border-border/40">
+                      <div className="flex gap-2.5">
+                        {existingAppForStyle ? (
+                          <Link 
+                            href={`/dashboard/applications/${existingAppForStyle.id}/prep`}
+                            className="flex-1 bg-green-600 hover:bg-green-700 text-white px-4 py-2.5 rounded-xl font-black text-[10px] flex items-center justify-center gap-2 shadow-lg transition-all hover:scale-[1.01] active:scale-[0.98] uppercase tracking-widest"
+                          >
+                            <CheckCircle className="w-4 h-4" />
+                            View Materials
+                          </Link>
+                        ) : (
+                          <button 
+                            onClick={handleOneClickTailor}
+                            disabled={!!isGeneratingOrPending}
+                            className="flex-1 bg-foreground hover:bg-foreground/90 text-background px-4 py-2.5 rounded-xl font-black text-[10px] flex items-center justify-center gap-2 shadow-lg transition-all hover:scale-[1.01] active:scale-[0.98] disabled:opacity-50 uppercase tracking-widest"
+                          >
+                            {isGeneratingOrPending ? (
+                              <>
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                                TAILORING...
+                              </>
+                            ) : (
+                              <>
+                                <Sparkles className="w-4 h-4 fill-current" />
+                                One-Click Tailor
+                              </>
+                            )}
+                          </button>
+                        )}
+
+                        <div className="relative shrink-0">
+                          <button 
+                            onClick={() => setShowTemplates(!showTemplates)}
+                            className="h-full bg-secondary text-foreground px-3.5 rounded-2xl text-[9px] font-black flex items-center gap-2 border border-border hover:bg-secondary/80 transition-all uppercase tracking-widest"
+                          >
+                            <Layout className="w-4 h-4 opacity-50" />
+                            <span>{selectedTemplate}</span>
+                            <ChevronDown className={`w-3 h-3 transition-transform ${showTemplates ? 'rotate-180' : ''}`} />
+                          </button>
+                          
+                          {showTemplates && (
+                            <div className="absolute top-full right-0 mt-2 bg-card border border-border rounded-xl p-1 z-50 shadow-xl animate-in fade-in zoom-in-95 duration-200 min-w-[120px]">
+                              {["MODERN", "CLASSIC"].map(t => (
+                                <button 
+                                  key={t}
+                                  onClick={() => { setSelectedTemplate(t); setShowTemplates(false); }}
+                                  className="w-full text-left px-3 py-2 hover:bg-secondary rounded-lg transition-all text-[9px] font-black uppercase tracking-widest"
+                                >
+                                  {t} UI
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="flex gap-2.5">
+                        {detailData.job.url && (
+                          <a 
+                            href={detailData.job.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="group flex-1 bg-secondary text-foreground px-4 py-2.5 rounded-xl font-black text-[10px] flex items-center justify-center gap-2 border border-border hover:border-foreground/30 hover:shadow-md hover:scale-[1.01] transition-all uppercase tracking-widest"
+                          >
+                            <span>Apply Now</span>
+                            <span className="text-[9px] bg-primary/10 text-primary px-2 py-0.5 rounded-full font-black border border-primary/20 shrink-0">
+                              {Math.round(detailData.matchScore)}% Match
+                            </span>
+                            <ExternalLink className="w-3.5 h-3.5 opacity-50 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform shrink-0" />
+                          </a>
+                        )}
+
+                        <Link
+                          href={`/dashboard/jobs/${detailData.job.id}`}
+                          className={`bg-secondary text-foreground px-4 py-2.5 rounded-xl font-black text-[10px] flex items-center justify-center gap-2 border border-border hover:border-foreground/30 hover:bg-foreground hover:text-background hover:scale-[1.01] transition-all uppercase tracking-widest ${detailData.job.url ? '' : 'flex-1'}`}
+                        >
+                          View Full Page
+                          <Maximize2 className="w-3.5 h-3.5" />
+                        </Link>
                       </div>
                     </div>
-
-                    <div className="flex flex-wrap gap-2 text-[10px] font-black uppercase tracking-widest">
-                      <span className="bg-secondary border border-border px-3 py-1.5 rounded-lg text-foreground flex items-center gap-1.5">
-                        <MapPin className="w-3.5 h-3.5 opacity-60" /> {detailData.job.location}
-                      </span>
-                      {detailData.job.salaryMin && (
-                        <span className="bg-secondary border border-border px-3 py-1.5 rounded-lg text-foreground flex items-center gap-1.5">
-                          <DollarSign className="w-3.5 h-3.5 text-emerald-500" /> ${detailData.job.salaryMin.toLocaleString()} - ${detailData.job.salaryMax.toLocaleString()}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Actions Block */}
-                  <div className="w-full md:w-auto flex flex-col gap-2 shrink-0">
-                    <div className="relative">
-                      <button 
-                        onClick={() => setShowTemplates(!showTemplates)}
-                        className="w-full bg-secondary text-foreground px-4 py-2.5 rounded-xl text-[10px] font-black flex items-center justify-between gap-4 border border-border hover:bg-secondary/80 transition-all uppercase tracking-widest"
-                      >
-                        <div className="flex items-center gap-1.5">
-                          <Layout className="w-4 h-4 opacity-50" />
-                          <span>Style: {selectedTemplate}</span>
-                        </div>
-                        <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showTemplates ? 'rotate-180' : ''}`} />
-                      </button>
-                      
-                      {showTemplates && (
-                        <div className="absolute top-full left-0 right-0 mt-2 bg-card border border-border rounded-xl p-1 z-50 shadow-xl animate-in fade-in zoom-in-95 duration-200">
-                          {["MODERN", "CLASSIC"].map(t => (
-                            <button 
-                              key={t}
-                              onClick={() => { setSelectedTemplate(t); setShowTemplates(false); }}
-                              className="w-full text-left px-3 py-2 hover:bg-secondary rounded-lg transition-all text-[9px] font-black uppercase tracking-widest"
-                            >
-                              {t} UI
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-
-                    {existingAppForStyle ? (
-                      <Link 
-                        href={`/dashboard/applications/${existingAppForStyle.id}/prep`}
-                        className="w-full bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-3 rounded-xl font-black text-xs flex items-center justify-center gap-2 shadow-md transition-all uppercase tracking-widest"
-                      >
-                        <CheckCircle className="w-4 h-4" />
-                        View Materials
-                      </Link>
-                    ) : (
-                      <button 
-                        onClick={handleOneClickTailor}
-                        disabled={!!isGeneratingOrPending}
-                        className="w-full bg-foreground hover:bg-foreground/90 text-background px-5 py-3 rounded-xl font-black text-xs flex items-center justify-center gap-2 shadow-md transition-all disabled:opacity-50 uppercase tracking-widest"
-                      >
-                        {isGeneratingOrPending ? (
-                          <>
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                            TAILORING...
-                          </>
-                        ) : (
-                          <>
-                            <Sparkles className="w-4 h-4 fill-current" />
-                            One-Click Tailor
-                          </>
-                        )}
-                      </button>
-                    )}
-
-                    {detailData.job.url && (
-                      <a 
-                        href={detailData.job.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="group w-full bg-secondary text-foreground px-5 py-2.5 rounded-xl font-black text-[10px] flex items-center justify-center gap-2 border border-border hover:border-foreground/30 transition-all uppercase tracking-widest"
-                      >
-                        Apply Now
-                        <ExternalLink className="w-3.5 h-3.5 opacity-55 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
-                      </a>
-                    )}
                   </div>
                 </div>
 
-                {/* AI Match Intelligence & Culture insights */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="bg-card border border-border rounded-2xl p-6 space-y-4 shadow-sm">
-                    <h3 className="text-[9px] font-black flex items-center gap-1.5 uppercase tracking-widest text-muted-foreground">
-                      <Target className="w-4 h-4 opacity-50" />
+                {/* Horizontal Tab Navigator for Split Screen Preview */}
+                <div className="sticky top-0 z-30 bg-card/95 backdrop-blur-md border-b border-border/40 py-3 flex flex-col items-center justify-center gap-2 px-4 shrink-0 -mx-6 md:-mx-8 -mt-px">
+                  {/* Primary Tab (Job Description) */}
+                  <button
+                    onClick={() => setActiveDetailSection("specifications-section")}
+                    className={`px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all shadow-sm shrink-0 ${
+                      activeDetailSection === "specifications-section"
+                        ? "bg-foreground text-background border-foreground shadow-md"
+                        : "bg-secondary/40 text-muted-foreground border-border/70 hover:bg-secondary/80 hover:text-foreground"
+                    }`}
+                  >
+                    Job Description
+                  </button>
+
+                  {/* Secondary Tabs (AI Insights & Culture Analysis) */}
+                  <div className="flex items-center justify-center gap-2 shrink-0">
+                    {[
+                      { id: "insights-section", label: "AI Insights" },
+                      { id: "culture-section", label: "Culture Analysis" }
+                    ].map((sec) => {
+                      const isActive = activeDetailSection === sec.id;
+                      return (
+                        <button
+                          key={sec.id}
+                          onClick={() => setActiveDetailSection(sec.id)}
+                          className={`px-3.5 py-2 rounded-lg text-[9px] font-black uppercase tracking-widest border transition-all shrink-0 ${
+                            isActive 
+                              ? "bg-foreground text-background border-foreground shadow-md animate-pulse" 
+                              : "bg-secondary/40 text-muted-foreground border-border/40 hover:bg-secondary/80 hover:text-foreground"
+                          }`}
+                        >
+                          {sec.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Conditional Panel Rendering */}
+                {activeDetailSection === "insights-section" && (
+                  <div className="bg-card border border-border rounded-2xl p-6 space-y-4 shadow-sm animate-in fade-in duration-300 mt-8">
+                    <h3 className="text-lg font-black flex items-center gap-3 uppercase tracking-tighter text-foreground">
+                      <Target className="w-5 h-5 text-primary" />
                       Match Intelligence
                     </h3>
                     <div className="text-foreground leading-relaxed text-xs font-semibold">
@@ -1000,62 +1192,89 @@ export default function JobsPage() {
                           <span>Generating Match Explanation...</span>
                         </div>
                       ) : detailData.job.relevanceExplanation ? (
-                        <p>{detailData.job.relevanceExplanation}</p>
+                        <div className="prose dark:prose-invert prose-xs max-w-none text-foreground/90 font-sans font-normal leading-relaxed">
+                          <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                            {detailData.job.relevanceExplanation}
+                          </ReactMarkdown>
+                        </div>
                       ) : (
                         <p className="text-muted-foreground italic">No score matching details resolved.</p>
                       )}
                     </div>
                   </div>
+                )}
 
-                  <div className="bg-card border border-border rounded-2xl p-6 space-y-4 shadow-sm">
-                    <h3 className="text-[9px] font-black flex items-center gap-1.5 uppercase tracking-widest text-muted-foreground">
-                      <Globe className="w-4 h-4 opacity-50" />
+                {activeDetailSection === "culture-section" && (
+                  <div className="bg-card border border-border rounded-2xl p-6 space-y-4 shadow-sm animate-in fade-in duration-300 mt-8">
+                    <h3 className="text-lg font-black flex items-center gap-3 uppercase tracking-tighter text-foreground">
+                      <Globe className="w-5 h-5 text-primary" />
                       Culture Alignment
                     </h3>
-                    <div className="text-foreground leading-relaxed text-xs font-semibold">
+                    <div className="text-foreground leading-relaxed text-xs font-semibold font-sans">
                       {cultureLoading ? (
                         <div className="flex items-center gap-2 opacity-60">
                           <Loader2 className="w-3.5 h-3.5 animate-spin" />
                           <span>Parsing Corporate Culture...</span>
                         </div>
                       ) : detailData.job.cultureAnalysis ? (
-                        <p className="truncate-lines-4" title={detailData.job.cultureAnalysis}>{detailData.job.cultureAnalysis}</p>
+                        <div className="prose dark:prose-invert prose-xs max-w-none text-foreground/90 font-sans font-normal leading-relaxed">
+                          <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                            {detailData.job.cultureAnalysis}
+                          </ReactMarkdown>
+                        </div>
                       ) : (
                         <p className="text-muted-foreground italic">No culture logs cached.</p>
                       )}
                     </div>
                   </div>
-                </div>
+                )}
 
-                {/* Matched Skills */}
-                {detailData.matchedSkills && detailData.matchedSkills.length > 0 && (
-                  <div className="bg-card border border-border rounded-2xl p-6 space-y-4 shadow-sm">
-                    <h3 className="text-[9px] font-black flex items-center gap-1.5 uppercase tracking-widest text-muted-foreground">
-                      <CheckCircle2 className="w-4 h-4 opacity-50" />
-                      Aligned Skills Overlap
-                    </h3>
-                    <div className="flex flex-wrap gap-2">
-                      {detailData.matchedSkills.map(skill => (
-                        <span key={skill} className="text-xs font-black uppercase tracking-wider bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 px-3 py-1.5 rounded-lg flex items-center gap-1">
-                          <CheckCircle2 className="w-3.5 h-3.5" />
-                          {skill}
-                        </span>
-                      ))}
+                {activeDetailSection === "specifications-section" && (
+                  <div className="space-y-6 mt-8">
+                    {/* Matched Skills */}
+                    {detailData.matchedSkills && detailData.matchedSkills.length > 0 && (
+                      <div className="bg-card border border-border rounded-2xl p-6 space-y-4 shadow-sm animate-in fade-in duration-300">
+                        <h3 className="text-[9px] font-black flex items-center gap-1.5 uppercase tracking-widest text-muted-foreground">
+                          <CheckCircle2 className="w-4 h-4 opacity-50" />
+                          Aligned Skills Overlap
+                        </h3>
+                        <div className="flex flex-wrap gap-2">
+                          {detailData.matchedSkills.map(skill => (
+                            <span key={skill} className="text-xs font-black uppercase tracking-wider bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 px-3 py-1.5 rounded-lg flex items-center gap-1">
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                              {skill}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Full job Description Box */}
+                    <div className="bg-card border border-border rounded-[2rem] p-6 md:p-8 space-y-4 shadow-sm animate-in fade-in duration-300">
+                      <h3 className="text-lg font-black flex items-center gap-3 uppercase tracking-tighter text-foreground border-b border-border/40 pb-3">
+                        <Briefcase className="w-5 h-5 text-primary" />
+                        Job Description
+                      </h3>
+                      <div className="prose dark:prose-invert prose-sm max-w-none text-foreground/90 leading-relaxed font-sans font-normal">
+                        <ReactMarkdown 
+                          remarkPlugins={[remarkGfm]}
+                          components={{
+                            p: ({ node, ...props }) => <p className="mb-5 leading-relaxed last:mb-0" {...props} />,
+                            h1: ({ node, ...props }) => <h1 className="text-sm md:text-base font-black mt-6 mb-3 tracking-tight" {...props} />,
+                            h2: ({ node, ...props }) => <h2 className="text-xs md:text-sm font-black mt-6 mb-3 tracking-tight" {...props} />,
+                            h3: ({ node, ...props }) => <h3 className="text-xs md:text-sm font-black mt-5 mb-2 tracking-tight" {...props} />,
+                            h4: ({ node, ...props }) => <h4 className="text-[11px] md:text-xs font-black mt-4 mb-2 tracking-tight" {...props} />,
+                            ul: ({ node, ...props }) => <ul className="list-disc pl-5 mb-5 space-y-1.5" {...props} />,
+                            ol: ({ node, ...props }) => <ol className="list-decimal pl-5 mb-5 space-y-1.5" {...props} />,
+                            li: ({ node, ...props }) => <li className="leading-relaxed" {...props} />
+                          }}
+                        >
+                          {detailData.job.description}
+                        </ReactMarkdown>
+                      </div>
                     </div>
                   </div>
                 )}
-
-                {/* Full job Description Box */}
-                <div className="bg-card border border-border rounded-[2rem] p-6 md:p-8 space-y-4 shadow-sm">
-                  <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground border-b border-border/40 pb-3">
-                    Vacancy Specifications
-                  </h3>
-                  <div className="prose dark:prose-invert prose-xs max-w-none text-foreground/80 leading-relaxed font-medium">
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                      {detailData.job.description}
-                    </ReactMarkdown>
-                  </div>
-                </div>
 
               </div>
             ) : (
@@ -1125,5 +1344,18 @@ export default function JobsPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function JobsPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex flex-col items-center justify-center py-40 gap-4 min-h-[400px]">
+        <Loader2 className="w-10 h-10 animate-spin text-primary" />
+        <p className="text-muted-foreground animate-pulse font-black tracking-widest uppercase text-[10px]">Scanning active channels...</p>
+      </div>
+    }>
+      <JobsContent />
+    </Suspense>
   );
 }
