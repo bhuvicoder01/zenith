@@ -5,14 +5,14 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { 
   Heart, Trash2, Link2, FileText, Image as ImageIcon, Loader2, 
-  ExternalLink, MessageSquare, Edit2, Eye, Share2, CornerDownRight, Send, Pause, Play, Volume2, VolumeX, Minimize, Maximize, X
+  ExternalLink, MessageSquare, Edit2, Eye, Share2, CornerDownRight, Send, Pause, Play, Volume2, VolumeX, Minimize, Maximize, X, Video, Paperclip
 } from "lucide-react";
 import useAuthStore from "@/store/useAuthStore";
 import api, { BACKEND_URL } from "@/lib/api";
 import { toast } from "sonner";
 import MentionInput from "./MentionInput";
 import GifStickerPicker from "./GifStickerPicker";
-import { ClickableMedia } from "./ImageLightbox";
+import { ClickableMedia, ImageLightbox } from "./ImageLightbox";
 
 const REACTION_EMOJIS = ["👍", "❤️", "👏", "💡", "😆", "🤝"];
 
@@ -41,6 +41,7 @@ export interface Post {
   content?: string;
   mediaUrls?: string[];
   pdfUrl?: string;
+  pdfName?: string;
   videoUrl?: string;
   linkUrl?: string;
   createdAt: string;
@@ -75,6 +76,10 @@ export default function PostCard({
   const [comments, setComments] = useState<Comment[]>(post.comments || []);
   const [postContent, setPostContent] = useState(post.content || "");
   const [postLinkUrl, setPostLinkUrl] = useState(post.linkUrl || "");
+  const [postMediaUrls, setPostMediaUrls] = useState<string[]>(post.mediaUrls || []);
+  const [postPdfUrl, setPostPdfUrl] = useState(post.pdfUrl || "");
+  const [postPdfName, setPostPdfName] = useState(post.pdfName || "");
+  const [postVideoUrl, setPostVideoUrl] = useState(post.videoUrl || "");
   const [reactions, setReactions] = useState<Record<string, string>>(post.reactions || {});
 
   // UI States
@@ -82,7 +87,72 @@ export default function PostCard({
   const [isEditing, setIsEditing] = useState(false);
   const [editContent, setEditContent] = useState(post.content || "");
   const [editLinkUrl, setEditLinkUrl] = useState(post.linkUrl || "");
+  const [editPdfName, setEditPdfName] = useState(post.pdfName || "");
+  const [editMediaFile, setEditMediaFile] = useState<File | null>(null);
+  const [editPdfFile, setEditPdfFile] = useState<File | null>(null);
+  const [editVideoFile, setEditVideoFile] = useState<File | null>(null);
+  const [editMediaPreview, setEditMediaPreview] = useState<string | null>(null);
+  const [editPdfPreview, setEditPdfPreview] = useState<string | null>(null);
+  const [editVideoPreview, setEditVideoPreview] = useState<string | null>(null);
+  const [deleteMedia, setDeleteMedia] = useState(false);
+  const [deletePdf, setDeletePdf] = useState(false);
+  const [deleteVideo, setDeleteVideo] = useState(false);
   const [savingEdit, setSavingEdit] = useState(false);
+
+  const startEditing = () => {
+    setEditContent(postContent);
+    setEditLinkUrl(postLinkUrl);
+    setEditPdfName(postPdfName);
+    setEditMediaFile(null);
+    setEditPdfFile(null);
+    setEditVideoFile(null);
+    setEditMediaPreview(postMediaUrls[0] || null);
+    setEditPdfPreview(postPdfUrl || null);
+    setEditVideoPreview(postVideoUrl || null);
+    setDeleteMedia(false);
+    setDeletePdf(false);
+    setDeleteVideo(false);
+    setIsEditing(true);
+  };
+
+  const handleEditMediaChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (!file.type.startsWith("image/")) {
+        toast.error("File must be an image");
+        return;
+      }
+      setEditMediaFile(file);
+      setEditMediaPreview(URL.createObjectURL(file));
+      setDeleteMedia(false);
+    }
+  };
+
+  const handleEditPdfChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.type !== "application/pdf") {
+        toast.error("File must be a PDF document");
+        return;
+      }
+      setEditPdfFile(file);
+      setEditPdfPreview(URL.createObjectURL(file));
+      setDeletePdf(false);
+    }
+  };
+
+  const handleEditVideoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (!file.type.startsWith("video/")) {
+        toast.error("File must be a video");
+        return;
+      }
+      setEditVideoFile(file);
+      setEditVideoPreview(URL.createObjectURL(file));
+      setDeleteVideo(false);
+    }
+  };
   const [showReactions, setShowReactions] = useState(false);
 
   // Comments / Replies States
@@ -99,6 +169,7 @@ export default function PostCard({
 
   // Reacting Users Modal States
   const [showReactingUsersModal, setShowReactingUsersModal] = useState(false);
+  const [pdfLightboxOpen, setPdfLightboxOpen] = useState(false);
   const [reactingUsers, setReactingUsers] = useState<any[]>([]);
   const [loadingReactingUsers, setLoadingReactingUsers] = useState(false);
 
@@ -109,6 +180,10 @@ export default function PostCard({
     setComments(post.comments || []);
     setPostContent(post.content || "");
     setPostLinkUrl(post.linkUrl || "");
+    setPostMediaUrls(post.mediaUrls || []);
+    setPostPdfUrl(post.pdfUrl || "");
+    setPostPdfName(post.pdfName || "");
+    setPostVideoUrl(post.videoUrl || "");
     setReactions(post.reactions || {});
   }, [post]);
 
@@ -117,6 +192,10 @@ export default function PostCard({
   const isLongPressRef = useRef<boolean>(false);
   const touchStartPosRef = useRef<{ x: number; y: number } | null>(null);
   const reactionContainerRef = useRef<HTMLDivElement>(null);
+
+  const editMediaInputRef = useRef<HTMLInputElement>(null);
+  const editPdfInputRef = useRef<HTMLInputElement>(null);
+  const editVideoInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     return () => {
@@ -321,13 +400,37 @@ export default function PostCard({
   const handleSaveEdit = async () => {
     if (!editContent.trim()) return;
     setSavingEdit(true);
+    const formData = new FormData();
+    formData.append("content", editContent);
+    formData.append("linkUrl", editLinkUrl);
+    formData.append("pdfName", editPdfName);
+
+    if (editMediaFile) {
+      formData.append("media", editMediaFile);
+    }
+    if (editPdfFile) {
+      formData.append("pdf", editPdfFile);
+    }
+    if (editVideoFile) {
+      formData.append("video", editVideoFile);
+    }
+
+    formData.append("deleteMedia", deleteMedia ? "true" : "false");
+    formData.append("deletePdf", deletePdf ? "true" : "false");
+    formData.append("deleteVideo", deleteVideo ? "true" : "false");
+
     try {
-      const res = await api.put(`/posts/${post.id}`, {
-        content: editContent,
-        linkUrl: editLinkUrl
+      const res = await api.put(`/posts/${post.id}`, formData, {
+        headers: {
+          "Content-Type": "multipart/form-data"
+        }
       });
       setPostContent(res.data.content || editContent);
       setPostLinkUrl(res.data.linkUrl || editLinkUrl);
+      setPostMediaUrls(res.data.mediaUrls || []);
+      setPostPdfUrl(res.data.pdfUrl || "");
+      setPostPdfName(res.data.pdfName || "");
+      setPostVideoUrl(res.data.videoUrl || "");
       setIsEditing(false);
       toast.success("Broadcast update saved");
     } catch (err) {
@@ -596,11 +699,7 @@ export default function PostCard({
             <div className="flex items-center gap-1.5">
               {user?.id === post.userId && (
                 <button 
-                  onClick={() => {
-                    setEditContent(postContent);
-                    setEditLinkUrl(postLinkUrl);
-                    setIsEditing(true);
-                  }}
+                  onClick={startEditing}
                   className="p-1 text-muted-foreground hover:text-primary transition-colors"
                   title="Edit Post"
                 >
@@ -621,7 +720,7 @@ export default function PostCard({
 
       {/* Editing State or View Mode */}
       {isEditing ? (
-        <div className="space-y-3 p-4 bg-secondary/15 rounded-2xl border border-border/60">
+        <div className="space-y-4 p-4 bg-secondary/15 rounded-[2rem] border border-border/60">
           <MentionInput
             placeholder="Edit your broadcast update..."
             value={editContent}
@@ -629,6 +728,75 @@ export default function PostCard({
             rows={3}
             className="w-full bg-transparent border-0 focus:ring-0 text-sm focus:outline-none text-foreground font-medium resize-none placeholder:text-muted-foreground/60"
           />
+
+          {/* Edit media previews */}
+          <div className="space-y-3">
+            {editMediaPreview && !deleteMedia && (
+              <div className="relative rounded-2xl overflow-hidden border border-border bg-secondary/20 max-w-[200px]">
+                <img src={editMediaPreview} alt="Image attachment" className="w-full h-auto max-h-[160px] object-cover" />
+                <button
+                  type="button"
+                  onClick={() => { setDeleteMedia(true); setEditMediaFile(null); setEditMediaPreview(null); }}
+                  className="absolute top-2 right-2 p-1.5 bg-black/60 hover:bg-black/80 text-white rounded-full transition-colors"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            )}
+
+            {editVideoPreview && !deleteVideo && (
+              <div className="relative rounded-2xl overflow-hidden border border-border bg-black max-w-[240px] p-2 flex items-center gap-2">
+                <Video className="w-6 h-6 text-primary" />
+                <span className="text-xs truncate max-w-[120px] font-bold text-foreground">
+                  {editVideoFile ? editVideoFile.name : "Attached Video"}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => { setDeleteVideo(true); setEditVideoFile(null); setEditVideoPreview(null); }}
+                  className="ml-auto p-1.5 text-muted-foreground hover:text-foreground rounded-lg transition-colors"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            )}
+
+            {editPdfPreview && !deletePdf && (
+              <div className="border border-border rounded-2xl overflow-hidden bg-secondary/20">
+                <div className="flex items-center justify-between px-3.5 py-2 bg-secondary/40 border-b border-border/40">
+                  <div className="flex items-center gap-2 text-xs min-w-0">
+                    <FileText className="w-5 h-5 text-red-500 shrink-0" />
+                    <span className="font-bold text-foreground truncate max-w-[150px]">
+                      {editPdfFile ? editPdfFile.name : "Attached PDF"}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => { setDeletePdf(true); setEditPdfFile(null); setEditPdfPreview(null); setEditPdfName(""); }}
+                    className="p-1 text-muted-foreground hover:text-foreground rounded-lg transition-colors"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+                <div className="px-3.5 py-2 bg-secondary/10 border-b border-border/40 flex items-center gap-2">
+                  <span className="text-[9px] font-black uppercase text-muted-foreground tracking-wider shrink-0">Headline (Optional):</span>
+                  <input
+                    type="text"
+                    placeholder="e.g. My Resume / Project Case Study"
+                    value={editPdfName}
+                    onChange={(e) => setEditPdfName(e.target.value)}
+                    className="flex-1 bg-transparent text-xs text-foreground placeholder-muted-foreground/50 focus:outline-none font-bold"
+                  />
+                </div>
+                <iframe
+                  src={editPdfPreview + "#view=FitH&toolbar=0&navpanes=0"}
+                  className="w-full h-[200px] border-0"
+                  title="Edit PDF Preview"
+                />
+              </div>
+            )}
+          </div>
+
+          {/* Edit linkUrl */}
           <div className="relative">
             <Link2 className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <input
@@ -639,27 +807,83 @@ export default function PostCard({
               className="w-full bg-secondary/30 border border-border rounded-xl pl-9 pr-4 py-2.5 text-xs focus:outline-none focus:ring-1 focus:ring-primary/20 text-foreground font-bold"
             />
           </div>
-          <div className="flex justify-end gap-2 text-xs">
+
+          {/* Media Attachments Toolbar inside edit state */}
+          <div className="flex items-center gap-2 pt-2 border-t border-border/40">
+            <input
+              type="file"
+              ref={editMediaInputRef}
+              onChange={handleEditMediaChange}
+              accept="image/*"
+              className="hidden"
+            />
+            <input
+              type="file"
+              ref={editPdfInputRef}
+              onChange={handleEditPdfChange}
+              accept="application/pdf"
+              className="hidden"
+            />
+            <input
+              type="file"
+              ref={editVideoInputRef}
+              onChange={handleEditVideoChange}
+              accept="video/*"
+              className="hidden"
+            />
+
             <button
               type="button"
-              onClick={() => setIsEditing(false)}
-              className="px-3.5 py-2 bg-secondary border border-border text-foreground rounded-xl font-bold hover:bg-secondary/80"
+              onClick={() => editMediaInputRef.current?.click()}
+              className="p-2 hover:bg-secondary rounded-xl text-muted-foreground hover:text-foreground transition-all flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider border border-border/40 bg-secondary/10"
+              title="Add Image"
             >
-              Cancel
+              <ImageIcon className="w-4 h-4 text-emerald-500" />
+              <span>Image</span>
             </button>
+
             <button
               type="button"
-              onClick={handleSaveEdit}
-              disabled={savingEdit || !editContent.trim()}
-              className="px-4 py-2 bg-foreground text-background rounded-xl font-black uppercase tracking-wider hover:opacity-90 disabled:opacity-50 flex items-center gap-1.5"
+              onClick={() => editPdfInputRef.current?.click()}
+              className="p-2 hover:bg-secondary rounded-xl text-muted-foreground hover:text-foreground transition-all flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider border border-border/40 bg-secondary/10"
+              title="Add PDF"
             >
-              {savingEdit ? (
-                <>
-                  <Loader2 className="w-3 h-3 animate-spin" />
-                  Saving...
-                </>
-              ) : "Save"}
+              <FileText className="w-4 h-4 text-red-500" />
+              <span>PDF</span>
             </button>
+
+            <button
+              type="button"
+              onClick={() => editVideoInputRef.current?.click()}
+              className="p-2 hover:bg-secondary rounded-xl text-muted-foreground hover:text-foreground transition-all flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider border border-border/40 bg-secondary/10"
+              title="Add Video"
+            >
+              <Video className="w-4 h-4 text-indigo-500" />
+              <span>Video</span>
+            </button>
+
+            <div className="flex ml-auto gap-2">
+              <button
+                type="button"
+                onClick={() => setIsEditing(false)}
+                className="px-3.5 py-2 bg-secondary border border-border text-foreground rounded-xl font-bold text-xs hover:bg-secondary/80"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveEdit}
+                disabled={savingEdit || !editContent.trim()}
+                className="px-4 py-2 bg-foreground text-background rounded-xl font-black text-xs uppercase tracking-wider hover:opacity-90 disabled:opacity-50 flex items-center gap-1.5"
+              >
+                {savingEdit ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    Saving...
+                  </>
+                ) : "Save"}
+              </button>
+            </div>
           </div>
         </div>
       ) : (
@@ -672,10 +896,10 @@ export default function PostCard({
           )}
 
           {/* Image Attachment */}
-          {post.mediaUrls && post.mediaUrls.length > 0 && (
+          {postMediaUrls && postMediaUrls.length > 0 && (
             <div className="-mx-6 w-[calc(100%+3rem)] overflow-hidden border-y border-border/60 bg-secondary/20 rounded-none relative">
               <ClickableMedia 
-                src={post.mediaUrls[0]} 
+                src={postMediaUrls[0]} 
                 alt="Post attachment" 
                 type="image"
                 containerClassName="w-full max-w-none rounded-none border-none bg-transparent shadow-none mt-0"
@@ -685,34 +909,63 @@ export default function PostCard({
           )}
 
           {/* Video Attachment */}
-          {post.videoUrl && (
+          {postVideoUrl && (
             <div className="-mx-6 w-[calc(100%+3rem)] overflow-hidden border-y border-border/60 bg-black relative rounded-none">
               <AutopauseVideo 
-                src={post.videoUrl} 
+                src={postVideoUrl} 
                 className="w-full h-auto max-h-96 object-contain"
               />
             </div>
           )}
 
           {/* PDF Attachment */}
-          {post.pdfUrl && (
-            <div className="flex items-center justify-between p-4 bg-secondary/20 border border-border rounded-2xl">
-              <div className="flex items-center gap-3 text-xs">
-                <FileText className="w-8 h-8 text-red-500 flex-shrink-0" />
-                <div>
-                  <p className="font-bold text-foreground truncate max-w-[250px]">Project Document</p>
-                  <p className="text-[10px] text-muted-foreground font-semibold">Embedded PDF Attachment</p>
+          {postPdfUrl && (
+            <div className="border border-border rounded-2xl overflow-hidden bg-secondary/10">
+              <div className="flex items-center justify-between px-4 py-2.5 bg-secondary/30 border-b border-border/40">
+                <div className="flex items-center gap-3 text-xs min-w-0">
+                  <FileText className="w-6 h-6 text-red-500 flex-shrink-0" />
+                  <div className="min-w-0">
+                    {postPdfName && (
+                      <p className="font-bold text-foreground truncate max-w-[250px]">{postPdfName}</p>
+                    )}
+                    <p className="text-[10px] text-muted-foreground font-semibold">Embedded PDF Attachment</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setPdfLightboxOpen(true)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-secondary hover:bg-secondary/80 border border-border rounded-xl text-[10px] font-black uppercase tracking-wider transition-colors text-foreground"
+                    title="Full Screen Preview"
+                  >
+                    <span className="hidden sm:inline">Full Screen</span> <Maximize className="w-3.5 h-3.5" />
+                  </button>
+                  <a 
+                    href={postPdfUrl} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-secondary hover:bg-secondary/80 border border-border rounded-xl text-[10px] font-black uppercase tracking-wider transition-colors text-foreground"
+                    title="Open Document"
+                  >
+                    <span className="hidden sm:inline">Open</span> <ExternalLink className="w-3.5 h-3.5" />
+                  </a>
                 </div>
               </div>
-              <a 
-                href={post.pdfUrl} 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-secondary hover:bg-secondary/80 border border-border rounded-xl text-[10px] font-black uppercase tracking-wider transition-colors text-foreground"
-              >
-                View <ExternalLink className="w-3.5 h-3.5" />
-              </a>
+              <iframe
+                src={postPdfUrl + "#view=FitH&toolbar=0&navpanes=0"}
+                className="w-full h-[400px] border-0"
+                title="PDF Document"
+              />
             </div>
+          )}
+
+          {pdfLightboxOpen && (
+            <ImageLightbox
+              src={postPdfUrl}
+              alt={postPdfName || "PDF Document"}
+              type="pdf"
+              onClose={() => setPdfLightboxOpen(false)}
+            />
           )}
 
           {/* Link Card Attachment */}

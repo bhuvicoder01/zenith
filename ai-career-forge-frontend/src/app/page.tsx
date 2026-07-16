@@ -42,6 +42,7 @@ export default function HomeFeed() {
   const [linkUrl, setLinkUrl] = useState("");
   const [mediaFile, setMediaFile] = useState<File | null>(null);
   const [pdfFile, setPdfFile] = useState<File | null>(null);
+  const [pdfHeadline, setPdfHeadline] = useState("");
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [showLinkInput, setShowLinkInput] = useState(false);
   const [publishing, setPublishing] = useState(false);
@@ -204,6 +205,9 @@ export default function HomeFeed() {
     }
     if (pdfFile) {
       formData.append("pdf", pdfFile);
+      if (pdfHeadline.trim()) {
+        formData.append("pdfName", pdfHeadline.trim());
+      }
     }
 
     try {
@@ -226,6 +230,7 @@ export default function HomeFeed() {
       setLinkUrl("");
       setMediaFile(null);
       setPdfFile(null);
+      setPdfHeadline("");
       setVideoFile(null);
       setMediaPreview(null);
       setVideoPreview(null);
@@ -468,21 +473,38 @@ export default function HomeFeed() {
                     )}
 
                     {pdfFile && (
-                      <div className="flex items-center justify-between p-3.5 bg-secondary/40 border border-border rounded-2xl">
-                        <div className="flex items-center gap-3 text-xs">
-                          <FileText className="w-6 h-6 text-red-500" />
-                          <div>
-                            <p className="font-bold text-foreground truncate max-w-[200px]">{pdfFile.name}</p>
-                            <p className="text-[10px] text-muted-foreground font-semibold">{(pdfFile.size / 1024).toFixed(1)} KB • PDF Document</p>
+                      <div className="border border-border rounded-2xl overflow-hidden bg-secondary/20">
+                        <div className="flex items-center justify-between px-3.5 py-2.5 bg-secondary/40 border-b border-border/40">
+                          <div className="flex items-center gap-2.5 text-xs min-w-0">
+                            <FileText className="w-5 h-5 text-red-500 shrink-0" />
+                            <div className="min-w-0">
+                              <p className="font-bold text-foreground truncate max-w-[200px]">{pdfFile.name}</p>
+                              <p className="text-[10px] text-muted-foreground font-semibold">{(pdfFile.size / 1024).toFixed(1)} KB • PDF Document</p>
+                            </div>
                           </div>
+                          <button 
+                            type="button" 
+                            onClick={() => { setPdfFile(null); setPdfHeadline(""); }}
+                            className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-secondary rounded-lg transition-colors"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
                         </div>
-                        <button 
-                          type="button" 
-                          onClick={() => setPdfFile(null)}
-                          className="p-1 text-muted-foreground hover:text-foreground"
-                        >
-                          <Trash2 className="w-4.5 h-4.5" />
-                        </button>
+                        <div className="px-3.5 py-2 bg-secondary/10 border-b border-border/40 flex items-center gap-2">
+                          <span className="text-[9px] font-black uppercase text-muted-foreground tracking-wider shrink-0">Headline (Optional):</span>
+                          <input 
+                            type="text"
+                            placeholder="e.g. My Resume / Project Case Study"
+                            value={pdfHeadline}
+                            onChange={(e) => setPdfHeadline(e.target.value)}
+                            className="flex-1 bg-transparent text-xs text-foreground placeholder-muted-foreground/50 focus:outline-none font-bold"
+                          />
+                        </div>
+                        <iframe
+                          src={URL.createObjectURL(pdfFile) + "#view=FitH&toolbar=0&navpanes=0"}
+                          className="w-full h-[320px] border-0"
+                          title="PDF Preview"
+                        />
                       </div>
                     )}
 

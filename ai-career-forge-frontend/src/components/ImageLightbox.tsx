@@ -1,15 +1,16 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { X, ZoomIn, Download } from "lucide-react";
+import { X, ZoomIn, Download, ExternalLink, FileText } from "lucide-react";
 
 interface ImageLightboxProps {
   src: string;
   alt: string;
+  type?: "image" | "pdf";
   onClose: () => void;
 }
 
-export function ImageLightbox({ src, alt, onClose }: ImageLightboxProps) {
+export function ImageLightbox({ src, alt, type = "image", onClose }: ImageLightboxProps) {
   const [scale, setScale] = useState(1);
   const [loaded, setLoaded] = useState(false);
 
@@ -17,16 +18,18 @@ export function ImageLightbox({ src, alt, onClose }: ImageLightboxProps) {
     document.body.style.overflow = "hidden";
     const handleKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
-      if (e.key === "+" || e.key === "=") setScale(s => Math.min(s + 0.25, 3));
-      if (e.key === "-") setScale(s => Math.max(s - 0.25, 0.5));
-      if (e.key === "0") setScale(1);
+      if (type === "image") {
+        if (e.key === "+" || e.key === "=") setScale(s => Math.min(s + 0.25, 3));
+        if (e.key === "-") setScale(s => Math.max(s - 0.25, 0.5));
+        if (e.key === "0") setScale(1);
+      }
     };
     window.addEventListener("keydown", handleKey);
     return () => {
       document.body.style.overflow = "";
       window.removeEventListener("keydown", handleKey);
     };
-  }, [onClose]);
+  }, [onClose, type]);
 
   const handleOverlayClick = useCallback(
     (e: React.MouseEvent) => {
@@ -38,81 +41,140 @@ export function ImageLightbox({ src, alt, onClose }: ImageLightboxProps) {
   return (
     <div
       onClick={handleOverlayClick}
-      className="fixed inset-0 z-[200] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in fade-in duration-200"
+      className="fixed inset-0 z-[9000] flex flex-col items-center justify-start bg-black/95 backdrop-blur-md animate-in fade-in duration-200"
       style={{ cursor: "zoom-out" }}
     >
-      {/* Controls */}
-      <div className="absolute top-4 right-4 flex items-center gap-2 z-10">
-        <button
-          onClick={() => setScale(s => Math.min(s + 0.25, 3))}
-          className="p-2.5 bg-white/10 hover:bg-white/20 text-white rounded-full backdrop-blur-sm transition-colors border border-white/10"
-          title="Zoom In (+)"
-        >
-          <ZoomIn className="w-4 h-4" />
-        </button>
-        <a
-          href={src}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="p-2.5 bg-white/10 hover:bg-white/20 text-white rounded-full backdrop-blur-sm transition-colors border border-white/10"
-          title="Open Original"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <Download className="w-4 h-4" />
-        </a>
-        <button
-          onClick={onClose}
-          className="p-2.5 bg-white/10 hover:bg-white/20 text-white rounded-full backdrop-blur-sm transition-colors border border-white/10"
-          title="Close (Esc)"
-        >
-          <X className="w-4 h-4" />
-        </button>
+      {/* Header Bar */}
+      <div className="w-full flex items-center justify-between p-4 bg-black/40 border-b border-white/10 backdrop-blur-sm z-30 shrink-0">
+        <div className="text-white text-xs font-bold truncate max-w-[60%] select-none">
+          {alt && alt !== "GIF" && alt !== "Sticker" ? alt : (type === "pdf" ? "PDF Document" : "Image Preview")}
+        </div>
+        <div className="flex items-center gap-3">
+          {type === "image" ? (
+            <>
+              <button
+                onClick={() => setScale(s => Math.min(s + 0.25, 3))}
+                className="p-2 bg-white/10 hover:bg-white/20 text-white rounded-lg transition-colors border border-white/10"
+                title="Zoom In"
+              >
+                <ZoomIn className="w-4 h-4" />
+              </button>
+              <a
+                href={src}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="p-2 bg-white/10 hover:bg-white/20 text-white rounded-lg transition-colors border border-white/10"
+                title="Open Original"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <Download className="w-4 h-4" />
+              </a>
+            </>
+          ) : (
+            <a
+              href={src}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="p-2 bg-white/10 hover:bg-white/20 text-white rounded-lg transition-colors border border-white/10 flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider"
+              title="Open/Download PDF"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Open Document</span>
+            </a>
+          )}
+          <button
+            onClick={onClose}
+            className="p-2 bg-white/15 hover:bg-white/25 text-white rounded-lg transition-colors border border-white/15"
+            title="Close"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
       </div>
 
-      {/* Zoom level indicator */}
-      {scale !== 1 && (
-        <div className="absolute top-4 left-4 bg-white/10 backdrop-blur-sm text-white text-[10px] font-bold uppercase tracking-widest px-3 py-1.5 rounded-full border border-white/10">
-          {Math.round(scale * 100)}%
-        </div>
-      )}
+      {/* Main Content Area */}
+      <div className="flex-1 w-full flex items-center justify-center p-4 overflow-auto relative z-10">
+        {type === "image" ? (
+          <>
+            {/* Zoom level indicator */}
+            {scale !== 1 && (
+              <div className="absolute top-4 left-4 bg-white/10 backdrop-blur-sm text-white text-[10px] font-bold uppercase tracking-widest px-3 py-1.5 rounded-full border border-white/10 z-20">
+                {Math.round(scale * 100)}%
+              </div>
+            )}
 
-      {/* Image */}
-      <div className="max-w-[90vw] max-h-[90vh] overflow-auto no-scrollbar flex items-center justify-center">
-        {!loaded && (
-          <div className="w-16 h-16 rounded-full border-2 border-white/20 border-t-white animate-spin" />
+            {/* Image Wrapper */}
+            <div className="max-w-[90vw] max-h-[80vh] overflow-auto -webkit-overflow-scrolling-touch no-scrollbar flex items-center justify-center">
+              {!loaded && (
+                <div className="w-16 h-16 rounded-full border-2 border-white/20 border-t-white animate-spin" />
+              )}
+              <img
+                src={src}
+                alt={alt}
+                onLoad={() => setLoaded(true)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setScale(s => (s >= 2 ? 1 : s + 0.5));
+                }}
+                className="transition-transform duration-300 ease-out rounded-2xl shadow-2xl"
+                style={{
+                  transform: `scale(${scale})`,
+                  cursor: scale >= 2 ? "zoom-out" : "zoom-in",
+                  maxWidth: "85vw",
+                  maxHeight: "75vh",
+                  objectFit: "contain",
+                  display: loaded ? "block" : "none",
+                }}
+              />
+            </div>
+
+            {/* Keyboard shortcut hint */}
+            <div className="absolute bottom-4 right-4 text-[9px] text-white/30 font-mono space-x-3 hidden md:flex z-20">
+              <span>ESC close</span>
+              <span>+/- zoom</span>
+              <span>0 reset</span>
+            </div>
+          </>
+        ) : (
+          /* PDF Full Screen View wrapper */
+          <div 
+            className="w-full max-w-[95vw] md:max-w-[85vw] h-full max-h-[80vh] rounded-2xl overflow-auto -webkit-overflow-scrolling-touch border border-white/10 shadow-2xl bg-zinc-900 z-10 flex flex-col items-center justify-center p-6 text-center"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Desktop View: Render iframe */}
+            <div className="hidden md:block w-full h-full">
+              <iframe
+                src={src + "#view=FitH"}
+                className="w-full h-full border-0 bg-zinc-900"
+                title="PDF Document"
+              />
+            </div>
+
+            {/* Mobile View: Render gorgeous mobile preview card */}
+            <div className="flex md:hidden flex-col items-center justify-center space-y-6 max-w-sm">
+              <div className="w-20 h-20 rounded-3xl bg-red-500/10 flex items-center justify-center border border-red-500/20">
+                <FileText className="w-10 h-10 text-red-500" />
+              </div>
+              <div className="space-y-2">
+                <h3 className="text-white font-black text-sm uppercase tracking-wider">
+                  {alt || "PDF Document"}
+                </h3>
+                <p className="text-[11px] text-zinc-400 font-semibold leading-relaxed">
+                  Touch screen devices require native viewer access to navigate. Click below to view, zoom, and print the document in full resolution.
+                </p>
+              </div>
+              <a
+                href={src}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 px-6 py-3 bg-red-600 hover:bg-red-700 text-white font-black text-xs uppercase tracking-wider rounded-xl transition-all shadow-lg shadow-red-600/20"
+              >
+                <ExternalLink className="w-4 h-4" /> Open PDF Document
+              </a>
+            </div>
+          </div>
         )}
-        <img
-          src={src}
-          alt={alt}
-          onLoad={() => setLoaded(true)}
-          onClick={(e) => {
-            e.stopPropagation();
-            setScale(s => (s >= 2 ? 1 : s + 0.5));
-          }}
-          className="transition-transform duration-300 ease-out rounded-2xl shadow-2xl"
-          style={{
-            transform: `scale(${scale})`,
-            cursor: scale >= 2 ? "zoom-out" : "zoom-in",
-            maxWidth: "85vw",
-            maxHeight: "85vh",
-            objectFit: "contain",
-            display: loaded ? "block" : "none",
-          }}
-        />
-      </div>
-
-      {/* Caption */}
-      {alt && alt !== "GIF" && alt !== "Sticker" && (
-        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-black/60 backdrop-blur-sm text-white text-xs font-semibold px-4 py-2 rounded-full border border-white/10 max-w-md truncate">
-          {alt}
-        </div>
-      )}
-
-      {/* Keyboard shortcut hint */}
-      <div className="absolute bottom-6 right-4 text-[9px] text-white/30 font-mono space-x-3 hidden md:flex">
-        <span>ESC close</span>
-        <span>+/- zoom</span>
-        <span>0 reset</span>
       </div>
     </div>
   );

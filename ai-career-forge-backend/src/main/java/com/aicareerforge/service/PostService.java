@@ -53,7 +53,7 @@ public class PostService {
         return posts;
     }
 
-    public Post createPost(String userId, String content, String linkUrl, byte[] mediaBytes, String mediaFilename, byte[] pdfBytes, String pdfFilename, MultipartFile videoFile) {
+    public Post createPost(String userId, String content, String linkUrl, byte[] mediaBytes, String mediaFilename, byte[] pdfBytes, String pdfFilename, String pdfName, MultipartFile videoFile) {
         if ((content == null || content.trim().isEmpty()) && mediaBytes == null && pdfBytes == null && (linkUrl == null || linkUrl.trim().isEmpty()) && (videoFile == null || videoFile.isEmpty())) {
             throw new IllegalArgumentException("Post cannot be completely empty");
         }
@@ -114,6 +114,7 @@ public class PostService {
                 String pdfKey = s3Service.uploadFile(pdfBytes, pdfFilename, userId, "posts/documents");
                 String pdfUrl = s3Service.getPermanentUrl(pdfKey);
                 postBuilder.pdfUrl(pdfUrl);
+                postBuilder.pdfName(pdfName != null && !pdfName.trim().isEmpty() ? pdfName.trim() : null);
                 log.info("Uploaded post PDF for user {}: {}", userId, pdfUrl);
             } catch (Exception e) {
                 log.error("Failed to upload post PDF for user {}: {}", userId, e.getMessage());
@@ -345,7 +346,21 @@ public class PostService {
         return post;
     }
 
-    public Post updatePost(String postId, String userId, String content, String linkUrl) {
+    public Post updatePost(
+            String postId, 
+            String userId, 
+            String content, 
+            String linkUrl,
+            String pdfName,
+            byte[] mediaBytes,
+            String mediaFilename,
+            byte[] pdfBytes,
+            String pdfFilename,
+            MultipartFile videoFile,
+            boolean deleteMedia,
+            boolean deletePdf,
+            boolean deleteVideo) {
+        
         Post post = postRepository.findById(postId)
                 .orElseThrow(() -> new IllegalArgumentException("Post not found"));
 
@@ -355,6 +370,64 @@ public class PostService {
 
         post.setContent(content);
         post.setLinkUrl(linkUrl != null ? linkUrl.trim() : null);
+
+        // Delete old media if requested
+        if (deleteMedia) {
+            post.setMediaUrls(new ArrayList<>());
+        }
+        // Upload new media if provided
+        if (mediaBytes != null && mediaBytes.length > 0 && mediaFilename != null) {
+            try {
+                String mediaKey = s3Service.uploadFile(mediaBytes, mediaFilename, userId, "posts/media");
+                String mediaUrl = s3Service.getPermanentUrl(mediaKey);
+                java.util.List<String> mediaUrls = new ArrayList<>();
+                mediaUrls.add(mediaUrl);
+                post.setMediaUrls(mediaUrls);
+                log.info("Updated post media for user {}: {}", userId, mediaUrl);
+            } catch (Exception e) {
+                log.error("Failed to upload updated post media: {}", e.getMessage());
+            }
+        }
+
+        // Delete old PDF if requested
+        if (deletePdf) {
+            post.setPdfUrl(null);
+            post.setPdfName(null);
+        }
+        // Upload new PDF if provided
+        if (pdfBytes != null && pdfBytes.length > 0 && pdfFilename != null) {
+            try {
+                String pdfKey = s3Service.uploadFile(pdfBytes, pdfFilename, userId, "posts/documents");
+                String pdfUrl = s3Service.getPermanentUrl(pdfKey);
+                post.setPdfUrl(pdfUrl);
+                log.info("Updated post PDF for user {}: {}", userId, pdfUrl);
+            } catch (Exception e) {
+                log.error("Failed to upload updated post PDF: {}", e.getMessage());
+            }
+        }
+        // Update PDF headline if PDF exists or is being uploaded
+        if (post.getPdfUrl() != null) {
+            post.setPdfName(pdfName != null && !pdfName.trim().isEmpty() ? pdfName.trim() : null);
+        } else {
+            post.setPdfName(null);
+        }
+
+        // Delete old video if requested
+        if (deleteVideo) {
+            post.setVideoUrl(null);
+        }
+        // Upload new video if provided
+        if (videoFile != null && !videoFile.isEmpty()) {
+            try {
+                String videoKey = s3Service.uploadFile(videoFile.getInputStream(), videoFile.getOriginalFilename(), userId, "posts/videos");
+                String videoUrl = s3Service.getPermanentUrl(videoKey);
+                post.setVideoUrl(videoUrl);
+                log.info("Updated post video for user {}: {}", userId, videoUrl);
+            } catch (Exception e) {
+                log.error("Failed to upload updated post video: {}", e.getMessage());
+            }
+        }
+
         Post saved = postRepository.save(post);
         hydratePostUrls(saved);
         return saved;

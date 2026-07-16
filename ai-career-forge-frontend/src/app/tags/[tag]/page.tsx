@@ -33,6 +33,7 @@ interface Post {
   content?: string;
   mediaUrls?: string[];
   pdfUrl?: string;
+  pdfName?: string;
   videoUrl?: string;
   linkUrl?: string;
   createdAt: string;

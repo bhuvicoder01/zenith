@@ -41,6 +41,7 @@ public class PostController {
             @AuthenticationPrincipal User user,
             @RequestParam(value = "content", required = false) String content,
             @RequestParam(value = "linkUrl", required = false) String linkUrl,
+            @RequestParam(value = "pdfName", required = false) String pdfName,
             @RequestParam(value = "media", required = false) MultipartFile mediaFile,
             @RequestParam(value = "pdf", required = false) MultipartFile pdfFile,
             @RequestParam(value = "video", required = false) MultipartFile videoFile) throws IOException {
@@ -51,7 +52,7 @@ public class PostController {
         byte[] pdfBytes = (pdfFile != null && !pdfFile.isEmpty()) ? pdfFile.getBytes() : null;
         String pdfFilename = (pdfFile != null && !pdfFile.isEmpty()) ? pdfFile.getOriginalFilename() : null;
 
-        Post post = postService.createPost(user.getId(), content, linkUrl, mediaBytes, mediaFilename, pdfBytes, pdfFilename, videoFile);
+        Post post = postService.createPost(user.getId(), content, linkUrl, mediaBytes, mediaFilename, pdfBytes, pdfFilename, pdfName, videoFile);
         return ResponseEntity.ok(post);
     }
 
@@ -80,22 +81,42 @@ public class PostController {
         return ResponseEntity.noContent().build();
     }
 
-    @PutMapping("/{id}")
+    @PutMapping(value = "/{id}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<Post> updatePost(
             @AuthenticationPrincipal User user,
             @PathVariable("id") String postId,
-            @RequestBody UpdatePostRequest request) {
-        Post post = postService.updatePost(postId, user.getId(), request.getContent(), request.getLinkUrl());
-        return ResponseEntity.ok(post);
-    }
+            @RequestParam(value = "content", required = false) String content,
+            @RequestParam(value = "linkUrl", required = false) String linkUrl,
+            @RequestParam(value = "pdfName", required = false) String pdfName,
+            @RequestParam(value = "media", required = false) MultipartFile mediaFile,
+            @RequestParam(value = "pdf", required = false) MultipartFile pdfFile,
+            @RequestParam(value = "video", required = false) MultipartFile videoFile,
+            @RequestParam(value = "deleteMedia", defaultValue = "false") boolean deleteMedia,
+            @RequestParam(value = "deletePdf", defaultValue = "false") boolean deletePdf,
+            @RequestParam(value = "deleteVideo", defaultValue = "false") boolean deleteVideo) throws IOException {
 
-    public static class UpdatePostRequest {
-        private String content;
-        private String linkUrl;
-        public String getContent() { return content; }
-        public void setContent(String content) { this.content = content; }
-        public String getLinkUrl() { return linkUrl; }
-        public void setLinkUrl(String linkUrl) { this.linkUrl = linkUrl; }
+        byte[] mediaBytes = (mediaFile != null && !mediaFile.isEmpty()) ? mediaFile.getBytes() : null;
+        String mediaFilename = (mediaFile != null && !mediaFile.isEmpty()) ? mediaFile.getOriginalFilename() : null;
+
+        byte[] pdfBytes = (pdfFile != null && !pdfFile.isEmpty()) ? pdfFile.getBytes() : null;
+        String pdfFilename = (pdfFile != null && !pdfFile.isEmpty()) ? pdfFile.getOriginalFilename() : null;
+
+        Post post = postService.updatePost(
+                postId, 
+                user.getId(), 
+                content, 
+                linkUrl, 
+                pdfName, 
+                mediaBytes, 
+                mediaFilename, 
+                pdfBytes, 
+                pdfFilename, 
+                videoFile, 
+                deleteMedia, 
+                deletePdf, 
+                deleteVideo
+        );
+        return ResponseEntity.ok(post);
     }
 
     @GetMapping("/{id}")
