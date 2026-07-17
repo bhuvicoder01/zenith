@@ -872,5 +872,31 @@ public class PostService {
         }
         return list;
     }
+
+    public List<String> getTrendingHashtags() {
+        Pageable pageable = PageRequest.of(0, 500, Sort.by(Sort.Direction.DESC, "createdAt"));
+        List<Post> recentPosts = postRepository.findAll(pageable).getContent();
+
+        java.util.Map<String, Integer> tagCounts = new java.util.HashMap<>();
+        java.util.regex.Pattern pattern = java.util.regex.Pattern.compile("#[a-zA-Z0-9_]+");
+
+        for (Post post : recentPosts) {
+            if (post.getContent() != null) {
+                java.util.regex.Matcher matcher = pattern.matcher(post.getContent());
+                java.util.Set<String> uniqueTagsInPost = new java.util.HashSet<>();
+                while (matcher.find()) {
+                    uniqueTagsInPost.add(matcher.group().toLowerCase());
+                }
+                for (String tag : uniqueTagsInPost) {
+                    tagCounts.put(tag, tagCounts.getOrDefault(tag, 0) + 1);
+                }
+            }
+        }
+
+        return tagCounts.entrySet().stream()
+                .sorted((entry1, entry2) -> entry2.getValue().compareTo(entry1.getValue()))
+                .map(java.util.Map.Entry::getKey)
+                .collect(Collectors.toList());
+    }
 }
 

@@ -78,6 +78,7 @@ public class SecurityConfig {
                                 AntPathRequestMatcher.antMatcher("/api/v1/jobs/public"),
                                 AntPathRequestMatcher.antMatcher(HttpMethod.GET, "/api/v1/hashtags"),
                                 AntPathRequestMatcher.antMatcher(HttpMethod.GET, "/api/v1/posts"),
+                                AntPathRequestMatcher.antMatcher(HttpMethod.GET, "/api/v1/posts/hashtags"),
                                 AntPathRequestMatcher.antMatcher(HttpMethod.GET, "/api/v1/posts/*"),
                                 AntPathRequestMatcher.antMatcher(HttpMethod.POST, "/api/v1/posts/*/view"),
                                 AntPathRequestMatcher.antMatcher("/ws/app"),

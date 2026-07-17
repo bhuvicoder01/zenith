@@ -181,6 +181,11 @@ public class PostController {
         return ResponseEntity.ok(postService.getReactingUsers(postId));
     }
 
+    @GetMapping("/hashtags")
+    public ResponseEntity<List<String>> getTrendingHashtags() {
+        return ResponseEntity.ok(postService.getTrendingHashtags());
+    }
+
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<String> handleIllegalArgument(IllegalArgumentException ex) {
         if ("Post not found".equals(ex.getMessage())) {

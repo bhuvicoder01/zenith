@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { 
   Heart, Trash2, Link2, FileText, Image as ImageIcon, Send, Loader2, Plus, 
   ExternalLink, Sparkles, MessageSquare, AlertCircle, File, LogOut, LayoutDashboard, Globe, Share2,
-  Edit2, Eye, CornerDownRight, Video, Play, Pause, Volume2, VolumeX, Maximize, Minimize, Lock
+  Edit2, Eye, CornerDownRight, Video, Play, Pause, Volume2, VolumeX, Maximize, Minimize, Lock, TrendingUp
 } from "lucide-react";
 import useAuthStore from "@/store/useAuthStore";
 import PublicNavbar from "@/components/PublicNavbar";
@@ -59,6 +59,7 @@ export default function HomeFeed() {
   const [searchConnQuery, setSearchConnQuery] = useState("");
   const [sentConnections, setSentConnections] = useState<Set<string>>(new Set());
   const [sendingShareUserIds, setSendingShareUserIds] = useState<Set<string>>(new Set());
+  const [trendingTags, setTrendingTags] = useState<string[]>([]);
 
   const fetchUserProfile = async () => {
     try {
@@ -101,8 +102,18 @@ export default function HomeFeed() {
     if (node) observer.current.observe(node);
   }, [loadingFeed, hasMore, page, fetchFeed]);
 
+  const fetchTrendingTags = async () => {
+    try {
+      const res = await api.get("/posts/hashtags");
+      setTrendingTags(res.data || []);
+    } catch (err) {
+      console.error("Failed to load trending hashtags:", err);
+    }
+  };
+
   useEffect(() => {
     fetchFeed(0, true);
+    fetchTrendingTags();
     if (isAuthenticated) {
       fetchUserProfile();
     }
@@ -383,28 +394,6 @@ export default function HomeFeed() {
                 </div>
               </div>
             )}
-
-            {/* Platform Stats Widget */}
-            <div className="bg-card border border-border rounded-3xl p-6 shadow-sm hidden lg:block space-y-4">
-              <h4 className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">System Intel</h4>
-              <div className="space-y-3 text-xs">
-                <div className="flex justify-between items-center">
-                  <span className="text-muted-foreground font-semibold">Nodes Online</span>
-                  <span className="font-mono text-emerald-500 font-bold flex items-center gap-1.5">
-                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                    ACTIVE
-                  </span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-muted-foreground font-semibold">Matched Jobs</span>
-                  <span className="font-bold">14,923</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-muted-foreground font-semibold">Candidate Pool</span>
-                  <span className="font-bold">4,120</span>
-                </div>
-              </div>
-            </div>
           </aside>
 
           {/* MAIN STREAM: CREATION CARD & TIMELINE */}
@@ -731,23 +720,27 @@ export default function HomeFeed() {
 
           {/* RIGHT COLUMN: PLATFORM CONNECTIONS / TRENDING */}
           <aside className="lg:col-span-3 space-y-6 hidden lg:block">
-            {/* Suggestions Box */}
-            <div className="bg-card border border-border rounded-3xl p-6 shadow-sm space-y-4">
-              <h4 className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">Trending Sectors</h4>
-              <div className="space-y-3">
-                {[
-                  { tag: "Machine Learning", posts: "420 updates" },
-                  { tag: "Fullstack Eng", posts: "891 updates" },
-                  { tag: "Resume Optimization", posts: "128 updates" },
-                  { tag: "Agentic Systems", posts: "305 updates" }
-                ].map((item, idx) => (
-                  <div key={idx} className="flex justify-between items-center text-xs">
-                    <div>
-                      <span className="font-bold text-foreground hover:underline cursor-pointer">#{item.tag.replace(/\s+/g, '')}</span>
-                      <p className="text-[10px] text-muted-foreground font-semibold mt-0.5">{item.posts}</p>
-                    </div>
-                  </div>
-                ))}
+            {/* Dynamic Trending Tags Widget */}
+            <div className="bg-card border border-border rounded-3xl p-6 shadow-sm space-y-4 animate-in fade-in duration-300">
+              <div className="flex items-center gap-2 text-primary">
+                <TrendingUp className="w-4 h-4" />
+                <h4 className="text-[10px] font-black uppercase tracking-widest text-foreground">Trending Tags</h4>
+              </div>
+              <div className="space-y-2">
+                <div className="flex flex-wrap gap-1.5">
+                  {(trendingTags.length > 0 
+                    ? trendingTags.map(tag => tag.startsWith("#") ? tag : `#${tag}`).slice(0, 10)
+                    : ["#AI", "#SoftwareEng", "#WebDev", "#Java", "#Python", "#React", "#NextJS"]
+                  ).map((tag) => (
+                    <Link
+                      key={tag}
+                      href={`/tags/${tag.replace("#", "")}`}
+                      className="px-2.5 py-1 bg-secondary hover:bg-primary/10 hover:text-primary border border-border hover:border-primary/20 text-[10px] font-bold uppercase tracking-wider rounded-xl transition-all"
+                    >
+                      {tag}
+                    </Link>
+                  ))}
+                </div>
               </div>
             </div>
 
