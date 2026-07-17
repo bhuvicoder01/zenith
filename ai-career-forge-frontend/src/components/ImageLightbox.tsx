@@ -142,13 +142,19 @@ export function ImageLightbox({ src, alt, type = "image", onClose }: ImageLightb
             className="w-full max-w-[95vw] md:max-w-[85vw] h-full max-h-[80vh] rounded-2xl overflow-auto -webkit-overflow-scrolling-touch border border-white/10 shadow-2xl bg-zinc-900 z-10 flex flex-col items-center justify-center p-6 text-center"
             onClick={(e) => e.stopPropagation()}
           >
-            {/* Desktop View: Render iframe */}
+            {/* Desktop View: Render PDF object/embed */}
             <div className="hidden md:block w-full h-full">
-              <iframe
-                src={src + "#view=FitH"}
-                className="w-full h-full border-0 bg-zinc-900"
-                title="PDF Document"
-              />
+              <object
+                data={src}
+                type="application/pdf"
+                className="w-full h-full border-none bg-zinc-900"
+              >
+                <embed
+                  src={src}
+                  type="application/pdf"
+                  className="w-full h-full border-none"
+                />
+              </object>
             </div>
 
             {/* Mobile View: Render gorgeous mobile preview card */}
