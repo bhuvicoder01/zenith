@@ -29,6 +29,18 @@ public class PublicProfileDTO {
     private java.time.Instant lastOnline;
     private String e2eePublicKey;
 
+    private String portfolioTemplate;
+    private String portfolioThemeColor;
+    private String portfolioFontFamily;
+    private String portfolioFontSize;
+    private boolean portfolioShowPhoto;
+    private boolean portfolioShowEmail;
+    private boolean portfolioShowBio;
+    private boolean portfolioShowExperience;
+    private boolean portfolioShowProjects;
+    private boolean portfolioShowCertifications;
+    private boolean portfolioShowInternships;
+
     public static PublicProfileDTO fromEntity(UserProfile profile) {
         if (profile == null) return null;
 
@@ -38,6 +50,18 @@ public class PublicProfileDTO {
 
         boolean showOnline = profile.getSettings() == null || profile.getSettings().isShowOnlineStatus();
         java.time.Instant resolvedLastOnline = (showOnline && !anonymize) ? profile.getLastOnline() : null;
+
+        String template = (profile.getSettings() != null) ? profile.getSettings().getPortfolioTemplate() : "minimalist";
+        String themeColor = (profile.getSettings() != null) ? profile.getSettings().getPortfolioThemeColor() : "blue";
+        String fontFamily = (profile.getSettings() != null) ? profile.getSettings().getPortfolioFontFamily() : "sans";
+        String fontSize = (profile.getSettings() != null) ? profile.getSettings().getPortfolioFontSize() : "medium";
+        boolean showPortPhoto = (profile.getSettings() == null) || profile.getSettings().isPortfolioShowPhoto();
+        boolean showPortEmail = (profile.getSettings() == null) || profile.getSettings().isPortfolioShowEmail();
+        boolean showPortBio = (profile.getSettings() == null) || profile.getSettings().isPortfolioShowBio();
+        boolean showPortExp = (profile.getSettings() == null) || profile.getSettings().isPortfolioShowExperience();
+        boolean showPortProj = (profile.getSettings() == null) || profile.getSettings().isPortfolioShowProjects();
+        boolean showPortCert = (profile.getSettings() == null) || profile.getSettings().isPortfolioShowCertifications();
+        boolean showPortIntern = (profile.getSettings() == null) || profile.getSettings().isPortfolioShowInternships();
 
         return PublicProfileDTO.builder()
                 .userId(profile.getUserId())
@@ -55,6 +79,17 @@ public class PublicProfileDTO {
                 .internships(profile.getInternships())
                 .lastOnline(resolvedLastOnline)
                 .e2eePublicKey(profile.getE2eePublicKey())
+                .portfolioTemplate(template)
+                .portfolioThemeColor(themeColor)
+                .portfolioFontFamily(fontFamily)
+                .portfolioFontSize(fontSize)
+                .portfolioShowPhoto(showPortPhoto)
+                .portfolioShowEmail(showPortEmail)
+                .portfolioShowBio(showPortBio)
+                .portfolioShowExperience(showPortExp)
+                .portfolioShowProjects(showPortProj)
+                .portfolioShowCertifications(showPortCert)
+                .portfolioShowInternships(showPortIntern)
                 .build();
     }
 }

@@ -155,6 +155,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     { href: "/dashboard/messages", label: "Messages", icon: MessageSquare },
     { href: "/dashboard/jobs", label: "Job Matches", icon: Briefcase },
     { href: "/dashboard/applications", label: "Tracker", icon: CheckCircle },
+    { href: "/dashboard/portfolio", label: "My Portfolio", icon: Sparkles },
     // { href: "/dashboard/profile", label: "Profile", icon: User },
     { href: "/dashboard/settings", label: "Settings", icon: Settings },
   ];

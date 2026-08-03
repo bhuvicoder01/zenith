@@ -230,8 +230,18 @@ export default function AssistantWidget() {
     }
   };
 
-  // Hide the AI assistant floating dragger/widget only when actively viewing a specific chat channel
-  if (pathname === "/dashboard/messages" && activeUserId) {
+  const isVanityRoute = (path: string | null) => {
+    if (!path) return false;
+    const parts = path.split("/").filter(Boolean);
+    if (parts.length === 1) {
+      const reserved = ["dashboard", "search", "tags", "auth", "public", "posts", "about", "admin", "recruiter"];
+      return !reserved.includes(parts[0]);
+    }
+    return false;
+  };
+
+  // Hide the AI assistant floating dragger/widget only when actively viewing a specific chat channel or on user vanity portfolios
+  if ((pathname === "/dashboard/messages" && activeUserId) || isVanityRoute(pathname)) {
     return null;
   }
 

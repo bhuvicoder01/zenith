@@ -17,7 +17,17 @@ export default function ThemeToggle() {
     setMounted(true);
   }, []);
 
-  if (!mounted || pathname === "/dashboard/messages") return null;
+  const isVanityRoute = (path: string | null) => {
+    if (!path) return false;
+    const parts = path.split("/").filter(Boolean);
+    if (parts.length === 1) {
+      const reserved = ["dashboard", "search", "tags", "auth", "public", "posts", "about", "admin", "recruiter"];
+      return !reserved.includes(parts[0]);
+    }
+    return false;
+  };
+
+  if (!mounted || pathname === "/dashboard/messages" || isVanityRoute(pathname)) return null;
 
   const isDark = resolvedTheme === "dark";
   

@@ -82,6 +82,18 @@ public class UserProfile {
         private boolean showEmail = true;
         private boolean showOnlineStatus = true;
         private boolean deviceNotifications = true;
+
+        private String portfolioTemplate = "minimalist";
+        private String portfolioThemeColor = "blue";
+        private String portfolioFontFamily = "sans";
+        private String portfolioFontSize = "medium";
+        private boolean portfolioShowPhoto = true;
+        private boolean portfolioShowEmail = true;
+        private boolean portfolioShowBio = true;
+        private boolean portfolioShowExperience = true;
+        private boolean portfolioShowProjects = true;
+        private boolean portfolioShowCertifications = true;
+        private boolean portfolioShowInternships = true;
     }
 
     @Data
