@@ -67,15 +67,17 @@ export default function AssistantWidget() {
     setPosition({ x: initialX, y: initialY });
   }, []);
 
-  // Prevent background scrolling when drawer is open
+  // Prevent background scrolling when drawer is open and notify listeners (ThemeToggle)
   useEffect(() => {
     if (isOpen) {
       document.body.style.overflow = "hidden";
     } else {
       document.body.style.overflow = "";
     }
+    window.dispatchEvent(new CustomEvent("assistant-widget-toggle", { detail: { isOpen } }));
     return () => {
       document.body.style.overflow = "";
+      window.dispatchEvent(new CustomEvent("assistant-widget-toggle", { detail: { isOpen: false } }));
     };
   }, [isOpen]);
 
@@ -158,7 +160,7 @@ export default function AssistantWidget() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Focus input when chat opens (works on mobile)
+  // Focus input when chat opens
   useEffect(() => {
     if (isOpen) {
       scrollToBottom();
@@ -180,7 +182,6 @@ export default function AssistantWidget() {
   };
 
   const scrollToBottom = () => {
-    // Delay to let React render the messages first
     setTimeout(() => {
       if (scrollRef.current) {
         scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
@@ -240,8 +241,8 @@ export default function AssistantWidget() {
     return false;
   };
 
-  // Hide the AI assistant floating dragger/widget only when actively viewing a specific chat channel or on user vanity portfolios
-  if ((pathname === "/dashboard/messages" && activeUserId) || isVanityRoute(pathname)) {
+  // Hide the AI assistant widget on portfolio pages or public user vanity portfolios
+  if ((pathname === "/dashboard/messages" && activeUserId) || isVanityRoute(pathname) || pathname?.startsWith("/dashboard/portfolio")) {
     return null;
   }
 
@@ -317,7 +318,6 @@ export default function AssistantWidget() {
           onPointerDown={(e) => e.stopPropagation()}
           className="fixed right-0 top-0 bottom-0 h-[100dvh] w-full md:max-w-[400px] bg-card/85 backdrop-blur-3xl border-l border-border shadow-2xl flex flex-col z-[1200] animate-in slide-in-from-right duration-300"
         >
-          {/* Left Edge Tucked-In Close Tab (Desktop only to prevent off-screen positioning on mobile) */}
           <button 
             onClick={(e) => {
               e.preventDefault();
@@ -337,9 +337,7 @@ export default function AssistantWidget() {
             </span>
           </button>
 
-          {/* Chat Container */}
           <div className="flex flex-col h-full overflow-hidden">
-            {/* Header */}
             <div className="p-4 md:p-6 border-b border-border bg-foreground/5 flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="w-12 h-12 rounded-2xl border border-border bg-muted flex items-center justify-center overflow-hidden shadow-lg relative group">
@@ -375,7 +373,6 @@ export default function AssistantWidget() {
               </div>
             </div>
 
-            {/* Messages */}
             <div 
               ref={scrollRef}
               className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4 md:space-y-6 scrollbar-hide"
@@ -431,7 +428,6 @@ export default function AssistantWidget() {
               )}
             </div>
 
-            {/* Input */}
             <div className="p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] md:p-6 border-t border-border bg-card sticky bottom-0 z-20 shrink-0">
               <div className="relative">
                 <input 

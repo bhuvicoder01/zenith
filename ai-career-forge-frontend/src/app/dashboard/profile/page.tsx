@@ -1044,6 +1044,16 @@ export default function ProfilePage() {
                   <ExternalLink className="w-4 h-4 text-muted-foreground" />
                   <span>Copy Link</span>
                 </button>
+                {profile.username && (
+                  <Link 
+                    href={`/${profile.username}`}
+                    target="_blank"
+                    className="px-5 py-4 bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 rounded-2xl font-black text-xs uppercase tracking-widest flex items-center gap-2 transition-all"
+                  >
+                    <Globe className="w-4 h-4" />
+                    <span>My Portfolio</span>
+                  </Link>
+                )}
                 <button 
                   onClick={() => setIsPublicPreview(true)}
                   className="px-6 py-4 bg-secondary text-secondary-foreground border border-border rounded-2xl font-black text-xs uppercase tracking-widest flex items-center gap-2.5 hover:bg-secondary/80 transition-all"

@@ -13,8 +13,18 @@ export default function ThemeToggle() {
   const [peelActive, setPeelActive] = useState(false);
   const pathname = usePathname();
 
+  const [isAssistantOpen, setIsAssistantOpen] = useState(false);
+
   useEffect(() => {
     setMounted(true);
+    const handleAssistantToggle = (e: Event) => {
+      const customEvent = e as CustomEvent<{ isOpen: boolean }>;
+      setIsAssistantOpen(!!customEvent.detail?.isOpen);
+    };
+    window.addEventListener("assistant-widget-toggle", handleAssistantToggle);
+    return () => {
+      window.removeEventListener("assistant-widget-toggle", handleAssistantToggle);
+    };
   }, []);
 
   const isVanityRoute = (path: string | null) => {
@@ -27,7 +37,7 @@ export default function ThemeToggle() {
     return false;
   };
 
-  if (!mounted || pathname === "/dashboard/messages" || isVanityRoute(pathname)) return null;
+  if (!mounted || pathname === "/dashboard/messages" || isVanityRoute(pathname) || isAssistantOpen) return null;
 
   const isDark = resolvedTheme === "dark";
   

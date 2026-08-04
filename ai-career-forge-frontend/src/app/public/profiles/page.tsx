@@ -221,12 +221,19 @@ export default function PublicProfilesPage() {
                       </div>
                     )}
 
-                    <div className="mt-auto pt-4 border-t border-border/50 flex items-center justify-between relative z-10">
+                    <div className="mt-auto pt-4 border-t border-border/50 flex items-center gap-2.5 relative z-10">
                       <Link 
                         href={`/public/profiles/${profile.username || profile.userId}`}
                         className="flex-1 bg-foreground text-background text-center py-3.5 rounded-xl text-xs font-black uppercase tracking-widest hover:opacity-90 transition-all flex items-center justify-center gap-2"
                       >
                         View Profile <ArrowRight className="w-4 h-4" />
+                      </Link>
+                      <Link 
+                        href={`/${profile.username || profile.userId}`}
+                        target="_blank"
+                        className="px-4 py-3.5 bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center justify-center gap-1.5"
+                      >
+                        <Code className="w-3.5 h-3.5" /> Portfolio
                       </Link>
                     </div>
                   </div>

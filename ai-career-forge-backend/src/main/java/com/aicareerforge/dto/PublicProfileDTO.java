@@ -40,6 +40,7 @@ public class PublicProfileDTO {
     private boolean portfolioShowProjects;
     private boolean portfolioShowCertifications;
     private boolean portfolioShowInternships;
+    private List<String> portfolioSectionOrder;
 
     public static PublicProfileDTO fromEntity(UserProfile profile) {
         if (profile == null) return null;
@@ -62,6 +63,9 @@ public class PublicProfileDTO {
         boolean showPortProj = (profile.getSettings() == null) || profile.getSettings().isPortfolioShowProjects();
         boolean showPortCert = (profile.getSettings() == null) || profile.getSettings().isPortfolioShowCertifications();
         boolean showPortIntern = (profile.getSettings() == null) || profile.getSettings().isPortfolioShowInternships();
+        List<String> sectionOrder = (profile.getSettings() != null && profile.getSettings().getPortfolioSectionOrder() != null)
+                ? profile.getSettings().getPortfolioSectionOrder()
+                : java.util.Arrays.asList("hero", "skills", "experience", "projects", "certifications", "internships", "contact");
 
         return PublicProfileDTO.builder()
                 .userId(profile.getUserId())
@@ -90,6 +94,7 @@ public class PublicProfileDTO {
                 .portfolioShowProjects(showPortProj)
                 .portfolioShowCertifications(showPortCert)
                 .portfolioShowInternships(showPortIntern)
+                .portfolioSectionOrder(sectionOrder)
                 .build();
     }
 }

@@ -46,7 +46,7 @@ export default function MobileFooterTabs() {
     };
   }, []);
 
-  // Check for active chat on mobile (so we can hide the footer to prevent keyboard overlapping)
+  // Check for active chat on mobile
   useEffect(() => {
     const checkChat = () => {
       if (typeof window !== "undefined") {
@@ -100,8 +100,6 @@ export default function MobileFooterTabs() {
     },
   ];
 
-  const VISIBLE_COUNT = 5;
-
   const isTabActive = useCallback((tab: Tab) => {
     if (tab.isExact) {
       return tab.activePattern.some((pattern) => pathname === pattern);
@@ -115,7 +113,6 @@ export default function MobileFooterTabs() {
     if (activeIndex >= 0) {
       setCenterTabIndex(activeIndex);
     }
-    // Route navigation completed, clear loading state
     setIsRouteLoading(false);
     if (loadingTimeoutRef.current) {
       clearTimeout(loadingTimeoutRef.current);
@@ -136,7 +133,7 @@ export default function MobileFooterTabs() {
     e.preventDefault();
     if (isTransitioning || isRouteLoading) return;
 
-    const offset = visibleIndex - centerIndex; // visibleIndex - 3
+    const offset = visibleIndex - centerIndex;
     if (offset === 0) {
       router.push(tab.href);
       return;
@@ -154,12 +151,11 @@ export default function MobileFooterTabs() {
       setSlideOffset(0);
       setDragOffset(0);
 
-      // Start page load tracking
       setIsRouteLoading(true);
       if (loadingTimeoutRef.current) clearTimeout(loadingTimeoutRef.current);
       loadingTimeoutRef.current = setTimeout(() => {
         setIsRouteLoading(false);
-      }, 8000); // 8 seconds fail-safe fallback
+      }, 8000);
 
       router.push(tab.href);
     }, 350);
@@ -171,7 +167,7 @@ export default function MobileFooterTabs() {
     touchEndX.current = e.touches[0].clientX;
     isSwiping.current = true;
     preventClick.current = false;
-    setIsTransitioning(false); // disable transitions while dragging
+    setIsTransitioning(false);
     setDragOffset(0);
   };
 
@@ -184,7 +180,6 @@ export default function MobileFooterTabs() {
     const width = typeof window !== "undefined" ? window.innerWidth : 375;
     const diffPercent = (diffPx / width) * 100;
 
-    // Clamp the drag offset to ±30% to keep it responsive
     const clampedPercent = Math.max(-30, Math.min(30, diffPercent));
     setDragOffset(clampedPercent);
   };
@@ -193,7 +188,7 @@ export default function MobileFooterTabs() {
     if (!isSwiping.current) return;
     isSwiping.current = false;
 
-    const threshold = 10; // 10% of viewport width
+    const threshold = 10;
     const len = allTabs.length;
 
     let offset = 0;
@@ -205,7 +200,6 @@ export default function MobileFooterTabs() {
       offset = -1;
     }
 
-    // If it's a tap or negligible drag (less than 2% viewport width), treat as pure tap
     if (offset === 0 && Math.abs(dragOffset) < 2) {
       setDragOffset(0);
       return;
@@ -225,12 +219,11 @@ export default function MobileFooterTabs() {
       if (newCenter !== centerTabIndex) {
         const centerTab = allTabs[newCenter];
         if (centerTab) {
-          // Start page load tracking
           setIsRouteLoading(true);
           if (loadingTimeoutRef.current) clearTimeout(loadingTimeoutRef.current);
           loadingTimeoutRef.current = setTimeout(() => {
             setIsRouteLoading(false);
-          }, 8000); // 8 seconds fail-safe fallback
+          }, 8000);
 
           router.push(centerTab.href);
         }
@@ -240,11 +233,23 @@ export default function MobileFooterTabs() {
 
   if (!mounted) return null;
 
-  // Do not show navigation footer on auth pages, admin section, or when inside an active chat window
   const isAuthPage = pathname.startsWith("/auth");
   const isAdminPage = pathname.startsWith("/admin");
 
-  if (isAuthPage || isAdminPage || hasActiveChat || !isAuthenticated) return null;
+  const isVanityRoute = (path: string | null) => {
+    if (!path) return false;
+    const parts = path.split("/").filter(Boolean);
+    if (parts.length === 1) {
+      const reserved = ["dashboard", "search", "tags", "auth", "public", "posts", "about", "admin", "recruiter"];
+      return !reserved.includes(parts[0]);
+    }
+    return false;
+  };
+
+  const isPortfolioPage = pathname?.startsWith("/dashboard/portfolio") || isVanityRoute(pathname);
+
+  // Hide mobile footer tabs on auth pages, admin pages, active chat, portfolio builder, or public user portfolio pages
+  if (isAuthPage || isAdminPage || hasActiveChat || !isAuthenticated || isPortfolioPage) return null;
 
   const len = allTabs.length;
   const visibleTabs = [
@@ -261,7 +266,6 @@ export default function MobileFooterTabs() {
     const active = isTabActive(tab);
     const Icon = tab.icon;
     
-    // During active transition/drag, target index determines which tab is highlighted/raised
     const isCenter = visibleIndex === (centerIndex + slideOffset);
     const showRevolvingGlow = isCenter && (isTransitioning || isRouteLoading);
 
@@ -272,18 +276,15 @@ export default function MobileFooterTabs() {
         onClick={(e) => handleTabClick(e, tab, visibleIndex)}
         className="flex flex-col items-center justify-center relative transition-all duration-300 w-[14.285%] shrink-0 group active:scale-95"
       >
-        {/* Glow & Circular Container wrapper */}
         <div className={`relative flex items-center justify-center transition-all duration-300 ${
           isCenter ? "-translate-y-2 h-[52px]" : "translate-y-0 h-[36px]"
         }`}>
-          {/* Outer glow ring */}
           <div className={`absolute rounded-full transition-all duration-500 ${
             isCenter ? "w-[60px] h-[60px]" : "w-0 h-0"
           } ${
             active && isCenter ? "bg-primary/10 scale-110" : "bg-transparent scale-0"
           }`} />
 
-          {/* Icon background circle */}
           <div className={`relative rounded-full flex items-center justify-center transition-all duration-300 ${
             isCenter
               ? "w-[52px] h-[52px] bg-background border-[3px] shadow-lg"
@@ -305,7 +306,6 @@ export default function MobileFooterTabs() {
               }`}
             />
 
-            {/* Badges on active / unread states */}
             {tab.label === "Messages" && unreadMessageCount > 0 && (
               <span className={`absolute bg-primary text-background rounded-full text-[8.5px] font-black leading-none animate-pulse shadow-sm transition-all duration-300 ${
                 isCenter ? "-top-1 -right-1 px-1.5 py-0.5" : "-top-1 -right-1.5 px-1.5 py-0.5"
@@ -321,19 +321,16 @@ export default function MobileFooterTabs() {
               </span>
             )}
 
-            {/* Active indicator dot for regular tab */}
             {active && !isCenter && !(tab.label === "Messages" && unreadMessageCount > 0) && !(tab.label === "Alerts" && unreadNotifCount > 0) && (
               <span className="absolute top-1 right-1 w-1.5 h-1.5 bg-primary rounded-full animate-pulse" />
             )}
 
-            {/* Revolving border loading overlay */}
             {showRevolvingGlow && (
               <div className="absolute inset-0 rounded-full border-[3px] border-t-primary border-r-primary/40 border-b-transparent border-l-transparent animate-spin pointer-events-none" />
             )}
           </div>
         </div>
 
-        {/* Tab Label */}
         <span
           className={`text-[8px] font-black uppercase tracking-wider transition-all duration-300 select-none ${
             isCenter ? "mt-1.5" : "mt-1"
@@ -351,9 +348,7 @@ export default function MobileFooterTabs() {
 
   return (
     <div className="fixed bottom-0 left-0 right-0 z-50 md:hidden bg-background/80 backdrop-blur-xl border-t border-border/40 px-3 pb-safe shadow-[0_-8px_30px_rgb(0,0,0,0.08)] animate-in slide-in-from-bottom-2 duration-300">
-      {/* Scrollable clipping container */}
       <div className="w-full overflow-hidden h-[88px] -mt-[32px] pt-[34px] relative max-w-lg mx-auto">
-        {/* Sliding Track */}
         <div
           className="flex items-end w-[140%] max-w-[140%] absolute bottom-0 left-0"
           style={{
@@ -368,7 +363,6 @@ export default function MobileFooterTabs() {
         </div>
       </div>
 
-      {/* Position indicator dots */}
       <div className="flex justify-center items-center gap-1.5 pb-2 mt-1">
         {allTabs.map((tab, i) => (
           <button
@@ -387,12 +381,11 @@ export default function MobileFooterTabs() {
                 setSlideOffset(0);
                 setDragOffset(0);
 
-                // Start page load tracking
                 setIsRouteLoading(true);
                 if (loadingTimeoutRef.current) clearTimeout(loadingTimeoutRef.current);
                 loadingTimeoutRef.current = setTimeout(() => {
                   setIsRouteLoading(false);
-                }, 8000); // 8 seconds fail-safe fallback
+                }, 8000);
 
                 router.push(tab.href);
               }, 350);

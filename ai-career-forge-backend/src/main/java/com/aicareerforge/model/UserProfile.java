@@ -70,6 +70,7 @@ public class UserProfile {
     private java.util.Map<String, Double> matchWeights = new java.util.HashMap<>();
 
     @Data
+    @Builder
     @NoArgsConstructor
     @AllArgsConstructor
     public static class UserSettings {
@@ -94,6 +95,11 @@ public class UserProfile {
         private boolean portfolioShowProjects = true;
         private boolean portfolioShowCertifications = true;
         private boolean portfolioShowInternships = true;
+
+        @Builder.Default
+        private List<String> portfolioSectionOrder = java.util.Arrays.asList(
+            "hero", "skills", "experience", "projects", "certifications", "internships", "contact"
+        );
     }
 
     @Data

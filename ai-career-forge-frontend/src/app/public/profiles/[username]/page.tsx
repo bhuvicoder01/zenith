@@ -314,8 +314,16 @@ export default function PublicProfileDetailPage() {
                   </p>
                 )}
               </div>
-              {/* Connection Buttons */}
-              <div className="flex items-center gap-3">
+              {/* Connection & Action Buttons */}
+              <div className="flex items-center gap-3 flex-wrap">
+                {/* View Portfolio Button - always visible */}
+                <Link 
+                  href={`/${username}`}
+                  target="_blank"
+                  className="px-6 py-3.5 bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 rounded-full text-xs font-black uppercase tracking-widest transition-all text-center flex items-center gap-2"
+                >
+                  <ExternalLink className="w-4 h-4" /> Portfolio
+                </Link>
                 {isAuthenticated && user?.id !== profile.userId && (
                   <Link 
                     href={`/dashboard/messages?userId=${profile.userId}`}
