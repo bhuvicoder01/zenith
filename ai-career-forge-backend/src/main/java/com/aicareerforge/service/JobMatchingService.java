@@ -137,16 +137,13 @@ public class JobMatchingService {
 
         // 4. Score and load user-specific data
         for (Job job : allJobs) {
-            Double cachedScore = scoreCache.getScore(userId, job.getId());
-
             UserJobMatch match = userJobMatchRepository.findFirstByUserIdAndJobId(userId, job.getId()).orElse(null);
             if (match != null) {
                 job.setRelevanceExplanation(match.getRelevanceExplanation());
-                job.setMatchScore(match.getMatchScore() != null ? match.getMatchScore() : cachedScore);
             }
 
             if (job.getMatchScore() == null) {
-                Double calculatedScore = scoringService.calculateMatchScore(job, profile, 0.5);
+                Double calculatedScore = scoringService.calculateMatchScore(job, profile, null);
                 job.setMatchScore(calculatedScore);
                 scoreCache.putScore(userId, job.getId(), calculatedScore);
             }
@@ -201,7 +198,7 @@ public class JobMatchingService {
         log.info("Fallback: found {} candidate jobs for scoring", candidateJobs.size());
 
         for (Job job : candidateJobs) {
-            Double score = scoringService.calculateMatchScore(job, profile, 0.5);
+            Double score = scoringService.calculateMatchScore(job, profile, null);
             job.setMatchScore(score);
             scoreCache.putScore(userId, job.getId(), score);
 
@@ -262,7 +259,6 @@ public class JobMatchingService {
         UserJobMatch match = userJobMatchRepository.findFirstByUserIdAndJobId(profile.getUserId(), job.getId()).orElse(null);
         if (match != null) {
             job.setRelevanceExplanation(match.getRelevanceExplanation());
-            if (match.getMatchScore() != null) job.setMatchScore(match.getMatchScore());
         }
 
         // Cache the score
@@ -384,25 +380,19 @@ public class JobMatchingService {
 
         // Score only the returned page of jobs
         for (Job job : jobs) {
-            Double cachedScore = scoreCache.getScore(userId, job.getId());
             UserJobMatch match = userJobMatchRepository.findFirstByUserIdAndJobId(userId, job.getId()).orElse(null);
             
             if (match != null) {
                 job.setRelevanceExplanation(match.getRelevanceExplanation());
-                job.setMatchScore(match.getMatchScore() != null ? match.getMatchScore() : cachedScore);
                 job.setPipelineStage(match.getPipelineStage());
             }
 
             if (job.getMatchScore() == null) {
-                Double calculatedScore = scoringService.calculateMatchScore(job, profile, 0.5);
+                Double calculatedScore = scoringService.calculateMatchScore(job, profile, null);
                 job.setMatchScore(calculatedScore);
                 scoreCache.putScore(userId, job.getId(), calculatedScore);
             }
 
-            // LinkedIn Primary Source matching score boost (+3.0 points up to a limit of 100)
-            if ("linkedin".equalsIgnoreCase(job.getSource()) && job.getMatchScore() != null && job.getMatchScore() < 100) {
-                job.setMatchScore(Math.min(100.0, job.getMatchScore() + 3.0));
-            }
         }
 
         return new PageImpl<>(catalogService.deduplicateJobs(jobs), pageable, total);

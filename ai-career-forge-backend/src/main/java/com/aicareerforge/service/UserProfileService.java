@@ -126,7 +126,7 @@ public class UserProfileService {
             profile.setPasswordGenerated(user.isPasswordGenerated());
         });
 
-        hydrateUrls(profile);
+        hydrateUrls(profile, false);
         return PublicProfileDTO.fromEntity(profile);
     }
 
@@ -140,15 +140,21 @@ public class UserProfileService {
 
         return profiles.stream()
                 .map(profile -> {
-                    hydrateUrls(profile);
+                    hydrateUrls(profile, false);
                     return PublicProfileDTO.fromEntity(profile);
                 })
                 .collect(java.util.stream.Collectors.toList());
     }
 
     private void hydrateUrls(UserProfile profile) {
+        hydrateUrls(profile, true);
+    }
+
+    private void hydrateUrls(UserProfile profile, boolean includePrivateAssets) {
         if (profile == null) return;
-        profile.setResumeS3Url(hydrateUrl(profile.getResumeS3Url()));
+        if (includePrivateAssets) {
+            profile.setResumeS3Url(s3Service.getPrivateAssetUrl(profile.getResumeS3Url(), profile.getUserId()));
+        }
         profile.setProfilePhotoUrl(hydrateUrl(profile.getProfilePhotoUrl()));
         profile.setCoverImageUrl(hydrateUrl(profile.getCoverImageUrl()));
         if (profile.getUserId() != null) {

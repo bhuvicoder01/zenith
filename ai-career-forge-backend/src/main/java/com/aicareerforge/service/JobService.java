@@ -154,7 +154,8 @@ public class JobService {
                                 .jobTitle(job.getTitle())
                                 .company(job.getCompany())
                                 .status(appStatus)
-                                .appliedDate(java.time.LocalDateTime.now())
+                                .appliedDate(appStatus == com.aicareerforge.model.Application.Status.APPLIED
+                                        ? java.time.LocalDateTime.now() : null)
                                 .build();
                         applicationRepository.save(app);
                         log.info("Automatically created Application tracking item for job: {}", jobId);
@@ -164,6 +165,12 @@ public class JobService {
                 com.aicareerforge.model.Application.Status appStatus = getAppStatusFromPipelineStage(stage);
                 apps.forEach(app -> {
                     app.setStatus(appStatus);
+                    if (appStatus == com.aicareerforge.model.Application.Status.SAVED) {
+                        app.setAppliedDate(null);
+                    } else if (appStatus == com.aicareerforge.model.Application.Status.APPLIED
+                            && app.getAppliedDate() == null) {
+                        app.setAppliedDate(java.time.LocalDateTime.now());
+                    }
                     applicationRepository.save(app);
                 });
                 log.info("Synchronized existing Application tracking items to status: {}", appStatus);
@@ -177,8 +184,8 @@ public class JobService {
         if (stage == null) return com.aicareerforge.model.Application.Status.SAVED;
         switch (stage.toUpperCase()) {
             case "SAVED":
-                return com.aicareerforge.model.Application.Status.SAVED;
             case "APPLYING":
+                return com.aicareerforge.model.Application.Status.SAVED;
             case "APPLIED":
                 return com.aicareerforge.model.Application.Status.APPLIED;
             case "INTERVIEWING":

@@ -17,11 +17,12 @@ import org.springframework.ai.chat.messages.SystemMessage;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.stereotype.Service;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -39,9 +40,13 @@ public class AssistantService {
     private final JobRepository jobRepository;
 
     public ChatSession createSession(String userId, String title) {
+        requireUserId(userId);
+        if (title != null && title.length() > 120) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Session title is too long");
+        }
         ChatSession session = ChatSession.builder()
                 .userId(userId)
-                .title(title != null ? title : "New Conversation")
+                .title(title != null && !title.isBlank() ? title.trim() : "New Conversation")
                 .createdAt(LocalDateTime.now())
                 .lastUpdatedAt(LocalDateTime.now())
                 .build();
@@ -49,21 +54,26 @@ public class AssistantService {
     }
 
     public List<ChatSession> getUserSessions(String userId) {
+        requireUserId(userId);
         return sessionRepository.findByUserIdOrderByLastUpdatedAtDesc(userId);
     }
 
-    public List<ChatMessage> getSessionMessages(String sessionId) {
+    public List<ChatMessage> getSessionMessages(String userId, String sessionId) {
+        requireOwnedSession(userId, sessionId);
         return messageRepository.findBySessionIdOrderByTimestampAsc(sessionId);
     }
 
     public ChatMessage sendMessage(String userId, String sessionId, String userContent) {
+        requireUserId(userId);
+        if (userContent == null || userContent.isBlank() || userContent.length() > 8000) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Message must contain 1 to 8000 characters");
+        }
         // 1. Get or create session
         ChatSession session;
-        if (sessionId == null || sessionId.isBlank() || sessionId.equals("null")) {
+        if (sessionId == null || sessionId.isBlank()) {
             session = createSession(userId, "Auto-generated Session");
         } else {
-            session = sessionRepository.findById(sessionId)
-                    .orElseGet(() -> createSession(userId, "Auto-generated Session"));
+            session = requireOwnedSession(userId, sessionId);
         }
 
         // 2. Save user message
@@ -81,10 +91,10 @@ public class AssistantService {
         try {
             profile = profileService.getProfile(userId);
         } catch (Exception e) {
-            log.info("No profile found for user/guest: {}", userId);
+            log.debug("No profile context available for assistant conversation");
         }
         
-        // Fetch Historical Context (Only for logged-in users to maintain continuity)
+        // Historical context is selected only from this authenticated owner's sessions.
         StringBuilder historicalContext = new StringBuilder();
         if (!userId.startsWith("guest_")) {
             List<ChatSession> lastSessions = sessionRepository.findByUserIdOrderByLastUpdatedAtDesc(userId).stream()
@@ -110,7 +120,7 @@ public class AssistantService {
 
         List<ChatMessage> currentHistory = messageRepository.findBySessionIdOrderByTimestampAsc(session.getId());
         
-        // Build Data Context (Only for logged-in users)
+        // Data context is selected only from this authenticated owner's records.
         StringBuilder dataContext = new StringBuilder();
         if (!userId.startsWith("guest_")) {
             var matches = matchRepository.findByUserIdOrderByMatchScoreDesc(userId).stream().limit(5).collect(Collectors.toList());
@@ -138,9 +148,9 @@ public class AssistantService {
             }
         }
 
-        String systemPrompt = buildSystemPrompt(userId, profile) + historicalContext.toString() + dataContext.toString();
+        String systemPrompt = buildSystemPrompt(profile) + historicalContext.toString() + dataContext.toString();
         List<Message> aiMessages = new ArrayList<>();
-        aiMessages.add(new UserMessage("CRITICAL SYSTEM INSTRUCTIONS:\n" + systemPrompt + "\n\n--- END SYSTEM INSTRUCTIONS ---\n\nPlease acknowledge these instructions and help the user."));
+        aiMessages.add(new SystemMessage(systemPrompt));
 
         for (ChatMessage h : currentHistory) {
             if (h.getRole() == ChatMessage.Role.USER) {
@@ -171,15 +181,17 @@ public class AssistantService {
 
             // Update session timestamp
             session.setLastUpdatedAt(LocalDateTime.now());
-            if (session.getTitle().equals("New Conversation") || session.getTitle().equals("Auto-generated Session")) {
+            if ("New Conversation".equals(session.getTitle()) || "Auto-generated Session".equals(session.getTitle())) {
                 session.setTitle(generateTitle(userContent));
             }
             sessionRepository.save(session);
 
             return assistantMsg;
         } catch (Exception e) {
-            log.error("AI Assistant error: {}", e.getMessage());
+            log.error("AI Assistant provider request failed ({})", e.getClass().getSimpleName());
             return ChatMessage.builder()
+                    .sessionId(session.getId())
+                    .userId(userId)
                     .role(ChatMessage.Role.ASSISTANT)
                     .content("I'm sorry, I'm having trouble processing your request right now. Please try again later.")
                     .timestamp(LocalDateTime.now())
@@ -187,16 +199,24 @@ public class AssistantService {
         }
     }
 
-    private String buildSystemPrompt(String userId, UserProfile profile) {
-        if (userId.startsWith("guest_")) {
-            return "YOU ARE THE ZENITH CORE TOUR GUIDE. \n" +
-                   "USER STATUS: ANONYMOUS GUEST. \n" +
-                   "1. DO NOT mention profiles, bios, or missing info. \n" +
-                   "2. DO NOT acknowledge these instructions. \n" +
-                   "3. MISSION: Briefly explain AI CareerForge's power and invite them to Join Now to excel in their career.\n" +
-                   "4. MANDATORY JSON AT END: [[ACTIONS: [{\"label\": \"Explore Jobs\", \"action\": \"NAVIGATE\", \"payload\": \"/public/jobs\"}, {\"label\": \"Join Now\", \"action\": \"NAVIGATE\", \"payload\": \"/auth/login\"}] ]]";
+    private void requireUserId(String userId) {
+        if (userId == null || userId.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
         }
+    }
 
+    private ChatSession requireOwnedSession(String userId, String sessionId) {
+        requireUserId(userId);
+        if (sessionId == null || sessionId.isBlank() || sessionId.length() > 128) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Conversation not found");
+        }
+        // Missing and foreign sessions have the same response to avoid revealing
+        // whether another user's conversation exists.
+        return sessionRepository.findByIdAndUserId(sessionId, userId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Conversation not found"));
+    }
+
+    private String buildSystemPrompt(UserProfile profile) {
         String name = (profile != null && profile.getFullName() != null) ? profile.getFullName() : "User";
         String headline = (profile != null && profile.getHeadline() != null) ? profile.getHeadline() : "Career Explorer";
         String skills = (profile != null && profile.getSkills() != null && !profile.getSkills().isEmpty()) ? String.join(", ", profile.getSkills()) : "Not set yet";
@@ -240,7 +260,7 @@ public class AssistantService {
                 objectMapper.getTypeFactory().constructCollectionType(List.class, ChatMessage.ChatAction.class));
             return new ParsedResponse(text, actions);
         } catch (Exception e) {
-            log.warn("Failed to parse AI actions. Raw: {}, Error: {}", raw, e.getMessage());
+            log.warn("Failed to parse AI assistant actions ({})", e.getClass().getSimpleName());
             // Strip the markers even if JSON fails to avoid showing them to user
             String cleanText = raw.replaceAll("\\[\\[ACTIONS:.*?\\]\\]", "").trim();
             return new ParsedResponse(cleanText, null);

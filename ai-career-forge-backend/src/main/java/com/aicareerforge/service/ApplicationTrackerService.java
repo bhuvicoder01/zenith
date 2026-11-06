@@ -11,6 +11,13 @@ import com.aicareerforge.repository.JobRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.data.mongodb.core.FindAndModifyOptions;
+import org.springframework.data.mongodb.core.query.Criteria;
+import org.springframework.data.mongodb.core.query.Query;
+import org.springframework.data.mongodb.core.query.Update;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -31,6 +38,7 @@ public class ApplicationTrackerService {
     private final S3Service s3Service;
     private final WebSocketAppHandler webSocketAppHandler;
     private final JobRepository jobRepository;
+    private final MongoTemplate mongoTemplate;
 
     public List<Application> getUserApplications(String userId) {
         List<Application> apps = applicationRepository.findByUserId(userId);
@@ -39,29 +47,17 @@ public class ApplicationTrackerService {
     }
 
     public Application getApplication(String id, String userId) {
-        Application app = applicationRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Application not found with id: " + id));
-        if (!app.getUserId().equals(userId)) {
-            throw new RuntimeException("Unauthorized to access this application");
-        }
+        Application app = findOwnedApplication(id, userId);
         hydrateUrls(app);
         return app;
     }
 
     private void hydrateUrls(Application app) {
         if (app == null) return;
-        app.setTailoredResumeS3Url(hydrateUrl(app.getTailoredResumeS3Url()));
-    }
-
-    private String hydrateUrl(String url) {
-        if (url == null || url.isBlank() || url.contains("preparing")) return url;
-        if (url.startsWith("http")) {
-            if (url.contains("pollinations.ai") || url.contains("unsplash.com")) {
-                return s3Service.getProxyUrl(url);
-            }
-            return url;
+        String url = app.getTailoredResumeS3Url();
+        if (url != null && !url.isBlank() && !"preparing".equals(url)) {
+            app.setTailoredResumeS3Url(s3Service.getPrivateAssetUrl(url, app.getUserId()));
         }
-        return s3Service.getPermanentUrl(url);
     }
 
     public Application createApplication(String userId, Application req) {
@@ -71,18 +67,26 @@ public class ApplicationTrackerService {
             if (existing.isPresent()) {
                 log.info("Application already exists for user: {}, job: {}, style: {}. Re-using application: {}", 
                     userId, req.getJobId(), req.getTemplateStyle(), existing.get().getId());
-                return existing.get();
+                Application app = existing.get();
+                hydrateUrls(app);
+                return app;
             }
         }
+        // POST creates a new owned record; a supplied ID must never overwrite another application.
+        req.setId(null);
         req.setUserId(userId);
         req.setStatus(Application.Status.SAVED);
-        req.setAppliedDate(LocalDateTime.now());
+        req.setAppliedDate(null);
+        req.setTailoredResumeS3Url(null);
+        req.setCoverLetterText(null);
+        req.setEmailIntroduction(null);
+        req.setInterviewPrepText(null);
         return applicationRepository.save(req);
     }
 
-    public Application prepareApplicationMaterials(String applicationId, String resumeText, String jobDescription, String company) {
-        Application app = applicationRepository.findById(applicationId)
-                .orElseThrow(() -> new RuntimeException("Application not found for preparation: " + applicationId));
+    public Application prepareApplicationMaterials(String applicationId, String userId, String jobDescription, String company) {
+        // Validate ownership before reading any resume data or calling paid providers.
+        Application app = findOwnedApplication(applicationId, userId);
 
         if ((jobDescription == null || jobDescription.isBlank()) && app.getJobId() != null) {
             Job job = jobRepository.findById(app.getJobId()).orElse(null);
@@ -105,9 +109,11 @@ public class ApplicationTrackerService {
         if (app.getTailoredResumeS3Url() != null 
                 && !app.getTailoredResumeS3Url().equals("preparing") 
                 && app.getCoverLetterText() != null 
+                && app.getEmailIntroduction() != null
                 && app.getInterviewPrepText() != null) {
             log.info("Application materials already prepared for application: {}. Skipping re-generation.", applicationId);
             webSocketAppHandler.sendNotification(app.getUserId(), "PREP_STATUS", "Preparation Completed", "Application materials retrieved successfully!", Map.of("step", "COMPLETED", "status", "success", "applicationId", applicationId));
+            hydrateUrls(app);
             return app;
         }
 
@@ -115,8 +121,10 @@ public class ApplicationTrackerService {
         
         // Mark as preparing in DB so refresh/list reflects loading state
         app.setTailoredResumeS3Url("preparing");
-        applicationRepository.save(app);
+        mongoTemplate.updateFirst(ownedQuery(applicationId, userId),
+                new Update().set("tailoredResumeS3Url", "preparing"), Application.class);
         
+        boolean prepared = false;
         try {
             // Send initial progress update
             webSocketAppHandler.sendNotification(app.getUserId(), "PREP_STATUS", "Preparation Started", "Retrieving user details...", Map.of("step", "STARTING", "status", "processing", "applicationId", applicationId));
@@ -178,41 +186,76 @@ public class ApplicationTrackerService {
             String s3Key = s3Service.uploadFile(pdfBytes, "tailored_resume.pdf", app.getUserId());
             app.setTailoredResumeS3Url(s3Key); // Store only the key
             
-            app.setStatus(Application.Status.APPLIED);
+            // Document readiness does not mean the candidate submitted an application.
             log.info("Materials successfully prepared for application: {}", applicationId);
 
-            // Send final success notification
-            webSocketAppHandler.sendNotification(app.getUserId(), "PREP_STATUS", "Preparation Completed", "Application materials generated successfully!", Map.of("step", "COMPLETED", "status", "success", "applicationId", applicationId));
+            prepared = true;
 
         } catch (Exception e) {
-            log.error("Partial failure in materials preparation: {}", e.getMessage());
-            app.setStatus(Application.Status.SAVED); // Rollback to saved status for retry
+            log.warn("Materials preparation failed for application {} ({})",
+                    applicationId, e.getClass().getSimpleName());
             app.setTailoredResumeS3Url(null);
-            webSocketAppHandler.sendNotification(app.getUserId(), "PREP_STATUS", "Preparation Failed", "An error occurred during preparation: " + e.getMessage(), Map.of("step", "FAILED", "status", "failed", "error", e.getMessage(), "applicationId", applicationId));
         }
         
-        Application saved = applicationRepository.save(app);
+        // Update only generated fields: a concurrent user status change must not be overwritten.
+        Update documents = new Update()
+                .set("tailoredResumeS3Url", app.getTailoredResumeS3Url())
+                .set("coverLetterText", app.getCoverLetterText())
+                .set("emailIntroduction", app.getEmailIntroduction())
+                .set("interviewPrepText", app.getInterviewPrepText());
+        Application saved = mongoTemplate.findAndModify(ownedQuery(applicationId, userId), documents,
+                FindAndModifyOptions.options().returnNew(true), Application.class);
+        if (saved == null) throw notFound();
         hydrateUrls(saved);
+        // Event-driven refreshes must see the persisted result, not the earlier "preparing" marker.
+        if (prepared) {
+            webSocketAppHandler.sendNotification(app.getUserId(), "PREP_STATUS", "Preparation Completed",
+                    "Application materials generated successfully!",
+                    Map.of("step", "COMPLETED", "status", "success", "applicationId", applicationId));
+        } else {
+            String message = "We could not prepare all documents. Your application status is unchanged. Please try again.";
+            webSocketAppHandler.sendNotification(app.getUserId(), "PREP_STATUS", "Preparation Failed",
+                    message, Map.of("step", "FAILED", "status", "failed", "error", message, "applicationId", applicationId));
+        }
         return saved;
     }
 
     public Application updateStatus(String applicationId, Application.Status status, String userId) {
-        Application app = applicationRepository.findById(applicationId)
-                .orElseThrow(() -> new RuntimeException("Application not found for status update: " + applicationId));
-        if (!app.getUserId().equals(userId)) {
-            throw new RuntimeException("Unauthorized to update this application");
+        if (status == null) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Application status is required");
+        Application app = findOwnedApplication(applicationId, userId);
+        Update update = new Update().set("status", status);
+        if (status == Application.Status.APPLIED && app.getAppliedDate() == null) {
+            update.set("appliedDate", LocalDateTime.now());
+        } else if (status == Application.Status.SAVED) {
+            update.set("appliedDate", null);
         }
-        app.setStatus(status);
-        return applicationRepository.save(app);
+        Application saved = mongoTemplate.findAndModify(ownedQuery(applicationId, userId), update,
+                FindAndModifyOptions.options().returnNew(true), Application.class);
+        if (saved == null) throw notFound();
+        hydrateUrls(saved);
+        return saved;
     }
 
     public void deleteApplication(String applicationId, String userId) {
-        Application app = applicationRepository.findById(applicationId)
-                .orElseThrow(() -> new RuntimeException("Application not found for deletion: " + applicationId));
-        if (!app.getUserId().equals(userId)) {
-            throw new RuntimeException("Unauthorized to delete this application");
-        }
+        Application app = findOwnedApplication(applicationId, userId);
         applicationRepository.delete(app);
+    }
+
+    private Application findOwnedApplication(String id, String userId) {
+        if (userId == null || userId.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Sign in to access applications");
+        }
+        return applicationRepository.findById(id)
+                .filter(app -> userId.equals(app.getUserId()))
+                .orElseThrow(this::notFound);
+    }
+
+    private Query ownedQuery(String id, String userId) {
+        return Query.query(Criteria.where("_id").is(id).and("userId").is(userId));
+    }
+
+    private ResponseStatusException notFound() {
+        return new ResponseStatusException(HttpStatus.NOT_FOUND, "Application not found");
     }
 
     private String getCaseInsensitiveValue(Map<String, String> map, String... keys) {

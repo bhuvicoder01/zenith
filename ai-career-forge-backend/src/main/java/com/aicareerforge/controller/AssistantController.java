@@ -4,48 +4,32 @@ import com.aicareerforge.model.ChatMessage;
 import com.aicareerforge.model.ChatSession;
 import com.aicareerforge.model.User;
 import com.aicareerforge.service.AssistantService;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
-import java.util.Map;
 
-@Slf4j
 @RestController
 @RequestMapping("/api/v1/assistant")
 @RequiredArgsConstructor
 public class AssistantController {
 
     private final AssistantService assistantService;
-    private final jakarta.servlet.http.HttpServletRequest request;
 
+    // Only the server-authenticated principal can select a conversation owner.
+    // Client headers, IP addresses, and request-body user IDs are not identities.
     private String getUserId(User user) {
-        if (user != null) return user.getId();
-        
-        // Fallback check for other authentication types
-        var auth = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
-        if (auth != null && auth.isAuthenticated() && !(auth instanceof org.springframework.security.authentication.AnonymousAuthenticationToken)) {
-            Object principal = auth.getPrincipal();
-            if (principal instanceof User) {
-                return ((User) principal).getId();
-            }
+        if (user == null || user.getId() == null || user.getId().isBlank()) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
         }
-
-        // Check for specific Guest ID from frontend (resets on refresh/session end)
-        String guestId = request.getHeader("X-Guest-ID");
-        if (guestId != null && !guestId.isEmpty()) {
-            return guestId;
-        }
-
-        // Final fallback: IP address (rarely used now as frontend sends UUID)
-        String remoteAddr = request.getHeader("X-Forwarded-For");
-        if (remoteAddr == null || remoteAddr.isEmpty()) {
-            remoteAddr = request.getRemoteAddr();
-        }
-        return "guest_" + remoteAddr.replace(":", "_").replace(".", "_");
+        return user.getId();
     }
 
     @GetMapping("/sessions")
@@ -54,23 +38,33 @@ public class AssistantController {
     }
 
     @PostMapping("/sessions")
-    public ResponseEntity<ChatSession> createSession(@AuthenticationPrincipal User user, @RequestBody Map<String, String> body) {
-        return ResponseEntity.ok(assistantService.createSession(getUserId(user), body.get("title")));
+    public ResponseEntity<ChatSession> createSession(
+            @AuthenticationPrincipal User user,
+            @Valid @RequestBody CreateSessionRequest body) {
+        return ResponseEntity.ok(assistantService.createSession(getUserId(user), body.title()));
     }
 
     @GetMapping("/sessions/{sessionId}/messages")
-    public ResponseEntity<List<ChatMessage>> getMessages(@PathVariable String sessionId) {
-        return ResponseEntity.ok(assistantService.getSessionMessages(sessionId));
+    public ResponseEntity<List<ChatMessage>> getMessages(
+            @AuthenticationPrincipal User user,
+            @PathVariable String sessionId) {
+        return ResponseEntity.ok(assistantService.getSessionMessages(getUserId(user), sessionId));
     }
 
     @PostMapping("/chat")
     public ResponseEntity<ChatMessage> sendMessage(
             @AuthenticationPrincipal User user,
-            @RequestBody Map<String, String> body) {
+            @Valid @RequestBody ChatRequest body) {
         return ResponseEntity.ok(assistantService.sendMessage(
                 getUserId(user), 
-                body.get("sessionId"), 
-                body.get("message")
+                body.sessionId(),
+                body.message()
         ));
     }
+
+    public record CreateSessionRequest(@Size(max = 120) String title) {}
+
+    public record ChatRequest(
+            @Size(max = 128) String sessionId,
+            @NotBlank @Size(max = 8000) String message) {}
 }

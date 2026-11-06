@@ -74,7 +74,6 @@ public class SecurityConfig {
                                 AntPathRequestMatcher.antMatcher("/api/v1/auth/reset-password"),
                                 AntPathRequestMatcher.antMatcher("/api/v1/public/**"),
                                 AntPathRequestMatcher.antMatcher("/api/v1/profile/public/**"),
-                                AntPathRequestMatcher.antMatcher("/api/v1/assistant/**"),
                                 AntPathRequestMatcher.antMatcher("/api/v1/jobs/public"),
                                 AntPathRequestMatcher.antMatcher(HttpMethod.GET, "/api/v1/hashtags"),
                                 AntPathRequestMatcher.antMatcher(HttpMethod.GET, "/api/v1/posts"),
@@ -84,6 +83,7 @@ public class SecurityConfig {
                                 AntPathRequestMatcher.antMatcher("/ws/app"),
                                 AntPathRequestMatcher.antMatcher("/error")
                         ).permitAll()
+                        .requestMatchers(AntPathRequestMatcher.antMatcher("/api/v1/assistant/**")).authenticated()
                         .requestMatchers(AntPathRequestMatcher.antMatcher("/api/v1/recruiter/**")).hasRole("RECRUITER")
                         .requestMatchers(AntPathRequestMatcher.antMatcher("/api/v1/admin/**")).hasRole("ADMIN")
                         .anyRequest().authenticated()

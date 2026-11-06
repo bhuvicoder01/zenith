@@ -1,6 +1,7 @@
 package com.aicareerforge.service;
 
 import io.awspring.cloud.s3.S3Template;
+import com.aicareerforge.security.AssetAccessPolicy;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -12,6 +13,7 @@ import software.amazon.awssdk.services.s3.presigner.model.PresignedGetObjectRequ
 
 import java.time.Duration;
 import java.time.Instant;
+import java.net.URI;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -81,6 +83,51 @@ public class S3Service {
     public String getPermanentUrl(String key) {
         if (key == null || key.isBlank()) return null;
         return backendUrl + "/api/v1/public/assets/" + key;
+    }
+
+    /**
+     * Issues a short-lived URL only for an authenticated owner's object. Callers
+     * must pass the server-selected owner, never an ID from a request body.
+     * Also refreshes legacy backend and expired S3 URLs without trusting their
+     * embedded query/signature or signing another owner's key.
+     */
+    public String getPrivateAssetUrl(String value, String ownerId) {
+        String key = privateObjectKey(value);
+        if (!AssetAccessPolicy.isOwnedKey(key, ownerId)) return null;
+        boolean isPdf = key.toLowerCase(java.util.Locale.ROOT).endsWith(".pdf");
+        String filename = key.substring(key.lastIndexOf('/') + 1);
+        GetObjectRequest objectRequest = GetObjectRequest.builder().bucket(bucketName).key(key)
+                .responseContentType(isPdf ? "application/pdf" : "application/octet-stream")
+                .responseContentDisposition((isPdf ? "inline" : "attachment") + "; filename=\"" + filename + "\"")
+                .responseCacheControl("private, no-store").build();
+        GetObjectPresignRequest request = GetObjectPresignRequest.builder()
+                .signatureDuration(Duration.ofMinutes(15)).getObjectRequest(objectRequest).build();
+        return s3Presigner.presignGetObject(request).url().toString();
+    }
+
+    private String privateObjectKey(String value) {
+        if (value == null || value.isBlank()) return null;
+        if (value.startsWith("users/")) return value;
+        try {
+            URI uri = URI.create(value);
+            URI backend = URI.create(backendUrl);
+            if (uri.getUserInfo() != null || uri.getHost() == null) return null;
+            String assetPrefix = "/api/v1/public/assets/";
+            if (java.util.Objects.equals(uri.getScheme(), backend.getScheme())
+                    && uri.getHost().equalsIgnoreCase(backend.getHost()) && uri.getPort() == backend.getPort()
+                    && uri.getPath().startsWith(assetPrefix)) {
+                return uri.getPath().substring(assetPrefix.length());
+            }
+            String host = uri.getHost().toLowerCase(java.util.Locale.ROOT);
+            if ("https".equalsIgnoreCase(uri.getScheme())
+                    && (host.equals(bucketName + ".s3.amazonaws.com")
+                        || (host.startsWith(bucketName + ".s3.") && host.endsWith(".amazonaws.com")))) {
+                return uri.getPath().startsWith("/") ? uri.getPath().substring(1) : null;
+            }
+        } catch (IllegalArgumentException exception) {
+            // Unknown external URLs and malformed legacy values are not private assets.
+        }
+        return null;
     }
 
     public String getProxyUrl(String externalUrl) {

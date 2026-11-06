@@ -125,7 +125,7 @@ public class JobController {
         // Priority: Cached Score (from list view) > Fresh Calculation (baseline)
         Double score = jobService.getCachedScore(user.getId(), id);
         if (score == null) {
-            score = jobService.calculateMatchScore(job, profile, 0.7); // Baseline fallback
+            score = jobService.calculateMatchScore(job, profile, null); // No semantic evidence available
         }
         
         List<Application> existingApps = applicationRepository.findByUserIdAndJobId(user.getId(), id);

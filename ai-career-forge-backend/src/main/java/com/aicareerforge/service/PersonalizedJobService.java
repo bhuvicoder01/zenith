@@ -111,7 +111,7 @@ public class PersonalizedJobService {
         return activityJobs.stream()
                 .distinct()
                 .map(job -> {
-                    job.setMatchScore(jobService.calculateMatchScore(job, profile, 0.6));
+                    job.setMatchScore(jobService.calculateMatchScore(job, profile, null));
                     return job;
                 })
                 .sorted((a, b) -> {

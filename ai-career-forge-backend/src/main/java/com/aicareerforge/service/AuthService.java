@@ -16,6 +16,8 @@ import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -84,6 +86,19 @@ public class AuthService {
     }
 
     public AuthResponse register(RegisterRequest request) {
+        if (request == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Registration details are required");
+        }
+        User.Role registrationRole = request.getRole() == null ? User.Role.USER : request.getRole();
+        // Privileged roles are assigned by administrators, never by a public
+        // registration payload. Validate before any persistence or token issue.
+        if (registrationRole != User.Role.USER && registrationRole != User.Role.RECRUITER) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Choose a candidate or recruiter account");
+        }
+        if (request.getPassword() == null || request.getPassword().isBlank() || request.getPassword().length() < 8
+                || request.getPassword().getBytes(java.nio.charset.StandardCharsets.UTF_8).length > 72) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Password must be at least 8 characters and at most 72 UTF-8 bytes");
+        }
         if (repository.existsByEmail(request.getEmail())) {
             throw new RuntimeException("Email already in use");
         }
@@ -110,7 +125,7 @@ public class AuthService {
                 .email(request.getEmail())
                 .username(uniqueUsername)
                 .password(passwordEncoder.encode(request.getPassword()))
-                .role(request.getRole() != null ? request.getRole() : User.Role.USER)
+                .role(registrationRole)
                 .build();
         repository.save(user);
 

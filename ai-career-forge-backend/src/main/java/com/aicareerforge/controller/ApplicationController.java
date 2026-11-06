@@ -3,7 +3,6 @@ package com.aicareerforge.controller;
 import com.aicareerforge.model.Application;
 import com.aicareerforge.model.User;
 import com.aicareerforge.service.ApplicationTrackerService;
-import com.aicareerforge.service.UserProfileService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -17,7 +16,6 @@ import java.util.List;
 public class ApplicationController {
 
     private final ApplicationTrackerService applicationTrackerService;
-    private final UserProfileService userProfileService;
 
     @GetMapping
     public ResponseEntity<List<Application>> getUserApplications(@AuthenticationPrincipal User user) {
@@ -42,13 +40,12 @@ public class ApplicationController {
             @PathVariable String applicationId,
             @RequestBody(required = false) PrepRequest req) {
         
-        String resumeText = userProfileService.getProfile(user.getId()).getRawResumeText();
         String desc = req != null ? req.jobDescription() : null;
         String comp = req != null ? req.company() : null;
         
         return ResponseEntity.ok(applicationTrackerService.prepareApplicationMaterials(
                 applicationId, 
-                resumeText, 
+                user.getId(),
                 desc, 
                 comp
         ));
