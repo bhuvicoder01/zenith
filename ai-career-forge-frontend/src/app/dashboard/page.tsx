@@ -45,6 +45,7 @@ export default function DashboardProfile() {
   const { notifications, markAsRead } = useWebSocketStore();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
   const [isUploading, setIsUploading] = useState(false);
   const [uploadStatus, setUploadStatus] = useState<"idle" | "success" | "error">("idle");
   const [isDragging, setIsDragging] = useState(false);
@@ -74,16 +75,21 @@ export default function DashboardProfile() {
   const fetchProfile = async () => {
     try {
       setIsLoading(true);
+      setLoadError("");
       const response = await api.get("/profile");
       setProfile(response.data);
     } catch (err) {
-      console.error("Failed to fetch profile:", err);
+      setLoadError("Your profile could not be loaded. Please try again.");
     } finally {
       setIsLoading(false);
     }
   };
 
   const uploadFile = async (file: File) => {
+    if ((file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf")) || file.size > 10 * 1024 * 1024) {
+      toast.error("Choose a PDF resume smaller than 10 MB.");
+      return;
+    }
     const formData = new FormData();
     formData.append("file", file);
 
@@ -128,11 +134,11 @@ export default function DashboardProfile() {
     try {
       await api.put("/profile", updatedProfile);
       setProfile(updatedProfile);
-      toast.success("Dashboard intel updated!");
+      toast.success("Profile updated.");
       setIsResumeSyncModalOpen(false);
       setSuggestions(null);
     } catch (err) {
-      toast.error("Failed to sync intel");
+      toast.error("Could not update the profile. Please try again.");
     } finally {
       setSaving(false);
     }
@@ -171,6 +177,8 @@ export default function DashboardProfile() {
     );
   }
 
+  if (loadError) return <div className="z-error-state" role="alert"><h1 className="text-xl">Your workspace will be right here.</h1><p>{loadError}</p><button onClick={fetchProfile} className="z-button z-button-dark">Try again</button></div>;
+
   const calculateCompleteness = () => {
     if (!profile) return 0;
     let score = 0;
@@ -192,20 +200,20 @@ export default function DashboardProfile() {
         <div className="relative z-10 space-y-6 max-w-2xl">
           <div className="flex items-center gap-3">
              <div className="px-3 py-1 bg-zinc-200/50 dark:bg-white/5 border border-zinc-300 dark:border-white/10 rounded-full text-[10px] font-black uppercase tracking-[0.2em] text-zinc-600 dark:text-zinc-400">
-               Career Nexus Engaged
+               YOUR CAREER WORKSPACE
              </div>
              {profile?.resumeS3Url && (
                <div className="flex items-center gap-1.5 px-3 py-1 bg-primary/10 dark:bg-white/10 border border-primary/20 dark:border-white/20 rounded-full text-[10px] font-black uppercase tracking-[0.2em] text-primary dark:text-white">
-                 <Zap className="w-3 h-3 fill-current" /> Intel Active
+                 <Zap className="w-3 h-3 fill-current" /> Resume added
                </div>
              )}
           </div>
           <div className="space-y-2">
             <h1 className="text-4xl md:text-6xl font-black tracking-tight text-zinc-900 dark:text-white leading-none">
-              Welcome Back, <span className="text-primary dark:text-zinc-100">{profile?.fullName?.split(' ')[0] || "Operative"}</span>
+              Welcome back, <span className="text-primary dark:text-zinc-100">{profile?.fullName?.split(' ')[0] || "there"}</span>
             </h1>
             <p className="text-lg md:text-xl text-zinc-600 dark:text-zinc-500 font-medium leading-relaxed">
-              {profile?.headline || "Initialize your career profile to unlock AI-powered job matching."}
+              {profile?.headline || "Build a clear profile, explore relevant roles, and plan your next step."}
             </p>
           </div>
           <div className="flex flex-wrap gap-4 pt-4">
@@ -213,7 +221,7 @@ export default function DashboardProfile() {
               href="/dashboard/jobs" 
               className="px-8 py-4 bg-zinc-900 dark:bg-white text-white dark:text-black hover:bg-zinc-800 dark:hover:bg-zinc-200 rounded-2xl font-black uppercase tracking-widest text-xs transition-all shadow-xl shadow-zinc-900/10 dark:shadow-white/10 flex items-center gap-2 group"
             >
-              Scan Job Market <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+              Discover roles <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
             </Link>
             <button 
               onClick={() => fileInputRef.current?.click()}
@@ -228,14 +236,14 @@ export default function DashboardProfile() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Quick Actions & Status */}
         <div className="space-y-8 lg:col-span-1">
-          {/* Readiness Tracker */}
+          {/* Profile completeness Tracker */}
           <section className="bg-card border border-border rounded-[2rem] p-8 space-y-6 shadow-xl">
              <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                    <div className="p-2 bg-amber-500/10 rounded-xl">
                       <BarChart3 className="w-5 h-5 text-amber-500" />
                    </div>
-                   <h3 className="text-lg font-black uppercase tracking-tight">Readiness</h3>
+                   <h3 className="text-lg font-black uppercase tracking-tight">Profile completeness</h3>
                 </div>
                 <span className="text-2xl font-black text-amber-500">{completeness}%</span>
              </div>
@@ -247,7 +255,7 @@ export default function DashboardProfile() {
                    />
                 </div>
                 <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest leading-relaxed">
-                   {completeness < 100 ? "Sync resume or fill profile fields to reach 100% mission readiness." : "Maximum readiness achieved. Deployment recommended."}
+                   {completeness < 100 ? "Add your resume, skills, and experience to complete these profile fields." : "These profile fields are complete. Review your next opportunity."}
                 </p>
              </div>
           </section>
@@ -276,18 +284,18 @@ export default function DashboardProfile() {
                 <div className="w-10 h-10 bg-green-500/10 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
                    <Sparkles className="w-5 h-5 text-green-500" />
                 </div>
-                <span className="text-xs font-black uppercase tracking-widest">AI Cover</span>
+                <span className="text-xs font-black uppercase tracking-widest">Review profile</span>
              </Link>
           </section>
 
-          {/* Live Stream Notifications Feed */}
+          {/* Recent activity Notifications Feed */}
           <section className="bg-card border border-border rounded-[2rem] p-8 space-y-6 shadow-xl relative overflow-hidden group">
              <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                    <div className="p-2 bg-primary/10 rounded-xl">
                       <Bell className="w-5 h-5 text-primary" />
                    </div>
-                   <h3 className="text-lg font-black uppercase tracking-tight">Live Stream</h3>
+                   <h3 className="text-lg font-black uppercase tracking-tight">Recent activity</h3>
                 </div>
                  {notifications.filter((n: NotificationItem) => !n.read).length > 0 && (
                     <span className="px-2 py-0.5 bg-primary text-background rounded-full text-[9px] font-black animate-pulse">
@@ -352,7 +360,7 @@ export default function DashboardProfile() {
                        <div className="p-2 bg-primary/10 rounded-xl">
                           <BrainCircuit className="w-5 h-5 text-primary" />
                        </div>
-                       <h3 className="text-lg font-black uppercase tracking-tight">Arsenal</h3>
+                       <h3 className="text-lg font-black uppercase tracking-tight">Skills</h3>
                     </div>
                     {isUploading && <Loader2 className="w-4 h-4 animate-spin text-primary" />}
                  </div>
@@ -465,13 +473,13 @@ export default function DashboardProfile() {
                       <h4 className="font-black text-lg">{suggestions.fullName || "Your Name"}</h4>
                    </div>
                 </div>
-                {suggestions.headline && <p className="text-sm font-bold text-foreground italic">"{suggestions.headline}"</p>}
+                {suggestions.headline && <p className="text-sm font-bold text-foreground italic">&quot;{suggestions.headline}&quot;</p>}
               </div>
 
               {/* Detected Skills */}
               {suggestions.skills?.length > 0 && (
                 <div className="space-y-3">
-                  <h4 className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Extracted Arsenal ({suggestions.skills.length})</h4>
+                  <h4 className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Extracted skills ({suggestions.skills.length})</h4>
                   <div className="flex flex-wrap gap-2">
                     {suggestions.skills.map(s => (
                       <span key={s} className="px-3 py-1.5 bg-secondary text-foreground border border-border rounded-full text-[10px] font-black">

@@ -102,7 +102,7 @@ function SearchResultsContent() {
           Search Workspace
         </div>
         <h1 className="text-2xl md:text-4xl font-black uppercase tracking-tight text-foreground">
-          Matches for <span className="text-primary font-black">"{cleanQueryDisplay}"</span>
+          Matches for <span className="text-primary font-black">&quot;{cleanQueryDisplay}&quot;</span>
         </h1>
         <p className="text-xs text-muted-foreground font-semibold">
           Discovered {profiles.length} members, {posts.length} posts, and {matchingTags.length} hashtags

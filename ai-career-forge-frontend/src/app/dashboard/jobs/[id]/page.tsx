@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, use } from "react";
+import { hasPreparedDocuments } from "@/lib/applicationState";
 import api from "@/lib/api";
 import Link from "next/link";
 import { 
@@ -76,22 +77,15 @@ export default function JobDetailsPage({ params }: { params: Promise<{ id: strin
   const [relevanceLoading, setRelevanceLoading] = useState(false);
 
   const existingAppForStyle = data?.existingApplications?.find(
-    app => app.templateStyle === selectedTemplate && app.status !== "SAVED"
+    app => app.templateStyle === selectedTemplate && hasPreparedDocuments(app)
   );
 
-  // Reactively mark application as completed when background prep finishes
+  // Refresh generated documents; only an explicit tracker action changes status.
   useEffect(() => {
-    if (prepStatus?.step === "COMPLETED" && data) {
-      setData(prev => {
-        if (!prev) return prev;
-        const currentApps = prev.existingApplications || [];
-        const updated = currentApps.map(app => 
-          app.templateStyle === selectedTemplate ? { ...app, status: "APPLIED" } : app
-        );
-        return { ...prev, existingApplications: updated };
-      });
+    if (prepStatus?.step === "COMPLETED") {
+      api.get(`/jobs/${id}`).then(response => setData(response.data)).catch(() => {});
     }
-  }, [prepStatus?.step]);
+  }, [prepStatus?.step, id]);
 
   useEffect(() => {
     const fetchJob = async () => {
@@ -160,7 +154,7 @@ export default function JobDetailsPage({ params }: { params: Promise<{ id: strin
         const isAlreadyPrepared = appRes.data.tailoredResumeS3Url && appRes.data.coverLetterText;
         const appWithStatus = {
           ...appRes.data,
-          status: isAlreadyPrepared ? "APPLIED" : "SAVED"
+          status: appRes.data.status || "SAVED"
         };
         return {
           ...prev,
@@ -206,7 +200,7 @@ export default function JobDetailsPage({ params }: { params: Promise<{ id: strin
     );
   }
 
-  if (!data) return null;
+  if (!data) return <div className="z-error-state" role="alert"><h1 className="text-xl">This role could not be loaded.</h1><p>It may no longer be available. Return to discovery to explore another opportunity.</p><Link href="/dashboard/jobs" className="z-button z-button-dark">Back to opportunities</Link></div>;
 
   const { job, matchedSkills, matchScore } = data;
 
@@ -250,7 +244,7 @@ export default function JobDetailsPage({ params }: { params: Promise<{ id: strin
         className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors mb-6 md:mb-8 group font-black uppercase text-[10px] tracking-widest"
       >
         <ArrowLeft className="w-3.5 h-3.5 group-hover:-translate-x-1 transition-transform" />
-        Back to Intelligence Feed
+        Back to opportunities
       </Link>
 
       <div className="grid grid-cols-1 md:grid-cols-12 gap-6 md:gap-8">
@@ -311,7 +305,7 @@ export default function JobDetailsPage({ params }: { params: Promise<{ id: strin
                   <div className="flex items-center gap-2">
                     <span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Match Compatibility:</span>
                     <span className={`border px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider flex items-center gap-1.5 shrink-0 shadow-sm ${matchColor}`}>
-                      <Target className="w-3.5 h-3.5 opacity-75" /> {matchLevel} Match ({Math.round(matchScore)}%)
+                      <Target className="w-3.5 h-3.5 opacity-75" /> {matchLevel} Match ({Math.round(matchScore)}/100)
                     </span>
                   </div>
 
@@ -384,7 +378,7 @@ export default function JobDetailsPage({ params }: { params: Promise<{ id: strin
                   >
                     <span>Apply Now</span>
                     <span className="text-[10px] bg-primary/10 text-primary px-2 py-0.5 rounded-full font-black text-[9px] border border-primary/20 shrink-0">
-                      {Math.round(matchScore)}% Match
+                      {Math.round(matchScore)}/100 relevance
                     </span>
                     <ExternalLink className="w-4 h-4 opacity-50 group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform shrink-0" />
                   </a>
@@ -438,7 +432,7 @@ export default function JobDetailsPage({ params }: { params: Promise<{ id: strin
                  <div className="bg-card border border-border rounded-2xl md:rounded-3xl p-5 md:p-8 space-y-4 shadow-sm">
                     <h3 className="text-[10px] font-black flex items-center gap-2 uppercase tracking-[0.2em] text-muted-foreground">
                        <Target className="w-4 h-4 opacity-50" />
-                       Match Intelligence
+                       Role relevance
                     </h3>
                     <div className="text-foreground/90 leading-relaxed text-sm font-sans font-normal">
                       {relevanceLoading ? (
@@ -455,7 +449,7 @@ export default function JobDetailsPage({ params }: { params: Promise<{ id: strin
                  <div className="bg-card border border-border rounded-2xl md:rounded-3xl p-5 md:p-8 space-y-4 shadow-sm">
                     <h3 className="text-[10px] font-black flex items-center gap-2 uppercase tracking-[0.2em] text-muted-foreground">
                        <Shield className="w-4 h-4 opacity-50" />
-                       Fair-Pay Intelligence
+                       Pay information
                     </h3>
                     <div className="text-foreground/90 leading-relaxed text-sm font-sans font-normal">
                       {job.fairPayEstimate ? (
@@ -536,12 +530,12 @@ export default function JobDetailsPage({ params }: { params: Promise<{ id: strin
            {/* Dynamic Match Score */}
            <div className="hidden md:block bg-foreground text-background border border-border rounded-3xl p-8 relative overflow-hidden shadow-2xl">
               <div className="relative z-10 space-y-4 text-center">
-                 <h4 className="font-black text-background/50 uppercase tracking-widest text-[10px]">Match Confidence</h4>
-                 <div className="text-8xl font-black text-background">{Math.round(matchScore)}%</div>
+                 <h4 className="font-black text-background/50 uppercase tracking-widest text-[10px]">Relevance score</h4>
+                 <div className="text-8xl font-black text-background">{Math.round(matchScore)}<span className="text-2xl">/100</span></div>
                  <div className="w-full bg-background/20 h-4 rounded-full overflow-hidden border border-background/20">
                     <div className="h-full bg-background transition-all duration-1000 shadow-[0_0_20px_rgba(255,255,255,0.5)]" style={{ width: `${matchScore}%` }}></div>
                  </div>
-                 <p className="text-[9px] text-background/40 font-black uppercase tracking-tighter pt-2">Atlas Vector Verified Match</p>
+                 <p className="text-[9px] text-background/40 font-black uppercase tracking-tighter pt-2">Weighted heuristic, not a hiring probability</p>
               </div>
            </div>
 
@@ -549,7 +543,7 @@ export default function JobDetailsPage({ params }: { params: Promise<{ id: strin
            <div className="hidden md:block bg-card border border-border rounded-3xl p-8 space-y-6 shadow-sm">
               <h4 className="font-black flex items-center gap-2 text-foreground/70 uppercase text-xs tracking-widest">
                  <CheckCircle className="w-4 h-4 text-green-600 dark:text-green-500" />
-                 Verified Skills
+                 Matching skills
               </h4>
               <div className="flex flex-wrap gap-2">
                 {matchedSkills.map(skill => (

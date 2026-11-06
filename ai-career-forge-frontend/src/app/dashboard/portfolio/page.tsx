@@ -632,7 +632,7 @@ export default function PortfolioCustomizer() {
                 if (sec.id === "contact") {
                   return makeDraggable("contact", idx, (
                     <div className="p-6 rounded-3xl bg-card border border-border text-center space-y-4 shadow-sm pt-4 border-t">
-                      <h2 className="text-lg font-black uppercase tracking-tight text-foreground">Let's Connect & Work Together</h2>
+                      <h2 className="text-lg font-black uppercase tracking-tight text-foreground">Let&apos;s Connect & Work Together</h2>
                       {showEmail && profile.email && (
                         <p className="text-xs text-muted-foreground font-semibold break-all">
                           Send email directly to: <InlineEdit value={profile.email} onChange={(val) => setProfile({ ...profile, email: val })} />
@@ -886,7 +886,7 @@ export default function PortfolioCustomizer() {
                 </div>
                 <div className="space-y-2">
                   <h1 className={`${isMobile ? "text-2xl" : "text-2xl sm:text-4xl"} font-black tracking-tight text-white leading-tight`}>
-                    Hi, I'm <span className={activeTheme.text}><InlineEdit value={profile.fullName} onChange={(val) => setProfile({ ...profile, fullName: val })} /></span> 👋
+                    Hi, I&apos;m <span className={activeTheme.text}><InlineEdit value={profile.fullName} onChange={(val) => setProfile({ ...profile, fullName: val })} /></span> 👋
                   </h1>
                   <p className="text-xs sm:text-base text-zinc-400 font-medium">
                     <InlineEdit value={profile.headline} onChange={(val) => setProfile({ ...profile, headline: val })} />
@@ -1073,7 +1073,7 @@ export default function PortfolioCustomizer() {
                 if (sec.id === "contact") {
                   return makeDraggable("contact", idx, (
                     <div className="p-6 rounded-2xl bg-zinc-900/80 border border-zinc-800 text-center space-y-4">
-                      <h2 className="text-xl font-bold text-white">Let's Connect & Work Together</h2>
+                      <h2 className="text-xl font-bold text-white">Let&apos;s Connect & Work Together</h2>
                       {showEmail && profile.email && (
                         <p className="text-xs text-zinc-400 break-all">
                           Email: <InlineEdit value={profile.email} onChange={(val) => setProfile({ ...profile, email: val })} />
@@ -1522,7 +1522,7 @@ export default function PortfolioCustomizer() {
                 if (sec.id === "contact") {
                   return makeDraggable("contact", idx, (
                     <div className={`${isMobile ? "col-span-1 p-5" : "md:col-span-3 p-8"} rounded-3xl border border-border bg-card text-center space-y-4 shadow-sm`}>
-                      <h3 className="text-xl font-black uppercase text-foreground">Let's Connect</h3>
+                      <h3 className="text-xl font-black uppercase text-foreground">Let&apos;s Connect</h3>
                       {showEmail && profile.email && (
                         <p className="text-xs text-muted-foreground font-semibold break-all">
                           <InlineEdit value={profile.email} onChange={(val) => setProfile({ ...profile, email: val })} />

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef, Suspense } from "react";
+import { hasPreparedDocuments } from "@/lib/applicationState";
 import api, { BACKEND_URL } from "@/lib/api";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -70,6 +71,7 @@ function JobsContent() {
   const [dashboard, setDashboard] = useState<DashboardData | null>(null);
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
   const [loadingMore, setLoadingMore] = useState(false);
   const [searching, setSearching] = useState(false);
   
@@ -171,7 +173,7 @@ function JobsContent() {
   }, [prepStatus]);
 
   const existingAppForStyle = detailData?.existingApplications?.find(
-    app => app.templateStyle === selectedTemplate && app.status !== "SAVED"
+    app => app.templateStyle === selectedTemplate && hasPreparedDocuments(app)
   );
 
   // SSE Sync status
@@ -317,7 +319,7 @@ function JobsContent() {
       const response = await api.get("/jobs/dashboard");
       setDashboard(response.data);
     } catch (error) {
-      console.error("Failed to fetch dashboard data:", error);
+      setLoadError("Opportunities could not be loaded. Please try again.");
     }
   };
 
@@ -372,7 +374,7 @@ function JobsContent() {
       setTotalPages(totalP);
       setTotalElements(totalE);
     } catch (error) {
-      console.error(`Failed to fetch ${tab} jobs:`, error);
+      setLoadError("The role list could not be updated. Please try again.");
       if (!append) setJobs([]);
     }
   };
@@ -469,7 +471,7 @@ function JobsContent() {
         const isAlreadyPrepared = appRes.data.tailoredResumeS3Url && appRes.data.coverLetterText;
         const appWithStatus = {
           ...appRes.data,
-          status: isAlreadyPrepared ? "APPLIED" : "SAVED"
+          status: appRes.data.status || "SAVED"
         };
         return {
           ...prev,
@@ -558,7 +560,7 @@ function JobsContent() {
                     <span className={`text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full border ${
                       job.matchScore >= 85 ? 'text-emerald-500 bg-emerald-500/10 border-emerald-500/20' : 'text-blue-500 bg-blue-500/10 border-blue-500/20'
                     }`}>
-                      {Math.round(job.matchScore)}% Match
+                      {Math.round(job.matchScore)}/100 relevance
                     </span>
                     <span className="text-[8px] font-black tracking-widest text-muted-foreground px-2 py-0.5 bg-secondary rounded-full uppercase">
                       {job.source}
@@ -592,6 +594,7 @@ function JobsContent() {
 
   return (
     <div className="space-y-4 md:space-y-8 animate-in fade-in duration-500 pb-20">
+      {loadError && <div className="z-error-state" role="alert"><p>{loadError}</p><button className="z-button z-button-outline" onClick={() => { setLoadError(""); fetchDashboard(); fetchJobs(activeTab, page); }}>Retry loading opportunities</button></div>}
       {/* Header Panel */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 md:gap-6 bg-card p-4 md:p-6 rounded-2xl md:rounded-[2rem] border border-border/80 shadow-sm relative">
         {isSyncing && (
@@ -609,7 +612,7 @@ function JobsContent() {
               )}
             </div>
             <p className="text-muted-foreground font-medium max-w-lg text-[10px] md:text-xs">
-              LinkedIn priority integrations and autonomous AI compatibility calculations.
+              Explore opportunities and compare skill-based relevance signals. Scores are heuristics, not hiring probabilities.
             </p>
           </div>
           
@@ -802,14 +805,14 @@ function JobsContent() {
           <div className="space-y-16">
             <HorizontalSection 
               title="Top job picks for you" 
-              description="High similarity matches compiled using vector algorithms."
+              description="Ranked by the available profile and role signals."
               icon={Zap}
               data={dashboard.topPicks}
             />
             
             <HorizontalSection 
-              title="Likely to hear back" 
-              description="Vacancy specifications aligning perfectly with your historical experience."
+              title="Closer skill alignment"
+              description="Roles with stronger signals against your profile. Review requirements before applying."
               icon={Target}
               data={dashboard.likelyToHearBack}
             />
@@ -874,7 +877,7 @@ function JobsContent() {
                             ? 'text-emerald-500 bg-emerald-500/10 border-emerald-500/20' 
                             : 'text-blue-500 bg-blue-500/10 border-blue-500/20'
                         }`}>
-                          {Math.round(job.matchScore)}% Match
+                          {Math.round(job.matchScore)}/100 relevance
                         </span>
                         <span className="text-[9px] md:text-[8px] font-black uppercase tracking-wider text-muted-foreground/80 bg-secondary px-1.5 py-0.5 rounded">
                           {job.source}
@@ -1018,7 +1021,7 @@ function JobsContent() {
                             <div className="flex items-center gap-2">
                               <span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Match Compatibility:</span>
                               <span className={`border px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider flex items-center gap-1.5 shrink-0 shadow-sm ${matchColor}`}>
-                                <Target className="w-3.5 h-3.5 opacity-75" /> {matchLevel} Match ({Math.round(matchScore)}%)
+                                <Target className="w-3.5 h-3.5 opacity-75" /> {matchLevel} Match ({Math.round(matchScore)}/100)
                               </span>
                             </div>
 
@@ -1122,7 +1125,7 @@ function JobsContent() {
                           >
                             <span>Apply Now</span>
                             <span className="text-[9px] bg-primary/10 text-primary px-2 py-0.5 rounded-full font-black border border-primary/20 shrink-0">
-                              {Math.round(detailData.matchScore)}% Match
+                              {Math.round(detailData.matchScore)}/100 relevance
                             </span>
                             <ExternalLink className="w-3.5 h-3.5 opacity-50 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform shrink-0" />
                           </a>
@@ -1183,7 +1186,7 @@ function JobsContent() {
                   <div className="bg-card border border-border rounded-2xl p-6 space-y-4 shadow-sm animate-in fade-in duration-300 mt-8">
                     <h3 className="text-lg font-black flex items-center gap-3 uppercase tracking-tighter text-foreground">
                       <Target className="w-5 h-5 text-primary" />
-                      Match Intelligence
+                      Role relevance
                     </h3>
                     <div className="text-foreground leading-relaxed text-xs font-semibold">
                       {relevanceLoading ? (

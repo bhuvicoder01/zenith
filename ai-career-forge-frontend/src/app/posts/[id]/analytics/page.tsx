@@ -150,7 +150,7 @@ export default function IndividualPostAnalytics() {
                 </div>
                 <div className="space-y-1">
                   <p className="text-sm text-foreground/90 font-medium leading-relaxed italic border-l-2 border-indigo-500/40 pl-4">
-                    "{postMetrics.contentSnippet || "Untitled / Media Post"}"
+                    &quot;{postMetrics.contentSnippet || "Untitled / Media Post"}&quot;
                   </p>
                 </div>
               </div>

@@ -1,292 +1,383 @@
 "use client";
-
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import api from "@/lib/api";
-import { 
-  CheckCircle, Clock, FileText, LayoutDashboard, 
-  ExternalLink, MousePointer2, Briefcase, ChevronRight,
-  TrendingUp, Download, Eye, AlertCircle, Loader2,
-  Trash2, Archive, Inbox, Activity, Sparkles
+import {
+  Archive,
+  ArrowUpRight,
+  Bookmark,
+  CheckCircle2,
+  ChevronRight,
+  FileText,
+  Loader2,
+  Plus,
+  RotateCcw,
+  Search,
+  ShieldCheck,
+  Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
+import api from "@/lib/api";
+import {
+  hasPreparedDocuments,
+  formatAppliedDate,
+} from "@/lib/applicationState";
 import { useWebSocketStore } from "@/store/useWebSocketStore";
-
+type Status =
+  | "SAVED"
+  | "APPLIED"
+  | "INTERVIEW"
+  | "OFFER"
+  | "REJECTED"
+  | "ARCHIVED";
 interface Application {
   id: string;
+  jobId?: string;
   jobTitle: string;
   company: string;
-  status: 'SAVED' | 'APPLIED' | 'INTERVIEW' | 'OFFER' | 'REJECTED' | 'ARCHIVED';
-  appliedDate: string;
+  status: Status;
+  appliedDate?: string | null;
   tailoredResumeS3Url?: string;
   coverLetterText?: string;
   emailIntroduction?: string;
   interviewPrepText?: string;
   templateStyle?: string;
 }
-
+const statusLabels: Record<Status, string> = {
+  SAVED: "Saved",
+  APPLIED: "Applied",
+  INTERVIEW: "Interview",
+  OFFER: "Offer",
+  REJECTED: "Closed · rejected",
+  ARCHIVED: "Archived",
+};
 export default function ApplicationTracker() {
   const [apps, setApps] = useState<Application[]>([]);
   const [loading, setLoading] = useState(true);
-  const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const [error, setError] = useState("");
+  const [busyId, setBusyId] = useState<string | null>(null);
   const [generatingId, setGeneratingId] = useState<string | null>(null);
-  const [currentTab, setCurrentTab] = useState<'ACTIVE' | 'ARCHIVED'>('ACTIVE');
-
+  const [archived, setArchived] = useState(false);
+  const [query, setQuery] = useState("");
   const { prepStatus } = useWebSocketStore();
-
-  const isGenerating = (app: Application) => {
-    return app.tailoredResumeS3Url === "preparing" ||
-           generatingId === app.id || 
-           (prepStatus && 
-            prepStatus.applicationId === app.id && 
-            prepStatus.step !== "COMPLETED" && 
-            prepStatus.step !== "FAILED");
+  const refresh = useCallback(async () => {
+    setError("");
+    try {
+      const response = await api.get("/applications");
+      setApps(Array.isArray(response.data) ? response.data : []);
+    } catch {
+      setError(
+        "Your applications could not be loaded. Please check your connection and try again.",
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
+  useEffect(() => {
+    if (prepStatus?.step === "COMPLETED" || prepStatus?.step === "FAILED")
+      refresh();
+  }, [prepStatus?.step, refresh]);
+  const update = async (id: string, status: Status) => {
+    setBusyId(id);
+    try {
+      await api.patch(`/applications/${id}/status`, null, {
+        params: { status },
+      });
+      await refresh();
+      toast.success(`Status updated to ${statusLabels[status].toLowerCase()}.`);
+    } catch {
+      toast.error("The status could not be updated. Please try again.");
+    } finally {
+      setBusyId(null);
+    }
   };
-
-  const handleGenerateMaterials = async (id: string) => {
+  const prepare = async (id: string) => {
     setGeneratingId(id);
     try {
       await api.post(`/applications/${id}/prepare`);
-      toast.success("AI materials generated successfully!");
-      await fetchApps();
-    } catch (error) {
-      console.error("Failed to generate materials:", error);
-      toast.error("Failed to generate AI materials");
+      await refresh();
+      toast.success(
+        "Your documents are ready to review. Application status is unchanged.",
+      );
+    } catch {
+      toast.error(
+        "Document preparation could not finish. Your application is still in the tracker.",
+      );
+      await refresh();
     } finally {
       setGeneratingId(null);
     }
   };
-
-  const fetchApps = async () => {
-    try {
-      const response = await api.get("/applications");
-      setApps(response.data);
-    } catch (error) {
-       console.error("Failed to fetch applications:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchApps();
-  }, []);
-
-  const handleStatusUpdate = async (id: string, newStatus: string) => {
-    setUpdatingId(id);
-    try {
-      await api.patch(`/applications/${id}/status?status=${newStatus}`);
-      await fetchApps();
-    } catch (error) {
-      console.error("Failed to update status:", error);
-    } finally {
-      setUpdatingId(null);
-    }
-  };
-
-  const handleArchive = (id: string) => {
-    handleStatusUpdate(id, 'ARCHIVED');
-  };
-
-  const handleDelete = async (id: string) => {
-    if (!window.confirm("Are you sure you want to permanently delete this application and all generates materials?")) {
-        return;
-    }
-    setUpdatingId(id);
+  const remove = async (id: string) => {
+    if (
+      !window.confirm(
+        "Delete this application and its generated documents? This cannot be undone.",
+      )
+    )
+      return;
+    setBusyId(id);
     try {
       await api.delete(`/applications/${id}`);
-      await fetchApps();
-    } catch (error) {
-      console.error("Failed to delete application:", error);
+      await refresh();
+      toast.success("Application deleted.");
+    } catch {
+      toast.error("The application could not be deleted.");
     } finally {
-      setUpdatingId(null);
+      setBusyId(null);
     }
   };
-
-  const filteredApps = apps.filter(app => 
-    currentTab === 'ACTIVE' ? app.status !== 'ARCHIVED' : app.status === 'ARCHIVED'
+  const filtered = apps.filter(
+    (app) =>
+      (archived ? app.status === "ARCHIVED" : app.status !== "ARCHIVED") &&
+      `${app.jobTitle} ${app.company}`
+        .toLowerCase()
+        .includes(query.toLowerCase()),
   );
-
-  if (loading) {
+  if (loading)
     return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-         <Loader2 className="w-8 h-8 text-muted-foreground animate-spin" />
+      <div
+        className="min-h-[50vh] flex items-center justify-center gap-3 text-sm text-muted-foreground"
+        role="status"
+      >
+        <Loader2 size={20} className="animate-spin" />
+        Loading your application tracker…
       </div>
     );
-  }
-
-  return (
-    <div className="space-y-10 animate-in fade-in duration-700">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-        <div className="space-y-1 hidden md:block">
-          <h1 className="text-2xl md:text-5xl font-black text-foreground tracking-tight">Application Arsenal</h1>
-          <p className="text-sm md:text-base text-muted-foreground font-semibold">Manage your agent-generated materials and track your mission progress.</p>
-        </div>
-        
-        <div className="flex items-center gap-4">
-           {/* Tabs */}
-           <div className="flex p-1 bg-secondary border border-border rounded-2xl">
-              <button 
-                onClick={() => setCurrentTab('ACTIVE')}
-                className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-sm font-black transition-all ${
-                  currentTab === 'ACTIVE' ? 'bg-foreground text-background shadow-lg' : 'text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                  <Activity className="w-4 h-4" /> Active Bids
-              </button>
-              <button 
-                onClick={() => setCurrentTab('ARCHIVED')}
-                className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-sm font-black transition-all ${
-                  currentTab === 'ARCHIVED' ? 'bg-foreground text-background shadow-lg' : 'text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                  <Inbox className="w-4 h-4" /> Archived
-              </button>
-           </div>
-
-           <div className="hidden xl:flex bg-card border border-border px-6 py-3 rounded-2xl items-center gap-3 shadow-sm">
-              <TrendingUp className="w-5 h-5 text-muted-foreground" />
-              <div>
-                <div className="text-[10px] font-black text-muted-foreground uppercase tracking-wider">Live Operations</div>
-                <div className="text-xl font-black text-foreground">{apps.filter(a => a.status === 'APPLIED' || a.status === 'INTERVIEW').length}</div>
-              </div>
-           </div>
-        </div>
+  if (error)
+    return (
+      <div className="z-error-state" role="alert">
+        <h1 className="text-xl">Let&apos;s try that again.</h1>
+        <p>{error}</p>
+        <button className="z-button z-button-dark" onClick={refresh}>
+          <RotateCcw size={16} />
+          Retry
+        </button>
       </div>
-
-      <div className="grid grid-cols-1 gap-4 md:gap-6">
-        {filteredApps.length > 0 ? (
-          filteredApps.map((app) => (
-            <div key={app.id} className="group bg-card backdrop-blur-md border border-border rounded-2xl md:rounded-3xl p-4 md:p-8 hover:shadow-xl transition-all border-l-4 border-l-foreground relative overflow-hidden">
-              <div className="flex flex-col xl:flex-row gap-8 items-start xl:items-center justify-between relative z-10">
-                
-                {/* Job Info */}
-                <div className="flex items-start gap-4 md:gap-6">
-                  <div className="p-3 md:p-5 bg-muted text-foreground/50 rounded-xl md:rounded-2xl border border-border">
-                    <Briefcase className="w-5 h-5 md:w-8 md:h-8" />
-                  </div>
-                  <div className="space-y-1">
-                    <h3 className="text-lg md:text-3xl font-black text-foreground tracking-tighter">{app.jobTitle}</h3>
-                    <p className="text-sm md:text-xl text-muted-foreground font-bold">{app.company}</p>
-                    
-                    <div className="flex flex-wrap items-center gap-4 mt-4">
-                       <span className={`flex items-center gap-2 px-3 py-1 rounded-full text-[10px] md:text-xs font-black border tracking-wider ${
-                         app.status === 'OFFER' ? 'bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/20' :
-                         app.status === 'INTERVIEW' ? 'bg-foreground/5 text-foreground/80 border-border' :
-                         app.status === 'REJECTED' ? 'bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20' :
-                         'bg-secondary text-muted-foreground border-border'
-                       }`}>
-                          <div className={`w-2 h-2 rounded-full ${
-                             app.status === 'OFFER' ? 'bg-green-500' :
-                             app.status === 'REJECTED' ? 'bg-red-500' :
-                             'bg-foreground animate-pulse'
-                          }`}></div>
-                          {app.status}
-                       </span>
-                       <span className="text-xs text-muted-foreground flex items-center gap-1 font-bold">
-                          <Clock className="w-3.5 h-3.5" />
-                          {new Date(app.appliedDate).toLocaleDateString()}
-                       </span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Status Stepper */}
-                <div className="flex flex-wrap items-center gap-2 bg-muted p-1.5 md:p-2 rounded-xl md:rounded-2xl border border-border shadow-inner">
-                   {['SAVED', 'APPLIED', 'INTERVIEW', 'OFFER', 'REJECTED'].map((st) => (
-                     <button
-                       key={st}
-                       onClick={() => handleStatusUpdate(app.id, st)}
-                       disabled={updatingId !== null || generatingId !== null}
-                       className={`px-2.5 py-1 md:px-3 md:py-1.5 rounded-lg md:rounded-xl text-[9px] md:text-[10px] font-black transition-all ${
-                         app.status === st 
-                           ? 'bg-foreground text-background shadow-lg scale-105' 
-                           : 'hover:bg-foreground/5 text-muted-foreground hover:text-foreground'
-                       }`}
-                     >
-                       {st}
-                     </button>
-                   ))}
-                </div>
-
-                {/* Actions */}
-                <div className="flex flex-wrap items-center gap-3 w-full xl:w-auto">
-                   <div className="flex gap-2 mr-2 border-r border-border pr-4">
-                       {app.status !== 'ARCHIVED' && (
-                           <button 
-                               onClick={() => handleArchive(app.id)}
-                               disabled={updatingId !== null || generatingId !== null}
-                               title="Archive Application"
-                               className="p-3 bg-secondary border border-border text-muted-foreground rounded-2xl hover:bg-foreground hover:text-background transition-all shadow-sm disabled:opacity-40"
-                           >
-                               <Archive className="w-5 h-5" />
-                           </button>
-                       )}
-                       <button 
-                           onClick={() => handleDelete(app.id)}
-                           disabled={updatingId !== null || generatingId !== null}
-                           title="Permanent Delete"
-                           className="p-3 bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-500 rounded-2xl hover:bg-red-500 hover:text-white transition-all shadow-sm disabled:opacity-40"
-                       >
-                           <Trash2 className="w-5 h-5" />
-                       </button>
-                   </div>
-
-                     {(!app.tailoredResumeS3Url || app.tailoredResumeS3Url === "preparing") ? (
-                       <button
-                         type="button"
-                         onClick={() => handleGenerateMaterials(app.id)}
-                         disabled={isGenerating(app) || generatingId !== null || updatingId !== null}
-                         className="flex-1 xl:flex-none flex items-center justify-center gap-2 px-4 py-2.5 md:px-6 md:py-3 bg-primary text-primary-foreground hover:bg-primary/90 rounded-xl md:rounded-2xl text-[10px] md:text-xs font-black uppercase tracking-widest transition-all shadow-xl disabled:opacity-50"
-                       >
-                         {isGenerating(app) ? (
-                           <>
-                             <Loader2 className="w-4 h-4 animate-spin" /> GENERATING...
-                           </>
-                         ) : (
-                           <>
-                             <Sparkles className="w-4 h-4 animate-pulse" /> GENERATE AI MATERIALS
-                           </>
-                         )}
-                       </button>
-                     ) : (
-                      <>
-                        <a 
-                          href={app.tailoredResumeS3Url}
-                          target="_blank"
-                          className="flex-1 xl:flex-none flex items-center justify-center gap-2 px-4 py-2.5 md:px-6 md:py-3 bg-secondary text-foreground hover:bg-foreground hover:text-background border border-border rounded-xl md:rounded-2xl text-[10px] md:text-xs font-black uppercase tracking-widest transition-all shadow-sm"
-                        >
-                          <Eye className="w-4 h-4" /> PREVIEW
-                        </a>
-                        <Link
-                          href={`/dashboard/applications/${app.id}/prep`}
-                          className="flex-1 xl:flex-none flex items-center justify-center gap-2 px-4 py-2.5 md:px-6 md:py-3 bg-foreground text-background rounded-xl md:rounded-2xl text-[10px] md:text-xs font-black uppercase tracking-widest hover:bg-foreground/90 transition-all shadow-xl"
-                        >
-                          <LayoutDashboard className="w-4 h-4" /> PREP KIT
-                        </Link>
-                      </>
-                    )}
-                </div>
-              </div>
-              
-              {/* Progress Line Background */}
-              <div className="absolute bottom-0 left-0 w-full h-[3px] bg-muted">
-                 <div className="h-full bg-foreground transition-all duration-1000 shadow-[0_0_10px_rgba(255,255,255,0.5)]" style={{ width: app.status === 'OFFER' ? '100%' : app.status === 'INTERVIEW' ? '60%' : app.status === 'APPLIED' ? '30%' : '10%' }}></div>
-              </div>
+    );
+  return (
+    <div className="space-y-7">
+      <header className="flex flex-wrap justify-between gap-5 items-start">
+        <div>
+          <span className="text-[10px] tracking-widest text-muted-foreground">
+            YOUR NEXT CHAPTER
+          </span>
+          <h1 className="text-3xl md:text-4xl mt-3">
+            Every opportunity, in one place.
+          </h1>
+          <p className="text-sm text-muted-foreground mt-3 max-w-xl">
+            Prepare thoughtfully. Keep track of your next steps. You decide when
+            an application moves forward.
+          </p>
+        </div>
+        <Link href="/dashboard/jobs" className="z-button z-button-dark">
+          <Plus size={16} />
+          Discover roles
+        </Link>
+      </header>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {(
+          [
+            { status: "SAVED", label: "Saved opportunities", icon: Bookmark },
+            {
+              status: "APPLIED",
+              label: "Recorded as applied",
+              icon: ArrowUpRight,
+            },
+            { status: "INTERVIEW", label: "At interview", icon: CheckCircle2 },
+            { status: "OFFER", label: "Offers", icon: FileText },
+          ] as const
+        ).map((item) => (
+          <div
+            key={item.status}
+            className="bg-card border border-border rounded-xl p-5 flex items-center gap-4"
+          >
+            <span className="p-2.5 bg-accent rounded-lg text-accent-foreground">
+              <item.icon size={18} />
+            </span>
+            <div>
+              <strong className="text-2xl font-medium">
+                {apps.filter((app) => app.status === item.status).length}
+              </strong>
+              <p className="text-[10px] text-muted-foreground mt-1">
+                {item.label}
+              </p>
             </div>
-          ))
+          </div>
+        ))}
+      </div>
+      <div className="flex gap-3 border border-border bg-accent/35 rounded-lg p-4 items-start text-xs text-muted-foreground">
+        <ShieldCheck size={17} className="shrink-0 mt-0.5" />
+        <p>
+          Preparing documents does not submit an application. Record{" "}
+          <strong className="text-foreground font-medium">Applied</strong> after
+          you submit it through the employer&apos;s own process.
+        </p>
+      </div>
+      <div className="flex flex-wrap gap-3 justify-between">
+        <div className="inline-flex p-1 rounded-lg bg-secondary border border-border">
+          {[false, true].map((value) => (
+            <button
+              key={String(value)}
+              onClick={() => setArchived(value)}
+              aria-pressed={archived === value}
+              className={`text-xs px-5 py-2 rounded-md ${archived === value ? "bg-card text-foreground shadow-sm" : "text-muted-foreground"}`}
+            >
+              {value ? "Archived" : "Active"}
+            </button>
+          ))}
+        </div>
+        <label className="flex items-center gap-2 bg-card border border-border rounded-lg px-3">
+          <Search size={16} className="text-muted-foreground" />
+          <input
+            aria-label="Search applications"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Find a role or company"
+            className="bg-transparent py-3 text-xs outline-none w-48"
+          />
+        </label>
+      </div>
+      <div className="space-y-3">
+        {filtered.length ? (
+          filtered.map((app) => {
+            const ready = hasPreparedDocuments(app);
+            const generating =
+              generatingId === app.id ||
+              app.tailoredResumeS3Url === "preparing" ||
+              (prepStatus?.applicationId === app.id &&
+                prepStatus.step !== "FAILED" &&
+                prepStatus.step !== "COMPLETED");
+            return (
+              <article
+                key={app.id}
+                className="bg-card border border-border rounded-xl p-5 md:p-6"
+              >
+                <div className="flex flex-wrap gap-5 items-center">
+                  <div className="w-11 h-11 rounded-lg bg-accent text-accent-foreground flex items-center justify-center font-display text-xl">
+                    {app.company?.[0] || "J"}
+                  </div>
+                  <div className="flex-1 min-w-[150px]">
+                    <h2 className="text-lg">{app.jobTitle}</h2>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {app.company}
+                      {app.templateStyle
+                        ? ` · ${app.templateStyle.toLowerCase()} template`
+                        : ""}
+                    </p>
+                  </div>
+                  <label className="text-[10px] text-muted-foreground flex flex-col gap-1.5">
+                    <span>Status for {app.company}</span>
+                    <select
+                      aria-label={`Application status for ${app.jobTitle} at ${app.company}`}
+                      value={app.status}
+                      disabled={busyId === app.id}
+                      onChange={(event) =>
+                        update(app.id, event.target.value as Status)
+                      }
+                      className="text-xs text-foreground border border-border bg-background rounded-lg py-2.5 px-3"
+                    >
+                      {Object.entries(statusLabels).map(([status, label]) => (
+                        <option value={status} key={status}>
+                          {label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+                <div className="mt-5 pt-4 border-t border-border flex flex-wrap justify-between items-center gap-4">
+                  <div className="flex flex-wrap items-center gap-4 text-[10px] text-muted-foreground">
+                    <span>{formatAppliedDate(app.appliedDate)}</span>
+                    <span className="flex items-center gap-1.5">
+                      {generating ? (
+                        <Loader2 size={13} className="animate-spin" />
+                      ) : (
+                        <FileText size={13} />
+                      )}{" "}
+                      {generating
+                        ? "Preparing documents"
+                        : ready
+                          ? "Documents ready to review"
+                          : "Documents not yet prepared"}
+                    </span>
+                  </div>
+                  <div className="flex items-center flex-wrap gap-2">
+                    {ready ? (
+                      <Link
+                        className="inline-flex gap-1 items-center text-xs px-3 py-2 rounded-lg border border-border"
+                        href={`/dashboard/applications/${app.id}/prep`}
+                      >
+                        Review documents
+                        <ChevronRight size={14} />
+                      </Link>
+                    ) : (
+                      <button
+                        onClick={() => prepare(app.id)}
+                        disabled={Boolean(generating) || generatingId !== null}
+                        className="text-xs px-3 py-2 rounded-lg border border-border disabled:opacity-50"
+                      >
+                        {generating ? "Preparing…" : "Prepare documents"}
+                      </button>
+                    )}
+                    {!archived && (
+                      <button
+                        onClick={() => update(app.id, "ARCHIVED")}
+                        disabled={busyId === app.id}
+                        className="p-2 text-muted-foreground"
+                        aria-label={`Archive ${app.jobTitle}`}
+                      >
+                        <Archive size={16} />
+                      </button>
+                    )}
+                    <button
+                      onClick={() => remove(app.id)}
+                      disabled={busyId === app.id}
+                      className="p-2 text-muted-foreground hover:text-destructive"
+                      aria-label={`Delete ${app.jobTitle}`}
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                </div>
+              </article>
+            );
+          })
         ) : (
-          <div className="py-24 text-center border-2 border-dashed border-border rounded-3xl space-y-4 bg-muted/20">
-             <div className="bg-secondary w-20 h-20 rounded-full flex items-center justify-center mx-auto border border-border">
-                <AlertCircle className="w-10 h-10 text-muted-foreground" />
-             </div>
-             <div>
-                <h3 className="text-2xl font-black text-foreground uppercase tracking-tighter">No Applications Initialize</h3>
-                <p className="text-muted-foreground font-medium">Find a job match and use One-Click tailoring to start your arsenal.</p>
-             </div>
-             <Link href="/dashboard/jobs" className="inline-block px-12 py-4 bg-foreground text-background rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-foreground/90 transition-all shadow-2xl">
-                Browse intelligence
-             </Link>
+          <div className="z-error-state">
+            <Bookmark
+              size={29}
+              className="mx-auto text-muted-foreground mb-4"
+            />
+            <h2 className="text-xl">
+              {query
+                ? "No matching applications"
+                : archived
+                  ? "No archived applications"
+                  : "A fresh page for your next step."}
+            </h2>
+            <p>
+              {query
+                ? "Try another search or clear the field."
+                : archived
+                  ? "Applications you archive will appear here."
+                  : "Choose a role to save it and begin preparing your documents."}
+            </p>
+            {query ? (
+              <button
+                className="z-button z-button-outline"
+                onClick={() => setQuery("")}
+              >
+                Clear search
+              </button>
+            ) : (
+              !archived && (
+                <Link className="z-button z-button-dark" href="/dashboard/jobs">
+                  Discover roles
+                  <ArrowUpRight size={16} />
+                </Link>
+              )
+            )}
           </div>
         )}
       </div>

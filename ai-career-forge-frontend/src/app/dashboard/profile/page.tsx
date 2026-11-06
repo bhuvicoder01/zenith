@@ -357,13 +357,16 @@ export default function ProfilePage() {
     setIsCoverModalOpen(false);
   };
 
-  const handleViewResume = () => {
-    if (!profile?.resumeS3Url) return;
-    // Check if it's already a full URL (hydrated by backend)
-    const url = profile.resumeS3Url.startsWith("http") 
-      ? profile.resumeS3Url 
-      : `${BACKEND_URL}/public/assets/${profile.resumeS3Url}`;
-    window.open(url, "_blank");
+  const handleViewResume = async () => {
+    const viewer = window.open("about:blank", "_blank");
+    if (!viewer) { toast.error("Allow pop-ups to open your resume."); return; }
+    viewer.opener = null;
+    try {
+      const response = await api.get("/profile");
+      const url = response.data.resumeS3Url;
+      if (!url || !/^https?:\/\//.test(url)) throw new Error("No resume available");
+      viewer.location.href = url;
+    } catch { viewer.close(); toast.error("Your resume could not be opened. Please try again."); }
   };
 
   const resumeInputRef = useRef<HTMLInputElement>(null);
@@ -1881,7 +1884,7 @@ export default function ProfilePage() {
                 {suggestions.headline && (
                   <div className="space-y-1">
                     <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Generated Headline</p>
-                    <p className="text-sm font-bold text-foreground italic">"{suggestions.headline}"</p>
+                    <p className="text-sm font-bold text-foreground italic">&quot;{suggestions.headline}&quot;</p>
                   </div>
                 )}
                 {suggestions.bio && (

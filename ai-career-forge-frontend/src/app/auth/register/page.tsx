@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import ZenithBrand from "@/components/ZenithBrand";
 import { BrainCircuit } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
@@ -54,54 +55,48 @@ export default function Register() {
   };
 
   return (
-    <div className="min-h-screen bg-background flex flex-col items-center justify-center p-6 relative overflow-hidden font-sans">
+    <div className="z-auth min-h-screen bg-background flex flex-col items-center justify-center p-6 relative overflow-hidden font-sans">
       <div className="absolute bottom-[-20%] left-[-10%] w-[500px] h-[500px] bg-foreground/5 rounded-full blur-3xl -z-10" />
       
       <div className="w-full max-w-sm">
         <div className="text-center mb-10">
-          <Link href="/" className="inline-flex items-center justify-center hover:opacity-80 transition-opacity">
-            <img 
-              src={mounted && resolvedTheme === 'dark' ? "/zenith-dark.png" : "/zenith-light.png"} 
-              alt="Zenith" 
-              className="w-full max-w-[150px] h-auto" 
-            />
-          </Link>
-          <p className="text-muted-foreground mt-2 text-[10px] font-black uppercase tracking-[0.2em]">Initialize Intelligence Node</p>
+          <ZenithBrand light={mounted && resolvedTheme === "dark"} />
+          <p className="text-muted-foreground mt-2 text-[10px] font-black uppercase tracking-[0.2em]">A fresh start for your next chapter</p>
         </div>
 
         <form onSubmit={handleRegister} className="space-y-5 bg-card p-6 md:p-10 rounded-3xl border border-border shadow-2xl">
           {error && (
-            <div className="p-3 bg-red-500/10 border border-red-500/20 text-red-500 text-xs rounded-lg text-center font-bold">
+            <div role="alert" className="p-3 bg-red-500/10 border border-red-500/20 text-red-500 text-xs rounded-lg text-center font-bold">
               {error}
             </div>
           )}
           
           <div className="space-y-1.5">
-            <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground block">Full Name</label>
+            <label htmlFor="auth-name" className="text-[10px] font-black uppercase tracking-widest text-muted-foreground block">Full name</label>
             <input 
-              type="text" 
+              id="auth-name" autoComplete="name" type="text"
               required
               value={name}
               onChange={(e) => setName(e.target.value)}
               className="w-full px-4 py-3 border border-border bg-background rounded-xl focus:outline-none focus:ring-1 focus:ring-foreground/20 transition-all text-sm font-medium" 
-              placeholder="Operator Name"
+              placeholder="Your name"
             />
           </div>
           <div className="space-y-1.5">
-            <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground block">Email Address</label>
+            <label htmlFor="auth-email" className="text-[10px] font-black uppercase tracking-widest text-muted-foreground block">Email address</label>
             <input 
-              type="email" 
+              id="auth-email" autoComplete="email" type="email"
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className="w-full px-4 py-3 border border-border bg-background rounded-xl focus:outline-none focus:ring-1 focus:ring-foreground/20 transition-all text-sm font-medium" 
-              placeholder="operator@zenith.ai"
+              placeholder="you@example.com"
             />
           </div>
           <div className="space-y-1.5">
-            <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground block">Password</label>
+            <label htmlFor="auth-password" className="text-[10px] font-black uppercase tracking-widest text-muted-foreground block">Password</label>
             <input 
-              type="password" 
+              id="auth-password" autoComplete="new-password" type="password"
               required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
@@ -111,7 +106,7 @@ export default function Register() {
           </div>
 
           <div className="space-y-1.5 pt-2">
-            <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground block">Identify Authority</label>
+            <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground block">I am here as a</label>
             <div className="grid grid-cols-2 gap-2">
               <button
                 type="button"
@@ -143,7 +138,7 @@ export default function Register() {
             disabled={isLoading}
             className="w-full py-4 px-4 bg-foreground text-background font-black uppercase tracking-[0.2em] text-xs rounded-xl shadow-xl hover:opacity-90 transition-all mt-4 disabled:opacity-50 active:scale-95"
           >
-            {isLoading ? "Provisioning..." : "Create Authority"}
+            {isLoading ? "Creating your account…" : "Create account"}
           </button>
           
           <div className="relative my-8">
@@ -151,7 +146,7 @@ export default function Register() {
               <span className="w-full border-t border-border/50" />
             </div>
             <div className="relative flex justify-center text-[10px] font-black uppercase tracking-widest">
-              <span className="bg-card px-4 text-muted-foreground">External Auth Protocols</span>
+              <span className="bg-card px-4 text-muted-foreground">Or continue with</span>
             </div>
           </div>
 

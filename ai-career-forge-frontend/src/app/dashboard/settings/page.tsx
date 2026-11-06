@@ -328,7 +328,7 @@ function SettingsContent() {
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="font-bold">Matching Precision</p>
-                    <p className="text-xs text-muted-foreground">Threshold for considering a job a 'match'.</p>
+                    <p className="text-xs text-muted-foreground">Threshold for considering a job a &apos;match&apos;.</p>
                   </div>
                   <div className="text-xl font-black text-amber-500">{profile?.settings?.matchingPrecision || 80}%</div>
                 </div>

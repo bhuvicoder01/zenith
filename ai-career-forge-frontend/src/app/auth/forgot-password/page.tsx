@@ -58,7 +58,7 @@ export default function ForgotPassword() {
               <div className="space-y-2">
                 <h1 className="text-xl font-bold tracking-tight">Forgot Password?</h1>
                 <p className="text-xs text-muted-foreground font-medium leading-relaxed">
-                  Enter your registered email address and we'll transmit a recovery link to restore your access.
+                  Enter your registered email address and we&apos;ll transmit a recovery link to restore your access.
                 </p>
               </div>
 
@@ -109,7 +109,7 @@ export default function ForgotPassword() {
                 onClick={() => setIsSent(false)}
                 className="text-[10px] font-black uppercase tracking-widest text-muted-foreground hover:text-foreground transition-colors"
               >
-                Didn't receive it? Try again
+                Didn&apos;t receive it? Try again
               </button>
             </div>
           )}

@@ -1632,7 +1632,7 @@ function ChatContainer() {
             <div className="text-center space-y-2 max-w-sm">
               <h2 className="text-2xl font-black italic tracking-tight text-foreground">Zenith Chat Terminal</h2>
               <p className="text-xs text-muted-foreground leading-relaxed">
-                Connect securely with recruiters and other professionals. Select a chat from the left panel or click the "+" button to initiate a new thread with your connections.
+                Connect securely with recruiters and other professionals. Select a chat from the left panel or click the &quot;+&quot; button to initiate a new thread with your connections.
               </p>
             </div>
             <button

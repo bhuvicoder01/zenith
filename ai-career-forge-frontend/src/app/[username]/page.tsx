@@ -284,7 +284,7 @@ export default function PublicPortfolio() {
               if (secId === "contact") {
                 return (
                   <div key="contact" className="p-6 sm:p-8 rounded-3xl bg-card border border-border text-center space-y-4 shadow-sm pt-4 border-t">
-                    <h2 className="text-lg sm:text-xl font-black uppercase tracking-tight text-foreground">Let's Connect & Work Together</h2>
+                    <h2 className="text-lg sm:text-xl font-black uppercase tracking-tight text-foreground">Let&apos;s Connect & Work Together</h2>
                     {showEmail && profile.email && (
                       <p className="text-xs text-muted-foreground font-semibold break-all">Send email directly to: {profile.email}</p>
                     )}
@@ -466,7 +466,7 @@ export default function PublicPortfolio() {
               </div>
               <div className="space-y-2">
                 <h1 className="text-2xl sm:text-4xl font-black tracking-tight text-white leading-tight">
-                  Hi, I'm <span className={activeColor.text}>{profile.fullName}</span> 👋
+                  Hi, I&apos;m <span className={activeColor.text}>{profile.fullName}</span> 👋
                 </h1>
                 <p className="text-sm sm:text-base text-zinc-400 font-medium">{profile.headline}</p>
               </div>
@@ -591,7 +591,7 @@ export default function PublicPortfolio() {
               if (secId === "contact") {
                 return (
                   <div key="contact" className="p-6 sm:p-10 rounded-2xl bg-zinc-900/80 border border-zinc-800 text-center space-y-4">
-                    <h2 className="text-xl sm:text-2xl font-bold text-white">Let's Connect & Work Together</h2>
+                    <h2 className="text-xl sm:text-2xl font-bold text-white">Let&apos;s Connect & Work Together</h2>
                     {showEmail && profile.email && (
                       <p className="text-xs text-zinc-400 break-all">Email: {profile.email}</p>
                     )}
@@ -923,7 +923,7 @@ export default function PublicPortfolio() {
               if (secId === "contact") {
                 return (
                   <div key="contact" className="md:col-span-3 p-8 rounded-3xl border border-border bg-card text-center space-y-4 shadow-sm">
-                    <h3 className="text-xl font-black uppercase text-foreground">Let's Connect</h3>
+                    <h3 className="text-xl font-black uppercase text-foreground">Let&apos;s Connect</h3>
                     {showEmail && profile.email && (
                       <p className="text-xs text-muted-foreground font-semibold break-all">{profile.email}</p>
                     )}
