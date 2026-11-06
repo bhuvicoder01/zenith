@@ -17,6 +17,7 @@
     <java.version>21</java.version>
     <spring-cloud-aws.version>3.1.1</spring-cloud-aws.version>
     <spring-ai.version>1.0.0-M1</spring-ai.version>
+    <spring-cloud-function.version>4.3.4</spring-cloud-function.version>
     <lombok.version>1.18.32</lombok.version>
     <spring-boot.version>3.5.16</spring-boot.version>
   </properties>
@@ -158,6 +159,16 @@
 
   <dependencyManagement>
     <dependencies>
+      <!-- Spring AI M1 brings Function 4.1.x, whose conditional component scan
+           fails on Spring Framework 6.2. Align the entire Function family with
+           its supported Spring Boot 3.5 line while retaining our AI APIs. -->
+      <dependency>
+        <groupId>org.springframework.cloud</groupId>
+        <artifactId>spring-cloud-function-dependencies</artifactId>
+        <version>${spring-cloud-function.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
       <dependency>
         <groupId>io.awspring.cloud</groupId>
         <artifactId>spring-cloud-aws-dependencies</artifactId>

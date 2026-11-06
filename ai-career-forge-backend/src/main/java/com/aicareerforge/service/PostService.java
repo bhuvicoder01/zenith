@@ -804,7 +804,8 @@ public class PostService {
                 .build();
     }
 
-    @org.springframework.context.event.EventListener(org.springframework.boot.context.event.ApplicationReadyEvent.class)
+    // Manual maintenance only: validate reply ancestry and a recovery plan
+    // separately before invoking. Application startup must not mutate comments.
     public void cleanupOrphanedComments() {
         log.info("Starting cleanup of orphaned comments...");
         try {

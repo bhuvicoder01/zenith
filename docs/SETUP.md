@@ -62,4 +62,4 @@ Unit tests mock external services. They do not send email, create social posts, 
 
 ## Verified release checks
 
-The career-workspace release passed 57 backend tests covering the changed workflows and access rules, plus 25 browser scenarios and seven automated WCAG scans of the landing/demo views. These checks use synthetic data and are not a full penetration test or a substitute for provider integration testing.
+The career-workspace release passed 59 backend tests covering the changed workflows and access rules, plus 25 browser scenarios and seven automated WCAG scans of the landing/demo views. These checks use synthetic data and are not a full penetration test or a substitute for provider integration testing.
